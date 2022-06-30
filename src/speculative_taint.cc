@@ -11,8 +11,73 @@
 
 #include <set>
 #include <map>
+#include <memory>
+#include <vector>
+#include <sstream>
 
 #include "util.h"
+
+class RfNode {
+public:
+  virtual ~RfNode() = default;
+
+  using Stores = std::vector<const llvm::StoreInst *>;
+  using OutputIt = std::back_insert_iterator<Stores>;
+  OutputIt serialize(std::ostream& os, OutputIt out) const {
+    unsigned i = 0;
+    serialize(os, i, out);
+    return out;
+  }
+
+  bool operator==(const RfNode& o) const {
+    Stores s1, s2;
+    std::stringstream ss1, ss2;
+    serialize(ss1, std::back_inserter(s1));
+    o.serialize(ss2, std::back_inserter(s2));
+    return ss1.str() == ss2.str() && s1 == s2;
+  }
+
+  bool operator!=(const RfNode& o) const = default;
+  
+private:
+  virtual void serialize(std::ostream& os, unsigned& i, OutputIt out) const = 0;
+};
+
+class RfLeaf: public RfNode {
+public:
+  const llvm::StoreInst *SI;
+
+  RfLeaf(const llvm::StoreInst *SI): SI(SI) {}
+
+private:
+  virtual void serialize(std::ostream& os, unsigned& i, OutputIt out) const override {
+    os << i;
+    ++i;
+    *out++ = SI;
+  }
+};
+
+class RfOp: public RfNode {
+public:
+  enum Kind {AND, OR} kind;
+  using Ptr = std::shared_ptr<RfOp>;
+  Ptr lhs, rhs;
+
+  RfOp(Kind kind, const Ptr& lhs, const Ptr& rhs): kind(kind), lhs(lhs), rhs(rhs) {}
+
+private:
+  virtual void serialize(std::ostream& os, unsigned& i, OutputIt out) const override {
+    os << "(";
+    lhs->serialize(os, i, out);
+    switch (kind) {
+    case AND: os << "&"; break;
+    case OR: os << "|"; break;
+    default: std::abort();
+    }
+    rhs->serialize(os, i, out);
+    os << ")";
+  }
+};
 
 struct SpeculativeAliasAnalysis {
   llvm::AliasAnalysis& AA;
@@ -75,9 +140,11 @@ struct SpeculativeTaint final: public llvm::FunctionPass {
      * Maintain map of taint mems.
      * 
      */
-    std::set<llvm::Instruction *> taints, taints_bak; // tainted instructions, initially empty
-    using Mem = std::set<const llvm::StoreInst *>;
-    std::map<llvm::BasicBlock *, Mem> mems_in, mems_out, mems_in_bak; // tainted memory, initially empty
+    // tainted instructions, initially empty
+    std::map<llvm::Instruction *, std::set<const llvm::StoreInst *>> taints, taints_bak; 
+    using Mem = std::map<const llvm::StoreInst *, >;
+    // tainted memory, initially empty
+    std::map<llvm::BasicBlock *, Mem> mems_in, mems_out, mems_in_bak; 
     
     do {
       changed = false;
@@ -171,7 +238,7 @@ struct SpeculativeTaint final: public llvm::FunctionPass {
     for (llvm::Instruction *I : taints) {
       add_taint(I);
     }
-    
+
   }
 
   
