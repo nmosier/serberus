@@ -66,6 +66,10 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
 
     std::set<llvm::LoadInst *> sources;
 
+    const auto get_tainted = [&taints](llvm::Value *V) -> bool {
+      return taints.contains(llvm::dyn_cast<llvm::Instruction>(V));
+    };
+
     do {
       changed = false;
 
@@ -162,13 +166,20 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
 
     // gather transmitters
     std::set<llvm::Instruction *> transmitters;
-    for_each_inst<llvm::Instruction>(
-        F, [&transmitters, &taints](llvm::Instruction *I) {
-          llvm::Value *V = get_sensitive_operand(I);
-          if (V && taints.contains(llvm::dyn_cast<llvm::Instruction>(V))) {
-            transmitters.insert(I);
-          }
-        });
+    for_each_inst<llvm::Instruction>(F, [&transmitters,
+                                         &taints](llvm::Instruction *I) {
+      const auto ops = get_transmitter_sensitive_operands(I);
+      const bool tainted_op =
+          std::any_of(ops.begin(), ops.end(), [&taints](llvm::Value *V) {
+            if (llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
+              return taints.contains(I);
+            }
+            return false;
+          });
+      if (tainted_op) {
+        transmitters.insert(I);
+      }
+    });
 
     if (transmitters.empty()) {
       return false;
@@ -205,10 +216,13 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
 
     // add "addr" edges
     for (llvm::Instruction *transmitter : transmitters) {
-      for (llvm::Value *V : get_incoming_addrs(transmitter)) {
-        if (llvm::Instruction *src = llvm::dyn_cast<llvm::Instruction>(V)) {
-          add_edge(std::make_pair(src, false),
-                   std::make_pair(transmitter, true), 1.f);
+      for (llvm::Value *leaked_V :
+           get_transmitter_sensitive_operands(transmitter)) {
+        for (llvm::Value *src : get_incoming_loads(leaked_V)) {
+          if (get_tainted(src)) {
+            add_edge(std::make_pair(llvm::cast<llvm::Instruction>(src), false),
+                     std::make_pair(transmitter, true), 1.f);
+          }
         }
       }
     }
@@ -219,14 +233,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
       for (llvm::StoreInst *SI : p.second) {
         add_edge(std::make_pair(SI, false), std::make_pair(LI, false), 1.f);
         // add "data" edges
-        std::set<llvm::Value *> Vs;
-        if (llvm::isa<llvm::LoadInst>(SI->getValueOperand())) {
-          Vs = {SI->getValueOperand()};
-        } else {
-          Vs = get_incoming_addrs(SI->getValueOperand());
-        }
-
-        for (llvm::Value *V : Vs) {
+        for (llvm::Value *V : get_incoming_loads(SI->getValueOperand())) {
           if (llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
             add_edge(std::make_pair(I, false), std::make_pair(SI, false), 1.f);
           }
