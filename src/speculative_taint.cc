@@ -9,12 +9,14 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
+#if 0
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/graph_traits.hpp>
 #include <boost/graph/one_bit_color_map.hpp>
 #include <boost/graph/stoer_wagner_min_cut.hpp>
 #include <boost/property_map/property_map.hpp>
 #include <boost/typeof/typeof.hpp>
+#endif
 
 #include <fstream>
 #include <map>
@@ -23,7 +25,84 @@
 #include <sstream>
 #include <vector>
 
+#include "graph.h"
+#include "min-cut.h"
 #include "util.h"
+
+struct ValueNode {
+  enum class Kind { transmitter, source, interior };
+  Kind kind;
+  llvm::Value *V;
+
+  auto to_tuple() const { return std::make_tuple(kind, V); }
+
+  bool operator<(const ValueNode &o) const { return to_tuple() < o.to_tuple(); }
+};
+
+struct SuperNode {
+  enum class Kind { transmitter, source };
+  Kind kind;
+
+  auto to_tuple() const { return std::make_tuple(kind); }
+
+  bool operator<(const SuperNode &o) const { return to_tuple() < o.to_tuple(); }
+};
+
+using Node = std::variant<ValueNode, SuperNode>;
+using Value = Node;
+
+struct NodeCmp {
+  bool operator()(const Node &a, const Node &b) const { return a < b; }
+};
+
+#if 0
+bool operator<(ValueNode::Kind a, ValueNode::Kind b) {
+    using T = std::underlying_type_t<ValueNode::Kind>;
+    return static_cast<T>(a) < static_cast<T>(b);
+}
+
+bool operator<(SuperNode::Kind a, SuperNode::Kind b) {
+    using T = std::underlying_type_t<ValueNode::Kind>;
+    return static_cast<T>(a) < static_cast<T>(b);
+}
+#endif
+
+std::ostream &operator<<(std::ostream &os, ValueNode::Kind VNK) {
+  using K = ValueNode::Kind;
+  switch (VNK) {
+  case K::source:
+    os << "source";
+    break;
+  case K::transmitter:
+    os << "transmitter";
+    break;
+  case K::interior:
+    os << "interior";
+    break;
+  }
+  return os;
+}
+
+std::ostream &operator<<(std::ostream &os, SuperNode::Kind SNK) {
+  using K = SuperNode::Kind;
+  switch (SNK) {
+  case K::source:
+    os << "source";
+    break;
+  case K::transmitter:
+    os << "transmitter";
+    break;
+  }
+  return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const Value &V) {
+  std::visit(
+      util::overloaded{[&os](const ValueNode &VN) { os << VN.kind << *VN.V; },
+                       [&os](const SuperNode &SN) { os << SN.kind; }},
+      V);
+  return os;
+}
 
 struct SpeculativeTaint final : public llvm::FunctionPass {
   static inline char ID = 0;
@@ -64,7 +143,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
     std::map<llvm::LoadInst *, std::set<llvm::StoreInst *>> shared_rfs,
         shared_rfs_bak;
 
-      std::set<llvm::Value *> sources;
+    std::set<llvm::Value *> sources;
 
     const auto get_tainted = [&taints](llvm::Value *V) -> bool {
       return taints.contains(llvm::dyn_cast<llvm::Instruction>(V));
@@ -182,139 +261,138 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
     });
 
 #if 0
-    if (transmitters.empty()) {
-        return;
-    }
+        if (transmitters.empty()) {
+            return;
+        }
 #endif
 
-    // generate graph
-    enum { TRANSMITTER, OTHER };
-    using Graph =
-        boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS,
-                              boost::no_property,
-                              boost::property<boost::edge_weight_t, int>>;
-    using WeightMap = boost::property_map<Graph, boost::edge_weight_t>::type;
-    using Weight = boost::property_traits<WeightMap>::value_type;
-    std::vector<std::pair<int, int>> edges;
-    std::vector<float_t> edge_weights;
+    Graph<Value, NodeCmp> G;
 
-    std::map<std::pair<llvm::Value *, bool>, int> inst_to_vertex;
-    std::vector<std::pair<llvm::Value *, bool>> vertex_to_inst;
-    const auto get_vertex = [&inst_to_vertex, &vertex_to_inst](
-                                std::pair<llvm::Value *, bool> I) -> int {
-      const auto res = inst_to_vertex.emplace(I, inst_to_vertex.size());
-      if (res.second) {
-        vertex_to_inst.push_back(I);
-      }
-      return res.first->second;
-    };
-    const auto add_edge = [&get_vertex, &edges, &edge_weights](
-                              std::pair<llvm::Value *, bool> src,
-                              std::pair<llvm::Value *, bool> dst,
-                              float_t weight) {
-      edges.emplace_back(get_vertex(src), get_vertex(dst));
-      edge_weights.push_back(weight);
-    };
+    // add edges
+    {
+      std::vector<ValueNode> todo;
+      std::transform(transmitters.begin(), transmitters.end(),
+                     std::back_inserter(todo), [](llvm::Instruction *T) {
+                       ValueNode VN = {.kind = ValueNode::Kind::transmitter,
+                                       .V = T};
+                       return VN;
+                     });
 
-    // add "addr" edges
-    for (llvm::Instruction *transmitter : transmitters) {
-      for (llvm::Value *leaked_V :
-           get_transmitter_sensitive_operands(transmitter)) {
-        for (llvm::Value *src : get_incoming_loads(leaked_V)) {
-          if (get_tainted(src)) {
-            add_edge(std::make_pair(llvm::cast<llvm::Instruction>(src), false),
-                     std::make_pair(transmitter, true), 1.f);
-          }
-        }
-      }
-    }
+      while (!todo.empty()) {
+        ValueNode VN = todo.back();
+        todo.pop_back();
 
-    // add "rf" edges
-    for (const auto &p : shared_rfs) {
-      llvm::LoadInst *LI = p.first;
-      for (llvm::StoreInst *SI : p.second) {
-        add_edge(std::make_pair(SI, false), std::make_pair(LI, false), 1.f);
-        // add "data" edges
-        for (llvm::Value *V : get_incoming_loads(SI->getValueOperand())) {
-          if (llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
-            add_edge(std::make_pair(I, false), std::make_pair(SI, false), 1.f);
-          }
-        }
-      }
-    }
-      
-#if 1
-      // add Spectre v1.1 edges
-      for_each_inst<llvm::StoreInst>(F, [&] (llvm::StoreInst *SI) {
-          if (has_incoming_addr(SI->getPointerOperand())) {
-              llvm::Value *V = SI->getValueOperand();
-              if (is_nonspeculative_secret(V) || get_tainted(V)) {
-                  llvm::Instruction *I = llvm::cast<llvm::Instruction>(V);
-                  // add as transmitter
-                  transmitters.insert(I);
-                  
-                  // add "addr" edges
-                  for (llvm::Value *V : get_incoming_loads(SI->getPointerOperand())) {
-                      sources.insert(V);
-                      add_edge(std::make_pair(V, false), std::make_pair(I, true), 1.f);
-                  }
+        switch (VN.kind) {
+        case ValueNode::Kind::transmitter: {
+          llvm::Instruction *T = llvm::cast<llvm::Instruction>(VN.V);
+          for (llvm::Value *leaked_V : get_transmitter_sensitive_operands(T)) {
+            for (llvm::Value *src : get_incoming_loads(leaked_V)) {
+              if (get_tainted(src)) {
+                ValueNode src_VN = {.kind = ValueNode::Kind::interior,
+                                    .V = src};
+                if (sources.contains(src)) {
+                  src_VN.kind = ValueNode::Kind::source;
+                }
+                G.add_edge(src_VN, VN, 1);
+                todo.push_back(src_VN);
               }
+            }
           }
-      });
+
+        } break;
+
+        case ValueNode::Kind::interior: {
+          if (llvm::StoreInst *SI = llvm::dyn_cast<llvm::StoreInst>(VN.V)) {
+            // trace back data sources
+            for (llvm::Value *src : get_incoming_loads(SI->getValueOperand())) {
+              if (get_tainted(src)) {
+                ValueNode src_VN = {.kind = ValueNode::Kind::interior,
+                                    .V = src};
+                if (sources.contains(src)) {
+                  src_VN.kind = ValueNode::Kind::source;
+                }
+                G.add_edge(src_VN, VN, 1);
+                todo.push_back(src_VN);
+              }
+            }
+          } else if (llvm::LoadInst *LI =
+                         llvm::dyn_cast<llvm::LoadInst>(VN.V)) {
+            // trace back rf edges
+            for (llvm::StoreInst *SI : shared_rfs.at(LI)) {
+              ValueNode src_VN = {.kind = ValueNode::Kind::interior, .V = SI};
+              G.add_edge(src_VN, VN, 1);
+              todo.push_back(src_VN);
+            }
+          } else {
+            std::abort();
+          }
+        } break;
+
+        case ValueNode::Kind::source: {
+          // do nothing
+        } break;
+        }
+      }
+    }
+
+    // add Spectre v1.1 edges
+    for_each_inst<llvm::StoreInst>(F, [&](llvm::StoreInst *SI) {
+      if (has_incoming_addr(SI->getPointerOperand())) {
+        llvm::Value *op_V = SI->getValueOperand();
+        if (is_nonspeculative_secret(op_V) || get_tainted(op_V)) {
+          // add as transmitter
+          transmitters.insert(SI);
+
+          ValueNode dst_VN = {.kind = ValueNode::Kind::transmitter, .V = SI};
+
+          // add addr edges
+          for (llvm::Value *src_V : get_incoming_loads(op_V)) {
+            sources.insert(src_V);
+            ValueNode src_VN = {.kind = ValueNode::Kind::source, .V = src_V};
+            G.add_edge(src_VN, dst_VN, 1);
+          }
+        }
+      }
+    });
+
+#if 0
+        // add Spectre v1.1 edges
+        for_each_inst<llvm::StoreInst>(F, [&] (llvm::StoreInst *SI) {
+            if (has_incoming_addr(SI->getPointerOperand())) {
+                llvm::Value *op_V = SI->getValueOperand();
+                if (is_nonspeculative_secret(op_V) || get_tainted(op_V)) {
+                    // add as transmitter
+                    transmitters.insert(SI);
+                    
+                    // add "addr" edges
+                    for (llvm::Value *src_V : get_incoming_loads(op_V)) {
+                        sources.insert(src_V);
+                        G.add_edge(Value(src_V, false), Value(SI, true), 1.f);
+                    }
+                }
+            }
+        });
 #endif
-      
-      // trim graph
-      while (true) {
-          std::vector<unsigned> outs (vertex_to_inst.size(), 0);
-          for (const auto& edge : edges) {
-              outs[edge.first]++;
-          }
-          
-          bool erased = false;
-          for (std::size_t i = 0; i < outs.size(); ++i) {
-              const auto& vert = vertex_to_inst.at(i);
-                // llvm::errs() << outs[edge.second] << " " << *vertex_to_inst.at(i).first << " " << sources.contains(vert.first) << "\n";
-              if (outs[i] == 0 && !(vert.second && transmitters.contains(llvm::dyn_cast<llvm::Instruction>(vert.first))) && !sources.contains(vert.first)) {
-                  if (std::erase_if(edges, [&] (const auto& edge) {
-                      return edge.second == i;
-                  }) > 0) {
-                      erased = true;
-                      // llvm::errs() << "here\n";
-                      sources.insert(vert.first);
-                      break;
-                  }
-              }
-          }
-          
-          if (!erased) {
-              break;
-          }
-      }
-      
-      // add infinite edges among all sources and among all transmitters
-      const auto add_infinite_edges = [&add_edge](const auto &set,
-                                                  bool transmitter) {
-        for (auto it1 = set.begin(); it1 != set.end(); ++it1) {
-          for (auto it2 = std::next(it1); it2 != set.end(); ++it2) {
-            add_edge(std::make_pair(*it1, transmitter),
-                     std::make_pair(*it2, transmitter), 1000.f);
-          }
-        }
-      };
-      add_infinite_edges(sources, false);
-      add_infinite_edges(transmitters, true);
-      
-      if (edges.empty()) {
-          return;
-      }
 
-    Graph graph(edges.begin(), edges.end(), edge_weights.begin(),
-                vertex_to_inst.size(), edges.size());
+    // add supersource and supertransmitter nodes
+    const SuperNode supertransmitter = {.kind = SuperNode::Kind::transmitter};
+    const SuperNode supersource = {.kind = SuperNode::Kind::source};
+    for (llvm::Instruction *T : transmitters) {
+      ValueNode src_VN = {.kind = ValueNode::Kind::transmitter, .V = T};
+      G.add_edge(src_VN, supertransmitter, 1000);
+    }
+    for (llvm::Value *S : sources) {
+      ValueNode dst_VN = {.kind = ValueNode::Kind::source, .V = S};
+      G.add_edge(supersource, dst_VN, 1000);
+    }
 
-    const auto parities = boost::make_one_bit_color_map(
-        boost::num_vertices(graph), boost::get(boost::vertex_index, graph));
-    boost::stoer_wagner_min_cut(graph, boost::get(boost::edge_weight, graph),
-                                boost::parity_map(parities));
+    const auto cut_edges =
+        minCut(G.adjacency_array(), G.lookup_node(supersource),
+               G.lookup_node(supertransmitter));
+
+    for (const auto &cut_edge : cut_edges) {
+      llvm::errs() << cut_edge.first << " " << cut_edge.second << "\n";
+    }
 
     // output dot graph, color cut edges
     {
@@ -322,50 +400,50 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
       path << std::getenv("OUT") << "/" << F.getName().str() << ".dot";
       std::ofstream f(path.str());
       f << "digraph {";
-      for (std::size_t i = 0; i < vertex_to_inst.size(); ++i) {
-        const char *color = boost::get(parities, i) ? "red" : "blue";
-        const char *kind = nullptr;
-        if (transmitters.contains(llvm::cast<llvm::Instruction>(vertex_to_inst.at(i).first)) &&
-            vertex_to_inst.at(i).second) {
-          kind = "transmitter";
-        } else if (sources.contains(llvm::dyn_cast<llvm::LoadInst>(
-                       vertex_to_inst.at(i).first))) {
-          kind = "source";
+      for (std::size_t i = 0; i < G.num_vertices(); ++i) {
+        std::optional<std::string> kind;
+        const auto &node = G.lookup_vert(i);
+        if (const ValueNode *VN = std::get_if<ValueNode>(&node)) {
+          kind = util::to_string(VN->kind);
         }
+
         f << "node" << i << " [label=\"";
         if (kind) {
-          f << kind << "\n";
+          f << *kind << "\n";
         }
-        f << util::to_string(*vertex_to_inst.at(i).first) << "\", color=\""
-          << color << "\"];\n";
+        f << util::to_string(node) << "\"];\n";
       }
-      for (std::size_t i = 0; i < edges.size(); ++i) {
-        const auto &edge = edges.at(i);
-        f << "node" << edge.first << " -> "
-          << "node" << edge.second;
-        f << "[label=\"" << edge_weights.at(i) << "\"";
-        if (boost::get(parities, edge.first) !=
-            boost::get(parities, edge.second)) {
-          f << ", color=\"red\"";
+
+      for (decltype(G)::Vertex i = 0; i < G.num_vertices(); ++i) {
+        for (decltype(G)::Vertex j = 0; j < G.num_vertices(); ++j) {
+          if (auto w = G.get_edge_v(i, j)) {
+            f << "node" << i << " -> node" << j << " [label=\"" << w << "\"";
+            if (std::find(cut_edges.begin(), cut_edges.end(),
+                          std::pair<int, int>(i, j)) != cut_edges.end()) {
+              f << ", color=\"red\"";
+            }
+            f << "];\n";
+          }
         }
-        f << "];\n";
       }
+
       f << "}\n";
 
       // output edges
     }
 
     // mitigate edges
-    for (const auto &edge : edges) {
-      if (boost::get(parities, edge.first) !=
-          boost::get(parities, edge.second)) {
-        llvm::errs() << "cut edge:\n";
-        llvm::errs() << *vertex_to_inst.at(edge.first).first << "\n";
-        llvm::errs() << *vertex_to_inst.at(edge.second).first << "\n";
+    for (const auto &cut_edge : cut_edges) {
+      const auto src = G.lookup_vert(cut_edge.first);
+      const auto dst = G.lookup_vert(cut_edge.second);
+      llvm::errs() << "cut edge:\n";
+      llvm::errs() << util::to_string(src) << "\n"
+                   << util::to_string(dst) << "\n\n";
 
-        llvm::IRBuilder<> IRB(llvm::cast<llvm::Instruction>(vertex_to_inst.at(edge.second).first));
-        IRB.CreateFence(llvm::AtomicOrdering::Acquire);
-      }
+      const auto &VN = std::get<ValueNode>(dst);
+
+      llvm::IRBuilder<> IRB(llvm::cast<llvm::Instruction>(VN.V));
+      IRB.CreateFence(llvm::AtomicOrdering::Acquire);
     }
 
 #if 0
