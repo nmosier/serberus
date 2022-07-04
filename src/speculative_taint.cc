@@ -64,7 +64,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
     std::map<llvm::LoadInst *, std::set<llvm::StoreInst *>> shared_rfs,
         shared_rfs_bak;
 
-    std::set<llvm::LoadInst *> sources;
+      std::set<llvm::Value *> sources;
 
     const auto get_tainted = [&taints](llvm::Value *V) -> bool {
       return taints.contains(llvm::dyn_cast<llvm::Instruction>(V));
@@ -79,7 +79,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         for (llvm::Instruction &I : B) {
 
           if (llvm::LoadInst *LI = llvm::dyn_cast<llvm::LoadInst>(&I)) {
-            if (has_incoming_addr(LI)) {
+            if (has_incoming_addr(LI->getPointerOperand())) {
               // address dependency: always tainted
               taints.insert(LI);
               sources.insert(LI);
@@ -181,9 +181,11 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
       }
     });
 
+#if 0
     if (transmitters.empty()) {
-      return false;
+        return;
     }
+#endif
 
     // generate graph
     enum { TRANSMITTER, OTHER };
@@ -196,10 +198,10 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
     std::vector<std::pair<int, int>> edges;
     std::vector<float_t> edge_weights;
 
-    std::map<std::pair<llvm::Instruction *, bool>, int> inst_to_vertex;
-    std::vector<std::pair<llvm::Instruction *, bool>> vertex_to_inst;
+    std::map<std::pair<llvm::Value *, bool>, int> inst_to_vertex;
+    std::vector<std::pair<llvm::Value *, bool>> vertex_to_inst;
     const auto get_vertex = [&inst_to_vertex, &vertex_to_inst](
-                                std::pair<llvm::Instruction *, bool> I) -> int {
+                                std::pair<llvm::Value *, bool> I) -> int {
       const auto res = inst_to_vertex.emplace(I, inst_to_vertex.size());
       if (res.second) {
         vertex_to_inst.push_back(I);
@@ -207,8 +209,8 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
       return res.first->second;
     };
     const auto add_edge = [&get_vertex, &edges, &edge_weights](
-                              std::pair<llvm::Instruction *, bool> src,
-                              std::pair<llvm::Instruction *, bool> dst,
+                              std::pair<llvm::Value *, bool> src,
+                              std::pair<llvm::Value *, bool> dst,
                               float_t weight) {
       edges.emplace_back(get_vertex(src), get_vertex(dst));
       edge_weights.push_back(weight);
@@ -240,19 +242,71 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         }
       }
     }
-
-    // add infinite edges among all sources and among all transmitters
-    const auto add_infinite_edges = [&add_edge](const auto &set,
-                                                bool transmitter) {
-      for (auto it1 = set.begin(); it1 != set.end(); ++it1) {
-        for (auto it2 = std::next(it1); it2 != set.end(); ++it2) {
-          add_edge(std::make_pair(*it1, transmitter),
-                   std::make_pair(*it2, transmitter), 1000.f);
-        }
+      
+#if 1
+      // add Spectre v1.1 edges
+      for_each_inst<llvm::StoreInst>(F, [&] (llvm::StoreInst *SI) {
+          if (has_incoming_addr(SI->getPointerOperand())) {
+              llvm::Value *V = SI->getValueOperand();
+              if (is_nonspeculative_secret(V) || get_tainted(V)) {
+                  llvm::Instruction *I = llvm::cast<llvm::Instruction>(V);
+                  // add as transmitter
+                  transmitters.insert(I);
+                  
+                  // add "addr" edges
+                  for (llvm::Value *V : get_incoming_loads(SI->getPointerOperand())) {
+                      sources.insert(V);
+                      add_edge(std::make_pair(V, false), std::make_pair(I, true), 1.f);
+                  }
+              }
+          }
+      });
+#endif
+      
+      // trim graph
+      while (true) {
+          std::vector<unsigned> outs (vertex_to_inst.size(), 0);
+          for (const auto& edge : edges) {
+              outs[edge.first]++;
+          }
+          
+          bool erased = false;
+          for (std::size_t i = 0; i < outs.size(); ++i) {
+              const auto& vert = vertex_to_inst.at(i);
+                // llvm::errs() << outs[edge.second] << " " << *vertex_to_inst.at(i).first << " " << sources.contains(vert.first) << "\n";
+              if (outs[i] == 0 && !(vert.second && transmitters.contains(llvm::dyn_cast<llvm::Instruction>(vert.first))) && !sources.contains(vert.first)) {
+                  if (std::erase_if(edges, [&] (const auto& edge) {
+                      return edge.second == i;
+                  }) > 0) {
+                      erased = true;
+                      // llvm::errs() << "here\n";
+                      sources.insert(vert.first);
+                      break;
+                  }
+              }
+          }
+          
+          if (!erased) {
+              break;
+          }
       }
-    };
-    add_infinite_edges(sources, false);
-    add_infinite_edges(transmitters, true);
+      
+      // add infinite edges among all sources and among all transmitters
+      const auto add_infinite_edges = [&add_edge](const auto &set,
+                                                  bool transmitter) {
+        for (auto it1 = set.begin(); it1 != set.end(); ++it1) {
+          for (auto it2 = std::next(it1); it2 != set.end(); ++it2) {
+            add_edge(std::make_pair(*it1, transmitter),
+                     std::make_pair(*it2, transmitter), 1000.f);
+          }
+        }
+      };
+      add_infinite_edges(sources, false);
+      add_infinite_edges(transmitters, true);
+      
+      if (edges.empty()) {
+          return;
+      }
 
     Graph graph(edges.begin(), edges.end(), edge_weights.begin(),
                 vertex_to_inst.size(), edges.size());
@@ -271,7 +325,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
       for (std::size_t i = 0; i < vertex_to_inst.size(); ++i) {
         const char *color = boost::get(parities, i) ? "red" : "blue";
         const char *kind = nullptr;
-        if (transmitters.contains(vertex_to_inst.at(i).first) &&
+        if (transmitters.contains(llvm::cast<llvm::Instruction>(vertex_to_inst.at(i).first)) &&
             vertex_to_inst.at(i).second) {
           kind = "transmitter";
         } else if (sources.contains(llvm::dyn_cast<llvm::LoadInst>(
@@ -309,7 +363,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         llvm::errs() << *vertex_to_inst.at(edge.first).first << "\n";
         llvm::errs() << *vertex_to_inst.at(edge.second).first << "\n";
 
-        llvm::IRBuilder<> IRB(vertex_to_inst.at(edge.second).first);
+        llvm::IRBuilder<> IRB(llvm::cast<llvm::Instruction>(vertex_to_inst.at(edge.second).first));
         IRB.CreateFence(llvm::AtomicOrdering::Acquire);
       }
     }
