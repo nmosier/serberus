@@ -22,7 +22,7 @@ OutputIt get_incoming_loads(llvm::Value *V, OutputIt out,
     return out;
   }
 
-  if (llvm::isa<llvm::Argument, llvm::LoadInst>(V)) {
+  if (llvm::isa<llvm::Argument, llvm::LoadInst, llvm::CallBase>(V)) {
     *out++ = V;
   } else if (llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
     for (llvm::Value *op : I->operands()) {
@@ -97,3 +97,9 @@ OutputIt get_transmitter_sensitive_operands(llvm::Instruction *I,
 
 std::set<llvm::Value *>
 get_transmitter_sensitive_operands(llvm::Instruction *I);
+
+namespace llvm {
+
+std::vector<llvm::Instruction *> predecessors(llvm::Instruction *I);
+
+}

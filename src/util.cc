@@ -88,3 +88,19 @@ bool is_nonspeculative_secret(const llvm::Value *V) {
     return false;
   }
 }
+
+namespace llvm {
+
+std::vector<llvm::Instruction *> predecessors(llvm::Instruction *I) {
+  std::vector<llvm::Instruction *> res;
+  if (llvm::Instruction *pred = I->getPrevNode()) {
+    res.push_back(pred);
+  } else {
+    for (llvm::BasicBlock *B : llvm::predecessors(I->getParent())) {
+      res.push_back(&B->back());
+    }
+  }
+  return res;
+}
+
+} // namespace llvm
