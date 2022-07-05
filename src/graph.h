@@ -32,6 +32,8 @@ public:
     edges[vsrc][vdst] = weight;
   }
 
+  void remove_edge(const Node &src, const Node &dst) { add_edge(src, dst, 0); }
+
   std::vector<std::vector<Value>> adjacency_array() const { return edges; }
 
   Vertex num_vertices() const { return nodes.size(); }
