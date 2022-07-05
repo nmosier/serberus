@@ -12,7 +12,7 @@ namespace {
 
 /* Returns true if there is a path from source 's' to sink 't' in
 residual graph. Also fills parent[] to store the path */
-int bfs(std::vector<std::vector<int>> rGraph, int s, int t, int parent[]) {
+int bfs(const std::vector<std::vector<int>>& rGraph, int s, int t, std::vector<int>& parent) {
   const int V = rGraph.size();
 
   // Create a visited array and mark all vertices as not visited
@@ -47,7 +47,7 @@ int bfs(std::vector<std::vector<int>> rGraph, int s, int t, int parent[]) {
 // A DFS based function to find all reachable vertices from s. The function
 // marks visited[i] as true if i is reachable from s. The initial values in
 // visited[] must be false. We can also use BFS to find reachable vertices
-void dfs(std::vector<std::vector<int>> rGraph, int s,
+void dfs(const std::vector<std::vector<int>>& rGraph, int s,
          std::vector<bool> &visited) {
   const int V = rGraph.size();
   visited[s] = true;
@@ -59,8 +59,7 @@ void dfs(std::vector<std::vector<int>> rGraph, int s,
 } // namespace
 
 // Prints the minimum s-t cut
-std::vector<std::pair<int, int>> minCut(std::vector<std::vector<int>> graph,
-                                        int s, int t) {
+std::vector<std::pair<int, int>> minCut(const std::vector<std::vector<int>>& graph, int s, int t) {
   const int V = graph.size();
   int u, v;
   std::vector<std::pair<int, int>> res;
@@ -73,7 +72,7 @@ std::vector<std::pair<int, int>> minCut(std::vector<std::vector<int>> graph,
   std::vector<int> parent(V);
 
   // Augment the flow while there is a path from source to sink
-  while (bfs(rGraph, s, t, parent.data())) {
+  while (bfs(rGraph, s, t, parent)) {
     // Find minimum residual capacity of the edhes along the
     // path filled by BFS. Or we can say find the maximum flow
     // through the path found.
@@ -105,22 +104,3 @@ std::vector<std::pair<int, int>> minCut(std::vector<std::vector<int>> graph,
 
   return res;
 }
-
-#if 0
-// Driver program to test above functions
-int main()
-{
-  // Let us create a graph shown in the above example
-  int graph[V][V] = { {0, 16, 13, 0, 0, 0},
-            {0, 0, 10, 12, 0, 0},
-            {0, 4, 0, 0, 14, 0},
-            {0, 0, 9, 0, 0, 20},
-            {0, 0, 0, 7, 0, 4},
-            {0, 0, 0, 0, 0, 0}
-          };
-
-  minCut(graph, 0, 5);
-
-  return 0;
-}
-#endif
