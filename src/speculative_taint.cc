@@ -162,9 +162,12 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
 
           if (llvm::LoadInst *LI = llvm::dyn_cast<llvm::LoadInst>(&I)) {
             if (has_incoming_addr(LI->getPointerOperand())) {
-              // address dependency: always tainted
-              taints.insert(LI);
-              sources.insert(LI);
+                // only speculatively taint if the value returned by the load isn't already a secret
+                if (!is_nonspeculative_secret(LI)) {
+                    // address dependency: always tainted
+                    taints.insert(LI);
+                    sources.insert(LI);
+                }
             } else {
               // check if it must overlap with a public store
               std::set<llvm::StoreInst *> rfs;
@@ -185,8 +188,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
                 shared_rfs[LI] = std::move(rfs);
               }
             }
-          } else if (llvm::StoreInst *SI =
-                         llvm::dyn_cast<llvm::StoreInst>(&I)) {
+          } else if (llvm::StoreInst *SI = llvm::dyn_cast<llvm::StoreInst>(&I)) {
 
             // check if value operand is tainted
             llvm::Value *V = SI->getValueOperand();
@@ -204,7 +206,15 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
                 }
               }
             }
-
+              
+          } else if (llvm::isa<llvm::CallBase>(&I)) {
+              
+              // ignore: functions will never return speculatively tainted values (this is an invariant we must uphold)
+              
+          } else if (llvm::isa<llvm::FenceInst>(&I)) {
+              
+              // ignore: we deal with them later on during graph analysis
+              
           } else if (!I.getType()->isVoidTy()) {
 
             // taint if any of inputs are tainted
@@ -410,6 +420,8 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
       ValueNode dst_VN = {.kind = ValueNode::Kind::source, .V = S};
       G.add_edge(supersource, dst_VN, 1000);
     }
+      
+      llvm::errs() << "min cut for " << F.getName() << ": " << G.num_vertices() << " vertices\n";
 
     const auto cut_edges =
         minCut(G.adjacency_array(), G.lookup_node(supersource),
