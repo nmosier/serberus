@@ -29,6 +29,9 @@
 #include "min-cut.h"
 #include "util.h"
 
+constexpr bool emit_dot = false;
+constexpr bool debug = false;
+
 struct ValueNode {
   enum class Kind { transmitter, source, interior };
   Kind kind;
@@ -268,9 +271,20 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
 
     Graph<Value, NodeCmp> G;
 
+    // add CFG
+    for_each_inst<llvm::Instruction>(F, [&](llvm::Instruction *dst) {
+      for (llvm::Instruction *src : llvm::predecessors(dst)) {
+        ValueNode src_VN = {.kind = ValueNode::Kind::interior, .V = src};
+        ValueNode dst_VN = {.kind = ValueNode::Kind::interior, .V = dst};
+        G.add_edge(src_VN, dst_VN, 1);
+      }
+    });
+
+#if 0
     // add edges
     {
       std::vector<ValueNode> todo;
+        std::set<ValueNode> seen;
       std::transform(transmitters.begin(), transmitters.end(),
                      std::back_inserter(todo), [](llvm::Instruction *T) {
                        ValueNode VN = {.kind = ValueNode::Kind::transmitter,
@@ -281,6 +295,10 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
       while (!todo.empty()) {
         ValueNode VN = todo.back();
         todo.pop_back();
+          
+          if (!seen.insert(VN).second) {
+              continue;
+          }
 
         switch (VN.kind) {
         case ValueNode::Kind::transmitter: {
@@ -304,7 +322,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         case ValueNode::Kind::interior: {
           if (llvm::StoreInst *SI = llvm::dyn_cast<llvm::StoreInst>(VN.V)) {
             // trace back data sources
-            for (llvm::Value *src : get_incoming_loads(SI->getValueOperand())) {
+                for (llvm::Value *src : get_incoming_loads(SI->getValueOperand())) {
               if (get_tainted(src)) {
                 ValueNode src_VN = {.kind = ValueNode::Kind::interior,
                                     .V = src};
@@ -334,6 +352,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         }
       }
     }
+#endif
 
     // add Spectre v1.1 edges
     for_each_inst<llvm::StoreInst>(F, [&](llvm::StoreInst *SI) {
@@ -355,28 +374,34 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
       }
     });
 
-#if 0
-        // add Spectre v1.1 edges
-        for_each_inst<llvm::StoreInst>(F, [&] (llvm::StoreInst *SI) {
-            if (has_incoming_addr(SI->getPointerOperand())) {
-                llvm::Value *op_V = SI->getValueOperand();
-                if (is_nonspeculative_secret(op_V) || get_tainted(op_V)) {
-                    // add as transmitter
-                    transmitters.insert(SI);
-                    
-                    // add "addr" edges
-                    for (llvm::Value *src_V : get_incoming_loads(op_V)) {
-                        sources.insert(src_V);
-                        G.add_edge(Value(src_V, false), Value(SI, true), 1.f);
-                    }
-                }
-            }
-        });
-#endif
+    // transmitters
+    for (llvm::Instruction *transmitter : transmitters) {
+      ValueNode src_VN = {.kind = ValueNode::Kind::interior, .V = transmitter};
+      ValueNode dst_VN = {.kind = ValueNode::Kind::transmitter,
+                          .V = transmitter};
+      G.add_edge(src_VN, dst_VN, 1);
+    }
+
+    // sources
+    for (llvm::Value *source : sources) {
+      ValueNode src_VN = {.kind = ValueNode::Kind::source, .V = source};
+      ValueNode dst_VN = {.kind = ValueNode::Kind::interior, .V = source};
+      G.add_edge(src_VN, dst_VN, 1);
+    }
+
+    for_each_inst<llvm::FenceInst>(F, [&](llvm::FenceInst *FI) {
+      for (llvm::Instruction *pred : llvm::predecessors(FI)) {
+        ValueNode src = {.kind = ValueNode::Kind::interior, .V = pred};
+        ValueNode dst = {.kind = ValueNode::Kind::interior, .V = FI};
+        G.remove_edge(src, dst);
+      }
+    });
 
     // add supersource and supertransmitter nodes
     const SuperNode supertransmitter = {.kind = SuperNode::Kind::transmitter};
     const SuperNode supersource = {.kind = SuperNode::Kind::source};
+    G.add_node(supertransmitter);
+    G.add_node(supersource);
     for (llvm::Instruction *T : transmitters) {
       ValueNode src_VN = {.kind = ValueNode::Kind::transmitter, .V = T};
       G.add_edge(src_VN, supertransmitter, 1000);
@@ -390,28 +415,34 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         minCut(G.adjacency_array(), G.lookup_node(supersource),
                G.lookup_node(supertransmitter));
 
-    for (const auto &cut_edge : cut_edges) {
-      llvm::errs() << cut_edge.first << " " << cut_edge.second << "\n";
+    if (debug) {
+      for (const auto &cut_edge : cut_edges) {
+        llvm::errs() << cut_edge.first << " " << cut_edge.second << "\n";
+      }
     }
 
     // output dot graph, color cut edges
-    {
+    if (emit_dot) {
       std::stringstream path;
       path << std::getenv("OUT") << "/" << F.getName().str() << ".dot";
       std::ofstream f(path.str());
       f << "digraph {";
       for (std::size_t i = 0; i < G.num_vertices(); ++i) {
-        std::optional<std::string> kind;
         const auto &node = G.lookup_vert(i);
-        if (const ValueNode *VN = std::get_if<ValueNode>(&node)) {
-          kind = util::to_string(VN->kind);
-        }
 
-        f << "node" << i << " [label=\"";
-        if (kind) {
-          f << *kind << "\n";
+        f << "node" << i << " [label=\"" << node << "\"";
+        const char *color = std::visit(
+            util::overloaded{
+                [](const ValueNode &VN) -> const char * {
+                  return VN.kind != ValueNode::Kind::interior ? "blue"
+                                                              : nullptr;
+                },
+                [](const SuperNode &) -> const char * { return "blue"; }},
+            node);
+        if (color) {
+          f << ", color=\"" << color << "\"";
         }
-        f << util::to_string(node) << "\"];\n";
+        f << "];\n";
       }
 
       for (decltype(G)::Vertex i = 0; i < G.num_vertices(); ++i) {
@@ -436,14 +467,25 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
     for (const auto &cut_edge : cut_edges) {
       const auto src = G.lookup_vert(cut_edge.first);
       const auto dst = G.lookup_vert(cut_edge.second);
-      llvm::errs() << "cut edge:\n";
-      llvm::errs() << util::to_string(src) << "\n"
-                   << util::to_string(dst) << "\n\n";
+      if (debug) {
+        llvm::errs() << "cut edge:\n";
+        llvm::errs() << util::to_string(src) << "\n"
+                     << util::to_string(dst) << "\n\n";
+      }
 
       const auto &VN = std::get<ValueNode>(dst);
 
-      llvm::IRBuilder<> IRB(llvm::cast<llvm::Instruction>(VN.V));
-      IRB.CreateFence(llvm::AtomicOrdering::Acquire);
+      llvm::Instruction *P = llvm::cast<llvm::Instruction>(VN.V);
+      std::optional<llvm::IRBuilder<>> IRB(P);
+      if (std::get<ValueNode>(src).kind == ValueNode::Kind::source) {
+        if (llvm::Instruction *P_ = P->getNextNode()) {
+          IRB.emplace(P_);
+        } else {
+          IRB.emplace(P->getParent());
+        }
+      }
+
+      IRB->CreateFence(llvm::AtomicOrdering::Acquire);
     }
 
 #if 0
