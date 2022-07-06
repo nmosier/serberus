@@ -20,13 +20,18 @@ add_library(min_cut STATIC
   min-cut.h
   )
 
+add_library(transmitter STATIC
+  transmitter.cc
+  transmitter.h
+  )
+
 add_library(speculative_taint SHARED
   speculative_taint.cc
   util.cc
   util.h
   )
 register_llvm_pass(speculative_taint)
-target_link_libraries(speculative_taint PRIVATE min_cut)
+target_link_libraries(speculative_taint PRIVATE min_cut transmitter)
 
 add_library(count_addr_stores SHARED
   count_addr_stores.cc
@@ -45,3 +50,8 @@ add_library(mitigate SHARED
   util.cc
   )
 register_llvm_pass(mitigate)
+
+add_executable(min_cut_driver
+  min-cut-driver.cc
+  )
+target_link_libraries(min_cut_driver PRIVATE min_cut)
