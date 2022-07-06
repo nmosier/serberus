@@ -9,15 +9,6 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
-#if 0
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/graph_traits.hpp>
-#include <boost/graph/one_bit_color_map.hpp>
-#include <boost/graph/stoer_wagner_min_cut.hpp>
-#include <boost/property_map/property_map.hpp>
-#include <boost/typeof/typeof.hpp>
-#endif
-
 #include <fstream>
 #include <map>
 #include <memory>
@@ -28,6 +19,7 @@
 #include "graph.h"
 #include "min-cut.h"
 #include "util.h"
+#include "transmitter.h"
 
 constexpr bool emit_dot = false;
 constexpr bool debug = false;
@@ -57,18 +49,6 @@ using Value = Node;
 struct NodeCmp {
   bool operator()(const Node &a, const Node &b) const { return a < b; }
 };
-
-#if 0
-bool operator<(ValueNode::Kind a, ValueNode::Kind b) {
-    using T = std::underlying_type_t<ValueNode::Kind>;
-    return static_cast<T>(a) < static_cast<T>(b);
-}
-
-bool operator<(SuperNode::Kind a, SuperNode::Kind b) {
-    using T = std::underlying_type_t<ValueNode::Kind>;
-    return static_cast<T>(a) < static_cast<T>(b);
-}
-#endif
 
 std::ostream &operator<<(std::ostream &os, ValueNode::Kind VNK) {
   using K = ValueNode::Kind;
