@@ -65,13 +65,6 @@ std::ostream &operator<<(std::ostream &os, const llvm::Value &V) {
   return os;
 }
 
-std::set<llvm::Value *>
-get_transmitter_sensitive_operands(llvm::Instruction *I) {
-  std::set<llvm::Value *> set;
-  get_transmitter_sensitive_operands(I, std::inserter(set, set.end()));
-  return set;
-}
-
 bool is_nonspeculative_secret(const llvm::Instruction *I) {
   if (llvm::MDNode *MDN = I->getMetadata("taint")) {
     assert(MDN->getNumOperands() == 1);
