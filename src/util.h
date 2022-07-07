@@ -1,4 +1,8 @@
+#pragma once
+
 #include <llvm/IR/Instruction.h>
+#include <llvm/IR/Dominators.h>
+#include <llvm/Analysis/LoopInfo.h>
 
 #include <ostream>
 #include <set>
@@ -40,7 +44,6 @@ OutputIt get_incoming_loads(llvm::Value *V, OutputIt out) {
   return impl::get_incoming_loads(V, out, seen);
 }
 
-std::set<llvm::Value *> get_incoming_loads(llvm::Instruction *I);
 std::set<llvm::Value *> get_incoming_loads(llvm::Value *V);
 
 template <class Inst, class Func>
@@ -73,6 +76,10 @@ template <class T> std::string to_string(const T &x) {
 }
 
 } // namespace util
+
+// compute loop depth
+unsigned instruction_loop_nest_depth(llvm::Instruction *I, const llvm::LoopInfo& LI);
+unsigned instruction_dominator_depth(llvm::Instruction *I, const llvm::DominatorTree& DT);
 
 namespace llvm {
 

@@ -97,3 +97,16 @@ std::vector<llvm::Instruction *> predecessors(llvm::Instruction *I) {
 }
 
 } // namespace llvm
+
+unsigned instruction_loop_nest_depth(llvm::Instruction *I, const llvm::LoopInfo& LI) {
+    if (const llvm::Loop *L = LI[I->getParent()]) {
+        return L->getLoopDepth() + 1; // TODO: check
+    } else {
+        return 0;
+    }
+}
+
+unsigned instruction_dominator_depth(llvm::Instruction *I, const llvm::DominatorTree& DT) {
+    auto *node = DT[I->getParent()];
+    return node->getLevel();
+}
