@@ -23,8 +23,13 @@
 #include "util.h"
 #include "transmitter.h"
 
-constexpr bool emit_dot = true;
+// constexpr bool emit_dot = true;
 constexpr bool debug = false;
+
+llvm::cl::opt<std::string> emit_dot("emit-dot",
+                                    llvm::cl::desc("Emit dot graphs"),
+                                    llvm::cl::init(""),
+                                    llvm::cl::OptionHidden::NotHidden);
 
 struct ValueNode {
     enum class Kind { transmitter, source, interior };
@@ -127,11 +132,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         std::map<llvm::LoadInst *, std::set<llvm::StoreInst *>> shared_rfs,
         shared_rfs_bak;
         
-        std::set<llvm::Value *> sources;
-        
-        const auto get_tainted = [&taints](llvm::Value *V) -> bool {
-            return taints.contains(llvm::dyn_cast<llvm::Instruction>(V));
-        };
+        std::set<llvm::LoadInst *> sources;
         
         do {
             changed = false;
@@ -243,7 +244,8 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
                                               &taints](llvm::Instruction *I) {
             const auto ops = get_transmitter_sensitive_operands(I);
             std::set<llvm::Instruction *> tainted_ops;
-            for (llvm::Value *V : ops) {
+            for (const TransmitterOperand& op : ops) {
+                llvm::Value *V = op.V;
                 if (llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
                     if (taints.contains(I)) {
                         tainted_ops.insert(I);
@@ -267,8 +269,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         // Spectre v1.1, non-speculative secret operand, mitigations
         for_each_inst<llvm::StoreInst>(F, [&](llvm::StoreInst *SI) {
             if (has_incoming_addr(SI->getPointerOperand()) && is_nonspeculative_secret(SI->getValueOperand())) {
-                llvm::IRBuilder<> IRB (SI);
-                IRB.CreateFence(llvm::AtomicOrdering::Acquire);
+                create_fence(SI);
             }
         });
         
@@ -337,11 +338,13 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
                     continue;
                 }
                 
-                if (sources.contains(V)) {
-                    *out++ = llvm::cast<llvm::Instruction>(V);
-                } else if (llvm::LoadInst *LI = llvm::dyn_cast<llvm::LoadInst>(V)) {
-                    for (llvm::StoreInst *SI : shared_rfs[LI]) {
-                        queue.push(SI->getValueOperand());
+                if (llvm::LoadInst *LI = llvm::dyn_cast<llvm::LoadInst>(V)) {
+                    if (sources.contains(LI)) {
+                        *out++ = LI;
+                    } else {
+                        for (llvm::StoreInst *SI : shared_rfs[LI]) {
+                            queue.push(SI->getValueOperand());
+                        }
                     }
                 } else if (llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
                     if (!I->getType()->isVoidTy()) {
@@ -360,30 +363,28 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
             for (llvm::Value *tainted_op : tainted_ops) {
                 get_transmitter_sources(tainted_op, std::inserter(sources, sources.end()));
             }
+            ValueNode dst = {
+                .kind = ValueNode::Kind::transmitter,
+                .V = T
+            };
+            Alg::ST st = {.t = dst};
             for (llvm::Instruction *source : sources) {
                 ValueNode src = {
                     .kind = ValueNode::Kind::source,
                     .V = source
                 };
-                ValueNode dst = {
-                    .kind = ValueNode::Kind::transmitter,
-                    .V = T
-                };
-                Alg::ST st = {
-                    .s = src,
-                    .t = dst,
-                };
-                sts.push_back(st);
+                st.s.insert(src);
             }
+            sts.push_back(st);
         }
         
         std::vector<std::pair<Node, Node>> cut_edges;
         Alg::run(G, sts.begin(), sts.end(), std::back_inserter(cut_edges));
         
         // output dot graph, color cut edges
-        if (emit_dot) {
+        if (!emit_dot.getValue().empty()) {
             std::stringstream path;
-            path << std::getenv("OUT") << "/" << F.getName().str() << ".dot";
+            path << emit_dot.getValue() << "/" << F.getName().str() << ".dot";
             std::ofstream f(path.str());
             f << "digraph {\n";
             
@@ -432,79 +433,12 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
             const auto &VN = std::get<ValueNode>(dst);
             
             llvm::Instruction *P = llvm::cast<llvm::Instruction>(VN.V);
-            std::optional<llvm::IRBuilder<>> IRB(P);
             if (std::get<ValueNode>(src).kind == ValueNode::Kind::source) {
-                if (llvm::Instruction *P_ = P->getNextNode()) {
-                    IRB.emplace(P_);
-                } else {
-                    IRB.emplace(P->getParent());
-                }
+                P = P->getNextNode();
+                assert(P);
             }
-            
-            IRB->CreateFence(llvm::AtomicOrdering::Acquire);
+            create_fence(P);
         }
-        
-#if 0
-        // commit taint as metadata
-        for (llvm::Instruction *I : taints) {
-            add_taint(I);
-            
-            if (llvm::LoadInst *LI = llvm::dyn_cast<llvm::LoadInst>(I)) {
-                const auto it = shared_rfs.find(LI);
-                if (it != shared_rfs.end()) {
-#if 0
-                    llvm::FunctionCallee intrin = get_clou_rf_intrinsic(*F.getParent());
-                    llvm::IRBuilder<> IRB (LI->getNextNonDebugInstruction());
-                    std::vector<llvm::Value *> args;
-                    std::copy(it->second.begin(), it->second.end(), std::back_inserter(args));
-                    IRB.CreateCall(intrin, args);
-#elif 0
-                    std::vector<llvm::Metadata *> sources;
-                    for (llvm::StoreInst *SI : it->second) {
-                        sources.push_back(llvm::ValueAsMetadata::get(SI->getPointerOperand()));
-                    }
-                    
-                    llvm::MDTuple *tuple = llvm::MDTuple::get(F.getContext(), sources);
-                    LI->setMetadata("clou.rf", tuple);
-                    
-                    //
-#endif
-                }
-            }
-        }
-        
-        // assign numbers to stores
-        std::set<llvm::StoreInst *> stores;
-        for (const auto& p : shared_rfs) {
-            std::copy(p.second.begin(), p.second.end(), std::inserter(stores, stores.end()));
-        }
-        unsigned store_counter = 0;
-        for (llvm::StoreInst *SI : stores) {
-            llvm::MDString *MDS = llvm::MDString::get(F.getContext(), std::to_string(store_counter));
-            llvm::MDNode *MD = llvm::MDNode::get(F.getContext(),
-                                                 llvm::ArrayRef<llvm::Metadata *>(MDS));
-            SI->setMetadata("clou.sid", MD);
-            ++store_counter;
-        }
-        
-        // emit rf metadata
-        for (llvm::BasicBlock& B : F) {
-            for (llvm::Instruction& I : B) {
-                if (llvm::LoadInst *LI = llvm::dyn_cast<llvm::LoadInst>(&I)) {
-                    const auto it = shared_rfs.find(LI);
-                    if (it != shared_rfs.end() && !it->second.empty()) {
-                        std::vector<llvm::Metadata *> Ms;
-                        for (llvm::StoreInst *SI : it->second) {
-                            llvm::MDNode *MD = SI->getMetadata("clou.sid");
-                            assert(MD);
-                            Ms.push_back(MD->getOperand(0));
-                        }
-                        LI->setMetadata("clou.rf", llvm::MDNode::get(F.getContext(), Ms));
-                    }
-                }
-            }
-        }
-#endif
     }
     
     static llvm::FunctionCallee get_clou_rf_intrinsic(llvm::Module &M) {
@@ -517,10 +451,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
     
     static void add_taint(llvm::Instruction *I) {
         llvm::LLVMContext &ctx = I->getContext();
-        I->setMetadata(
-                       "taint", llvm::MDNode::get(
-                                                  ctx, llvm::ArrayRef<llvm::Metadata *>(llvm::MDString::get(
-                                                                                                            I->getContext(), speculative_secret_label))));
+        I->setMetadata("taint", llvm::MDNode::get(ctx, llvm::ArrayRef<llvm::Metadata *>(llvm::MDString::get(    I->getContext(), speculative_secret_label))));
     }
     
     static unsigned compute_edge_weight(llvm::Instruction *I, const llvm::DominatorTree& DT, const llvm::LoopInfo& LI) {
@@ -528,6 +459,15 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         score *= instruction_loop_nest_depth(I, LI) + 1;
         score *= 1. / (instruction_dominator_depth(I, DT) + 1);
         return score * 100;
+    }
+    
+    static void create_fence(llvm::Instruction *I) {
+        while (llvm::isa<llvm::PHINode>(I)) {
+            I = I->getNextNode();
+            assert(I);
+        }
+        llvm::IRBuilder<> IRB (I);
+        IRB.CreateFence(llvm::AtomicOrdering::Acquire);
     }
 };
 
