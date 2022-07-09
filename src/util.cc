@@ -107,6 +107,9 @@ unsigned instruction_loop_nest_depth(llvm::Instruction *I, const llvm::LoopInfo&
 }
 
 unsigned instruction_dominator_depth(llvm::Instruction *I, const llvm::DominatorTree& DT) {
-    auto *node = DT[I->getParent()];
-    return node->getLevel();
+    if (auto *node = DT[I->getParent()]) {
+        return node->getLevel();
+    } else {
+        return 0;
+    }
 }
