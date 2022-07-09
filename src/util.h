@@ -57,6 +57,24 @@ void for_each_inst(llvm::Function &F, Func func) {
   }
 }
 
+template <class Func>
+void for_each_func_def(llvm::Module& M, Func func) {
+    for (llvm::Function& F : M) {
+        if (!F.isDeclaration()) {
+            func(F);
+        }
+    }
+}
+
+template <class Func>
+void for_each_func_def(const llvm::Module& M, Func func) {
+    for (const llvm::Function& F : M) {
+        if (!F.isDeclaration()) {
+            func(F);
+        }
+    }
+}
+
 bool is_speculative_secret(const llvm::Instruction *I);
 bool is_speculative_secret(const llvm::Value *V);
 
