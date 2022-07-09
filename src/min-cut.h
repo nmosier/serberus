@@ -102,7 +102,8 @@ private:
 template <class Node, class Weight, class NodeLess = std::less<Node>>
 struct FordFulkersonMulti {
     struct ST {
-        Node s, t;
+        std::set<Node, NodeLess> s;
+        Node t;
     };
     using Graph = std::map<Node, std::map<Node, Weight, NodeLess>, NodeLess>;
     
@@ -125,12 +126,12 @@ struct FordFulkersonMulti {
             }
             
             Weight path_flow = std::numeric_limits<Weight>::max();
-            for (Node v = it->t; v != it->s; v = parent.at(v)) {
+            for (Node v = it->t; !it->s.contains(v); v = parent.at(v)) {
                 const Node& u = parent.at(v);
                 path_flow = std::min(path_flow, R[u][v]);
             }
             
-            for (Node v = it->t; v != it->s; v = parent.at(v)) {
+            for (Node v = it->t; !it->s.contains(v); v = parent.at(v)) {
                 const Node& u = parent.at(v);
                 R[u][v] -= path_flow;
                 R[v][u] += path_flow;
@@ -142,7 +143,9 @@ struct FordFulkersonMulti {
         
         std::set<Node, NodeLess> visited;
         for (auto it = begin; it != end; ++it) {
-            dfs(R, it->s, visited);
+            for (const Node& s_ : it->s) {
+                dfs(R, s_, visited);
+            }
         }
         
         // get all edges from reachable vertex to unreachable
@@ -161,12 +164,14 @@ struct FordFulkersonMulti {
     }
     
 private:
-    static bool bfs(Graph& G, const Node& s, const Node& t, std::map<Node, Node, NodeLess>& parent) {
+    static bool bfs(Graph& G, const std::set<Node, NodeLess>& s, const Node& t, std::map<Node, Node, NodeLess>& parent) {
         std::set<Node, NodeLess> visited;
         
         std::queue<Node> q;
-        q.push(s);
-        visited.insert(s);
+        for (const Node& s_ : s) {
+            q.push(s_);
+            visited.insert(s_);
+        }
         
         while (!q.empty()) {
             Node u = q.front();

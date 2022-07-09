@@ -23,8 +23,16 @@ int main() {
     std::cin >> num_sts;
     std::vector<Alg::ST> sts (num_sts);
     for (auto& st : sts) {
-        std::cerr << "source and sink: ";
-        std::cin >> st.s >> st.t;
+        std::cerr << "source(s): ";
+        int num_sources;
+        std::cin >> num_sources;
+        for (int i = 0; i < num_sources; ++i) {
+            int source;
+            std::cin >> source;
+            st.s.insert(source);
+        }
+        std::cerr << "sink: ";
+        std::cin >> st.t;
     }
     
     std::vector<std::pair<int, int>> cut_edges;
