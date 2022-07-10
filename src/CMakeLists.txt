@@ -10,6 +10,11 @@ include_directories(SYSTEM ${LLVM_INCLUDE_DIRS} ${Libprofiler_INCLUDE_DIRS} ${Bo
 link_directories(${Libprofiler_LIBRARY_DIRS})
 link_libraries(${Libprofiler_LIBRARIES})
 
+add_library(my_scc_pass STATIC
+  my_scc_pass.cc
+  my_scc_pass.h
+  )
+
 add_library(util STATIC
   util.cc
   util.h
@@ -68,4 +73,4 @@ add_library(secret_param_analysis SHARED
   secret_param_analysis.cc
   )
 register_llvm_pass(secret_param_analysis)
-target_link_libraries(secret_param_analysis PRIVATE util transmitter)
+target_link_libraries(secret_param_analysis PRIVATE util transmitter my_scc_pass)
