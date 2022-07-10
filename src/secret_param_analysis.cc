@@ -165,6 +165,21 @@ struct SecretParamAnalysis final: public MySCCPass {
             }
         });
         
+        for_each_inst<llvm::IntrinsicInst>(Fs.begin(), Fs.end(), [&] (llvm::IntrinsicInst *II) {
+            if (II->getIntrinsicID() == llvm::Intrinsic::annotation) {
+                // TODO: double-check how LLVM does this
+                // TODO: extract this into function
+                llvm::Value *V = II->getArgOperand(1);
+                auto *GEP = llvm::cast<llvm::ConcreteOperator<llvm::Operator, llvm::Instruction::GetElementPtr>>(V);
+                llvm::Value *V_ = GEP->getOperand(0);
+                llvm::GlobalVariable *GV = llvm::cast<llvm::GlobalVariable>(V_);
+                const auto str = llvm::cast<llvm::ConstantDataArray>(GV->getInitializer())->getAsCString();
+                if (str == "public") {
+                    pub_vals_insert(II->getArgOperand(0));
+                }
+            }
+        });
+        
         // 5. propogate public values
         do {
             changed = false;
