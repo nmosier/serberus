@@ -45,6 +45,9 @@ OutputIt get_transmitter_sensitive_operands(llvm::Instruction *I,
             *out++ = TransmitterOperand(TransmitterOperand::TRUE, BI->getCondition());
         }
     }
+    if (llvm::SwitchInst *SI = llvm::dyn_cast<llvm::SwitchInst>(I)) {
+        *out++ = TransmitterOperand(TransmitterOperand::TRUE, SI->getCondition());
+    }       
     if (llvm::CallBase *C = llvm::dyn_cast<llvm::CallBase>(I)) {
         *out++ = TransmitterOperand(TransmitterOperand::TRUE, C->getCalledOperand());
         for (llvm::Value *op : C->args()) {
