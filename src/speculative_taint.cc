@@ -10,6 +10,7 @@
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/IR/Dominators.h>
 #include <llvm/Analysis/LoopInfo.h>
+#include <llvm/Support/CommandLine.h>
 
 #include <fstream>
 #include <map>
@@ -17,6 +18,7 @@
 #include <set>
 #include <sstream>
 #include <vector>
+#include <variant>
 
 #include "graph.h"
 #include "min-cut.h"
@@ -39,7 +41,7 @@ struct ValueNode {
     auto to_tuple() const { return std::make_tuple(kind, V); }
     
     bool operator<(const ValueNode &o) const { return to_tuple() < o.to_tuple(); }
-    bool operator==(const ValueNode&) const = default;
+  bool operator==(const ValueNode& o) const { return to_tuple() == o.to_tuple(); }
 };
 
 struct SuperNode {
@@ -49,7 +51,7 @@ struct SuperNode {
     auto to_tuple() const { return std::make_tuple(kind); }
     
     bool operator<(const SuperNode &o) const { return to_tuple() < o.to_tuple(); }
-    bool operator==(const SuperNode&) const = default;
+  bool operator==(const SuperNode& o) const { return to_tuple() == o.to_tuple(); }
 
 };
 
