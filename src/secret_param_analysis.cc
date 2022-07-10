@@ -138,11 +138,10 @@ struct SecretParamAnalysis final: public MySCCPass {
                         }
                     } else if (llvm::isa<llvm::AllocaInst, llvm::BranchInst, llvm::FenceInst, llvm::StoreInst, llvm::SwitchInst, llvm::UnreachableInst>(I)) {
                         // ignore
+		    } else if (llvm::isa<llvm::ExtractValueInst, llvm::ExtractElementInst>(I)) {
+		      // TODO: ignore for now, but can consider for more precision later on
                     } else {
-                        std::string s;
-                        llvm::raw_string_ostream os (s);
-                        os << "clou: internal error: unhandled instruction: " << *I;
-                        throw std::runtime_error(s);
+		      unhandled_instruction(*I);
                     }
                 }
             }
@@ -159,10 +158,8 @@ struct SecretParamAnalysis final: public MySCCPass {
         };
         
         for_each_inst<llvm::Instruction>(Fs.begin(), Fs.end(), [&] (llvm::Instruction *I) {
-            llvm::errs() << "for inst " << *I << "\n";
             for (const TransmitterOperand& op : get_transmitter_sensitive_operands(I)) {
                 if (op.kind == TransmitterOperand::TRUE) {
-                    llvm::errs() << "true transmitter operand: " << *op.V << "\n";
                     pub_vals_insert(op.V);
                 }
             }
@@ -214,11 +211,10 @@ struct SecretParamAnalysis final: public MySCCPass {
                         }
                     } else if (llvm::isa<llvm::AllocaInst, llvm::BranchInst>(I)) {
                         // ignore
+		    } else if (llvm::isa<llvm::ExtractValueInst>(I)) {
+		      // TODO: ignored, handle later for higher precision
                     } else {
-                        std::string s;
-                        llvm::raw_string_ostream os (s);
-                        os << "clou: internal error: unhandled instruction: " << *I;
-                        throw std::runtime_error(s);
+		      unhandled_instruction(*I);
                     }
                 }
                 
@@ -237,10 +233,7 @@ struct SecretParamAnalysis final: public MySCCPass {
                     llvm::Type *T = A.getType();
 #ifndef NDEBUG
                     if (!llvm::isa<llvm::IntegerType, llvm::PointerType, llvm::VectorType, llvm::ArrayType>(T)) {
-                        std::string s;
-                        llvm::raw_string_ostream os (s);
-                        os << "internal clou error: unexpected argument type '" << *T << "' in function '" << F.getName() << "'";
-                        throw std::runtime_error(s);
+		      unhandled_instruction(*T);
                     }
 #endif
                     if (llvm::isa<llvm::IntegerType, llvm::VectorType, llvm::ArrayType>(T) && !summary.pub_args.contains(const_cast<llvm::Argument *>(&A))) {
@@ -366,10 +359,7 @@ struct SecretParamAnalysisOld final: public llvm::ModulePass {
                     } else if (llvm::isa<llvm::InsertValueInst, llvm::InsertElementInst>(pub_I)) {
                         // we could technically model these to gain more precision, but aren't considering them for now
                     } else {
-                        std::string s;
-                        llvm::raw_string_ostream os (s);
-                        os << "clou internal error: unhandled instruction " << *pub_I << "\n";
-                        throw std::runtime_error(s);
+		      unhandled_instruction(*pub_I);
                     }
                 }
             }
@@ -387,10 +377,7 @@ struct SecretParamAnalysisOld final: public llvm::ModulePass {
                     llvm::Type *T = A.getType();
 #ifndef NDEBUG
                     if (!llvm::isa<llvm::IntegerType, llvm::PointerType, llvm::VectorType, llvm::ArrayType>(T)) {
-                        std::string s;
-                        llvm::raw_string_ostream os (s);
-                        os << "internal clou error: unexpected argument type '" << *T << "' in function '" << F.getName() << "'";
-                        throw std::runtime_error(s);
+		      unhandled_instruction(*T);
                     }
 #endif
                     if (llvm::isa<llvm::IntegerType, llvm::VectorType, llvm::ArrayType>(T) && !pub_vars.contains(const_cast<llvm::Argument *>(&A))) {

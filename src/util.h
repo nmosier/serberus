@@ -172,3 +172,9 @@ OutputIt dominators(llvm::DominatorTree& DT, llvm::Instruction *I, OutputIt out)
 }
 
 }
+
+#define unhandled_instruction(I)		\
+  do {									\
+    llvm::errs() << __FILE__ << ":" << __LINE__ << ":" << I << "\n";	\
+    std::abort();							\
+  } while (false)
