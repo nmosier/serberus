@@ -1,7 +1,9 @@
 #pragma once
 
 #include <llvm/IR/Instructions.h>
+
 #include <set>
+#include <tuple>
 
 #include "util.h"
 
@@ -13,8 +15,14 @@ struct TransmitterOperand {
     llvm::Value *V;
     
     TransmitterOperand(Kind kind, llvm::Value *V): kind(kind), V(V) {}
-    
-    auto operator<=>(const TransmitterOperand&) const = default;
+
+  auto tuple() const {
+    return std::make_tuple(kind, V);
+  }
+
+  bool operator<(const TransmitterOperand& o) const {
+    return tuple() < o.tuple();
+  }
     
     llvm::Instruction *I() const {
         return llvm::dyn_cast_or_null<llvm::Instruction>(V);
