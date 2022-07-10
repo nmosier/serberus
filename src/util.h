@@ -3,6 +3,8 @@
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/Dominators.h>
 #include <llvm/Analysis/LoopInfo.h>
+#include <llvm/Analysis/CallGraphSCCPass.h>
+#include <llvm/Analysis/CallGraph.h>
 
 #include <ostream>
 #include <set>
@@ -57,6 +59,24 @@ void for_each_inst(llvm::Function &F, Func func) {
   }
 }
 
+template <class Inst, class Func>
+void for_each_inst(llvm::CallGraphSCC& SCC, Func func) {
+    for (llvm::CallGraphNode *CGN : SCC) {
+        if (llvm::Function *F = CGN->getFunction()) {
+            if (!F->isDeclaration()) {
+                for_each_inst<Inst>(*F, func);
+            }
+        }
+    }
+}
+
+template <class Inst, class Func, class InputIt>
+void for_each_inst(InputIt begin, InputIt end, Func func) {
+    for_each_func_def(begin, end, [&func] (llvm::Function& F) {
+        for_each_inst<Inst>(F, func);
+    });
+}
+
 template <class Func>
 void for_each_func_def(llvm::Module& M, Func func) {
     for (llvm::Function& F : M) {
@@ -71,6 +91,28 @@ void for_each_func_def(const llvm::Module& M, Func func) {
     for (const llvm::Function& F : M) {
         if (!F.isDeclaration()) {
             func(F);
+        }
+    }
+}
+
+template <class Func>
+void for_each_func_def(llvm::CallGraphSCC& SCC, Func func) {
+    for (llvm::CallGraphNode *CGN : SCC) {
+        if (llvm::Function *F = CGN->getFunction()) {
+            if (!F->isDeclaration()) {
+                func(*F);
+            }
+        }
+    }
+}
+
+template <class Func, class InputIt>
+void for_each_func_def(InputIt begin, InputIt end, Func func) {
+    for (InputIt it = begin; it != end; ++it) {
+        if (llvm::Function *F = *it) {
+            if (!F->isDeclaration()) {
+                func(*F);
+            }
         }
     }
 }
@@ -102,5 +144,31 @@ unsigned instruction_dominator_depth(llvm::Instruction *I, const llvm::Dominator
 namespace llvm {
 
 std::vector<llvm::Instruction *> predecessors(llvm::Instruction *I);
+
+/**
+ * Guaranteed to produce output in reverse dominating order.
+ */
+template <class Inst, class OutputIt>
+OutputIt dominators(llvm::DominatorTree& DT, llvm::Instruction *I, OutputIt out) {
+    const auto output = [&out] (llvm::Instruction *I) {
+        if (Inst *I_ = llvm::dyn_cast<Inst>(I)) {
+            *out++ = I_;
+        }
+    };
+    
+    // dominators w/i basic block
+    for (llvm::Instruction *I_ = I; I_; I_ = I_->getPrevNode()) {
+        output(I_);
+    }
+    
+    // dominating basic blocks
+    for (auto *node = DT[I->getParent()]->getIDom(); node; node = node->getIDom()) {
+        for (llvm::Instruction& I : llvm::reverse(*node->getBlock())) {
+            output(&I);
+        }
+    }
+
+    return out;
+}
 
 }
