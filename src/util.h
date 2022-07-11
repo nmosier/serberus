@@ -60,6 +60,17 @@ void for_each_inst(llvm::Function &F, Func func) {
 }
 
 template <class Inst, class Func>
+void for_each_inst(const llvm::Function& F, Func func) {
+    for (const llvm::BasicBlock& B : F) {
+        for (const llvm::Instruction& I : B) {
+            if (const Inst *I_ = llvm::dyn_cast<Inst>(&I)) {
+                func(I_);
+            }
+        }
+    }
+}
+
+template <class Inst, class Func>
 void for_each_inst(llvm::CallGraphSCC& SCC, Func func) {
     for (llvm::CallGraphNode *CGN : SCC) {
         if (llvm::Function *F = CGN->getFunction()) {

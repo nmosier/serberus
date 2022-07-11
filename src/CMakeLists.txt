@@ -80,3 +80,21 @@ add_library(secret_param_analysis SHARED
   my_scc_pass
   )
 register_llvm_pass(secret_param_analysis)
+
+add_library(nonspeculative_taint SHARED
+  nonspeculative_taint.cc
+  nonspeculative_taint.h
+  transmitter
+  $<TARGET_OBJECTS:util>
+  )
+register_llvm_pass(nonspeculative_taint)
+target_link_libraries(nonspeculative_taint PUBLIC my_scc_pass)
+
+add_library(spectre_v1_1 SHARED
+  spectre_v1_1.cc
+  $<TARGET_OBJECTS:util>
+  nonspeculative_taint
+  transmitter
+  my_scc_pass # TODO: shouldn't need this
+  )
+register_llvm_pass(spectre_v1_1)
