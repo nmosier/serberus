@@ -226,10 +226,10 @@ struct SecretParamAnalysis final: public MySCCPass {
                         }
                     } else if (llvm::isa<llvm::AllocaInst, llvm::BranchInst>(I)) {
                         // ignore
-		    } else if (llvm::isa<llvm::ExtractValueInst>(I)) {
-		      // TODO: ignored, handle later for higher precision
+                    } else if (llvm::isa<llvm::ExtractValueInst>(I)) {
+                        // TODO: ignored, handle later for higher precision
                     } else {
-		      unhandled_instruction(*I);
+                        unhandled_instruction(*I);
                     }
                 }
                 
