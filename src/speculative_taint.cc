@@ -107,11 +107,9 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
     }
     
     virtual bool runOnFunction(llvm::Function &F) override {
-        // SpeculativeAliasAnalysis SAA
-        // {getAnalysis<llvm::AAResultsWrapperPass>(F)};
         llvm::AliasAnalysis &AA =
         getAnalysis<llvm::AAResultsWrapperPass>().getAAResults();
-        
+
         /* Propogate taint rules */
         propogate_taint(F, AA);
         
@@ -128,11 +126,9 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
          */
         // tainted instructions, initially empty
         std::set<llvm::Instruction *> taints, taints_bak;
-        using Mem = std::set<llvm::StoreInst *>;
         // tainted memory, initially empty
-        std::map<llvm::BasicBlock *, Mem> mems_in, mems_out, mems_in_bak;
-        std::map<llvm::LoadInst *, std::set<llvm::StoreInst *>> shared_rfs,
-        shared_rfs_bak;
+	std::set<llvm::StoreInst *> mem, mem_bak;
+	std::map<llvm::LoadInst *, std::set<llvm::StoreInst *>> rfs, rfs_bak;
         
         std::set<llvm::LoadInst *> sources;
         
@@ -140,10 +136,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
             changed = false;
             
             for (llvm::BasicBlock &B : F) {
-                Mem mem = std::move(mems_in[&B]);
-                
                 for (llvm::Instruction &I : B) {
-                    
                     if (llvm::LoadInst *LI = llvm::dyn_cast<llvm::LoadInst>(&I)) {
                         if (has_incoming_addr(LI->getPointerOperand())) {
                             // only speculatively taint if the value returned by the load isn't already a secret
@@ -154,22 +147,13 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
                             }
                         } else {
                             // check if it must overlap with a public store
-                            std::set<llvm::StoreInst *> rfs;
-                            llvm::AliasResult alias = llvm::AliasResult::NoAlias;
                             for (llvm::StoreInst *SI : mem) {
                                 const llvm::Value *P = SI->getPointerOperand();
-                                const llvm::AliasResult cur_alias =
-                                AA.alias(P, LI->getPointerOperand());
-                                alias = std::max(alias, cur_alias);
-                                if (cur_alias /* == llvm::AliasResult::MayAlias */ !=
-                                    llvm::AliasResult::NoAlias) {
-                                    rfs.insert(SI);
+                                const llvm::AliasResult alias = AA.alias(P, LI->getPointerOperand());
+				if (alias != llvm::AliasResult::NoAlias) {
+				  rfs[LI].insert(SI);
+				  taints.insert(LI);
                                 }
-                            }
-                            
-                            if (alias != llvm::AliasResult::NoAlias) {
-                                taints.insert(LI);
-                                shared_rfs[LI] = std::move(rfs);
                             }
                         }
                     } else if (llvm::StoreInst *SI = llvm::dyn_cast<llvm::StoreInst>(&I)) {
@@ -217,26 +201,14 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
                         }
                     }
                 }
-                
-                mems_out[&B] = std::move(mem);
             }
             
-            /* meet */
-            for (llvm::BasicBlock &B : F) {
-                Mem &mem = mems_in[&B];
-                for (llvm::BasicBlock *B_pred : llvm::predecessors(&B)) {
-                    const Mem &mem_pred = mems_out[B_pred];
-                    std::copy(mem_pred.begin(), mem_pred.end(),
-                              std::inserter(mem, mem.end()));
-                }
-            }
-            
-            changed = (taints != taints_bak || mems_in != mems_in_bak ||
-                       shared_rfs != shared_rfs_bak);
+            /* meet */            
+            changed = (taints != taints_bak || mem != mem_bak || rfs != rfs_bak);
             
             taints_bak = taints;
-            mems_in_bak = mems_in;
-            shared_rfs_bak = shared_rfs;
+	    mem_bak = mem;
+            rfs_bak = rfs;
             
         } while (changed);
         
@@ -259,12 +231,6 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
             }
         });
         
-#if 0
-        if (transmitters.empty()) {
-            return;
-        }
-#endif
-        
         using Alg = FordFulkersonMulti<ValueNode, int>;
         Alg::Graph G;
         
@@ -286,6 +252,16 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
                 G[src_VN][dst_VN] = compute_edge_weight(dst, DT, LI);
             }
         });
+
+	/* Add edge connecting return instructions to entry instructions. 
+	 * This allows us to capture aliases across invocations of the same function.
+	 */
+	for_each_inst<llvm::ReturnInst>(F, [&](llvm::ReturnInst *RI) {
+	  ValueNode src_VN = {.kind = ValueNode::Kind::interior, .V = RI};
+	  llvm::Instruction *entry = &F.getEntryBlock().front();
+	  ValueNode dst_VN = {.kind = ValueNode::Kind::interior, .V = entry};
+	  G[src_VN][dst_VN] = compute_edge_weight(entry, DT, LI);
+	});
         
         // transmitters
         for (const auto& [transmitter, _] : transmitters) {
@@ -320,12 +296,6 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         }
         llvm::errs() << "min cut for " << F.getName() << ": " << nodes.size() << " vertices\n";
         
-#if 0
-        const auto cut_edges =
-        minCut(G.adjacency_array(), G.lookup_node(supersource),
-               G.lookup_node(supertransmitter));
-#endif
-        
         // source-transmitter pairs
         std::vector<Alg::ST> sts;
         const auto get_transmitter_sources = [&] (llvm::Value *V, auto out) {
@@ -344,9 +314,9 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
                     if (sources.contains(LI)) {
                         *out++ = LI;
                     } else {
-                        for (llvm::StoreInst *SI : shared_rfs[LI]) {
-                            queue.push(SI->getValueOperand());
-                        }
+		      for (llvm::StoreInst *SI : rfs[LI]) {
+			queue.push(SI->getValueOperand());
+		      }
                     }
                 } else if (llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
                     if (!I->getType()->isVoidTy()) {
