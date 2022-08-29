@@ -176,7 +176,7 @@ bool NonspeculativeTaint::runOnSCC(const MySCC& SCC) {
                     }
                 } else if (llvm::isa<llvm::AllocaInst, llvm::BranchInst>(I)) {
                     // ignore
-                } else if (llvm::isa<llvm::ExtractValueInst, llvm::InsertElementInst, llvm::InsertValueInst>(I)) {
+                } else if (llvm::isa<llvm::ExtractValueInst, llvm::InsertElementInst, llvm::InsertValueInst, llvm::ShuffleVectorInst>(I)) {
                     // TODO: ignored, handle later for higher precision
                 } else {
                     unhandled_instruction(*I);
