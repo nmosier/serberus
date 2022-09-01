@@ -96,6 +96,7 @@ add_library(SpectreV1_1 SHARED
   $<TARGET_OBJECTS:util>
   NonspeculativeTaint
   $<TARGET_OBJECTS:transmitter>
+  my_scc_pass
   )
 register_llvm_pass(SpectreV1_1)
 

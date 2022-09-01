@@ -16,4 +16,11 @@ endif()
 
 add_compile_options(-Wall -Wextra -pedantic)
 
+# For testing infrastructure
+find_program(MAKE_EXE NAMES gmake nmake make)
+include(ExternalProject)
+
+enable_testing()
+
 add_subdirectory(src)
+add_subdirectory(test)
