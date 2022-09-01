@@ -1,10 +1,11 @@
+#include "NonspeculativeTaint.h"
+
 #include <llvm/Analysis/AliasAnalysis.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Operator.h>
 
-#include "nonspeculative_taint.h"
 #include "util.h"
 #include "transmitter.h"
 

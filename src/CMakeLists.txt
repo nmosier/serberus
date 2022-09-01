@@ -17,10 +17,16 @@ add_library(my_scc_pass STATIC
   my_scc_pass.h
   )
 
-add_library(util STATIC
+add_library(util OBJECT
   util.cc
   util.h
-  )
+)
+
+add_library(InstructionPass OBJECT
+  InstructionPass.cc
+  InstructionPass.h
+)
+register_llvm_pass(InstructionPass)
 
 add_library(graph STATIC
   graph.cc
@@ -32,18 +38,18 @@ add_library(min_cut OBJECT
   min-cut.h
   )
 
-add_library(transmitter STATIC
+add_library(transmitter OBJECT
   transmitter.cc
   transmitter.h
   )
 
-add_library(speculative_taint SHARED
-  speculative_taint.cc
+add_library(SpeculativeTaint SHARED
+  SpeculativeTaint.cc
   $<TARGET_OBJECTS:min_cut>
-  transmitter
+  $<TARGET_OBJECTS:transmitter>
   util
   )
-register_llvm_pass(speculative_taint)
+register_llvm_pass(SpeculativeTaint)
 
 add_library(count_addr_stores SHARED
   count_addr_stores.cc
@@ -81,20 +87,27 @@ add_library(secret_param_analysis SHARED
   )
 register_llvm_pass(secret_param_analysis)
 
-add_library(nonspeculative_taint SHARED
-  nonspeculative_taint.cc
-  nonspeculative_taint.h
-  transmitter
+add_library(NonspeculativeTaint SHARED
+  NonspeculativeTaint.cc
+  NonspeculativeTaint.h
+  $<TARGET_OBJECTS:transmitter>
   $<TARGET_OBJECTS:util>
   )
-register_llvm_pass(nonspeculative_taint)
-target_link_libraries(nonspeculative_taint PUBLIC my_scc_pass)
+register_llvm_pass(NonspeculativeTaint)
+target_link_libraries(NonspeculativeTaint PUBLIC my_scc_pass)
 
-add_library(spectre_v1_1 SHARED
-  spectre_v1_1.cc
+add_library(SpectreV1_1 SHARED
+  SpectreV1_1.cc
   $<TARGET_OBJECTS:util>
-  nonspeculative_taint
-  transmitter
-  my_scc_pass # TODO: shouldn't need this
+  NonspeculativeTaint
+  $<TARGET_OBJECTS:transmitter>
   )
-register_llvm_pass(spectre_v1_1)
+register_llvm_pass(SpectreV1_1)
+
+add_library(ZeroFillCalls SHARED
+  ZeroFillCalls.cc
+  $<TARGET_OBJECTS:InstructionPass>
+  $<TARGET_OBJECTS:util>
+)
+register_llvm_pass(ZeroFillCalls)
+  

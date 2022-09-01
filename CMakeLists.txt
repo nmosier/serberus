@@ -17,5 +17,3 @@ endif()
 add_compile_options(-Wall -Wextra -pedantic)
 
 add_subdirectory(src)
-
-message("LLVM_INCLUDE_DIRS: ${LLVM_INCLUDE_DIRS}")

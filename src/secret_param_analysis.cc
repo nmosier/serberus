@@ -16,6 +16,7 @@
 #include <llvm/Analysis/AliasAnalysis.h>
 #include <llvm/Analysis/ScalarEvolution.h>
 #include <llvm/Analysis/BasicAliasAnalysis.h>
+#include <llvm/IR/IntrinsicInst.h>
 
 #include <map>
 #include <set>

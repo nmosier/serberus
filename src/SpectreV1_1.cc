@@ -17,7 +17,7 @@
 #include <llvm/Analysis/ScalarEvolution.h>
 #include <llvm/Analysis/BasicAliasAnalysis.h>
 
-#include "nonspeculative_taint.h"
+#include "NonspeculativeTaint.h"
 #include "util.h"
 
 namespace {

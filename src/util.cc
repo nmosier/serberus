@@ -1,9 +1,11 @@
+#include "util.h"
+
 #include <set>
 #include <sstream>
+#include <cassert>
 
 #include <llvm/IR/Instructions.h>
-
-#include "util.h"
+#include <llvm/IR/Operator.h>
 
 namespace {
 
@@ -112,4 +114,26 @@ unsigned instruction_dominator_depth(llvm::Instruction *I, const llvm::Dominator
     } else {
         return 0;
     }
+}
+
+namespace clou::util {
+
+  namespace {
+    llvm::Function *getCalledFunctionRec(llvm::Value *V) {
+      if (llvm::Function *F = llvm::dyn_cast<llvm::Function>(V)) {
+	return F;
+      } else if (llvm::BitCastOperator *BCO = llvm::dyn_cast<llvm::BitCastOperator>(V)) {
+	assert(BCO->getNumOperands() == 1);
+	return getCalledFunctionRec(BCO->getOperand(0));
+      } else {
+	unhandled_value(*V);
+      }
+    }
+  }
+
+  llvm::Function *getCalledFunction(const llvm::CallBase *C) {
+    return getCalledFunctionRec(C->getCalledOperand());
+  }
+  
+  
 }

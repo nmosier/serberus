@@ -86,6 +86,10 @@ namespace clou {
       for (const GReg& greg : gregs) {
 	constraints << "~{" << greg.q << "},";
       }
+      constexpr int num_xmms = 16;
+      for (int i = 0; i < num_xmms; ++i) {
+	constraints << "~{xmm" << i << "},";
+      }
       constraints << "~{flags}";
 
       return llvm::InlineAsm::get(func_ty, asm_str.str(), constraints.str(), false, false, llvm::InlineAsm::AD_Intel);
@@ -104,8 +108,6 @@ namespace clou {
     }
 
     bool runOnInstruction(llvm::Instruction& I) override {
-      llvm::errs() << "here\n";
-      
       llvm::CallBase *C = llvm::dyn_cast<llvm::CallBase>(&I);
       if (!C) {
 	return false;
@@ -132,7 +134,7 @@ namespace clou {
       return true;
     }
 
-    void print(llvm::raw_ostream& os, const llvm::Module *M) const override {
+    void print(llvm::raw_ostream& os, const llvm::Module *) const override {
       for (auto [key, value] : stats) {
 	os << key << ": " << value << "\n";
       }
@@ -145,12 +147,8 @@ namespace clou {
     void registerPass(const llvm::PassManagerBuilder&, llvm::legacy::PassManagerBase& PM) {
       PM.add(new ZeroFillCalls());
     }
-    llvm::RegisterStandardPasses Y {
-      llvm::PassManagerBuilder::EP_EnabledOnOptLevel0,
-      registerPass,
-    };
     llvm::RegisterStandardPasses Z {
-      llvm::PassManagerBuilder::EP_FullLinkTimeOptimizationLast,
+      llvm::PassManagerBuilder::EP_OptimizerLast,
       registerPass,
     };
   }

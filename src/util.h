@@ -189,3 +189,18 @@ OutputIt dominators(llvm::DominatorTree& DT, llvm::Instruction *I, OutputIt out)
     llvm::errs() << __FILE__ << ":" << __LINE__ << ":" << I << "\n";	\
     std::abort();							\
   } while (false)
+
+#define unhandled_value(V)			\
+  do {						\
+    llvm::errs() << __FILE__ << ":" << __LINE__ << ": unhandled value: " << (V) << "\n"; \
+    std::abort();							\
+  } while (false)
+
+namespace clou::util {
+
+  /**
+   * Provide a more complete version of llvm::CallBase::getCalledFunction() that handles more cases.
+   */
+  llvm::Function *getCalledFunction(const llvm::CallBase *C);
+  
+}
