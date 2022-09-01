@@ -211,13 +211,12 @@ void NonspeculativeTaint::print(llvm::raw_ostream& os, const llvm::Module *M) co
     }
 }
 
-bool NonspeculativeTaint::secret(const llvm::Value *V) const {
-    llvm::Value *V_ = const_cast<llvm::Value *>(V);
-    if (const llvm::Argument *A = llvm::dyn_cast<llvm::Argument>(V)) {
-        return !pub_vals.contains(V_);
+bool NonspeculativeTaint::secret(llvm::Value *V) const {
+    if (llvm::Argument *A = llvm::dyn_cast<llvm::Argument>(V)) {
+        return !pub_vals.contains(A);
     } else if (const llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
         if (!I->getType()->isVoidTy()) {
-            return !pub_vals.contains(V_);
+            return !pub_vals.contains(V);
         }
     }
     return false;

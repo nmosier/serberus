@@ -22,5 +22,5 @@ private:
     virtual void print(llvm::raw_ostream& os, const llvm::Module *M) const override;
     
 public:
-    bool secret(const llvm::Value *V) const;
+    bool secret(llvm::Value *V) const;
 };

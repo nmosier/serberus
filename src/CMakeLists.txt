@@ -28,11 +28,6 @@ add_library(InstructionPass OBJECT
 )
 register_llvm_pass(InstructionPass)
 
-add_library(graph STATIC
-  graph.cc
-  graph.h
-  )
-
 add_library(min_cut OBJECT
   min-cut.cc
   min-cut.h

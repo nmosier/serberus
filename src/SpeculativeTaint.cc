@@ -20,7 +20,6 @@
 #include <vector>
 #include <variant>
 
-#include "graph.h"
 #include "min-cut.h"
 #include "util.h"
 #include "transmitter.h"
