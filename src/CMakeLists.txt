@@ -75,7 +75,7 @@ add_library(print_dom_loop SHARED
 register_llvm_pass(print_dom_loop)
 
 add_library(secret_param_analysis SHARED
-  secret_param_analysis.cc
+  SecretParamAnalysis.cc
   util
   transmitter
   my_scc_pass

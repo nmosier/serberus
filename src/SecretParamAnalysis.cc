@@ -67,15 +67,7 @@ struct SecretParamAnalysis final: public MySCCPass {
         std::map<llvm::LoadInst *, llvm::StoreInst *> rfs;
         for_each_func_def(Fs.begin(), Fs.end(), [&] (llvm::Function& F) {
             llvm::DominatorTree DT (F);
-            
-#if 0
-            llvm::AAResults& AA = getAnalysis<llvm::AAResultsWrapperPass>(F).getAAResults();
-            llvm::ScalarEvolution& SE = getAnalysis<llvm::ScalarEvolutionWrapperPass>(F).getSE();
-            llvm::LoopInfo LI (DT);
-            llvm::DependenceInfo DI (&F, &AA, &SE, &LI);
-#else
             llvm::DependenceInfo& DI = getAnalysis<llvm::DependenceAnalysisWrapperPass>(F).getDI();
-#endif
 
             for_each_inst<llvm::LoadInst>(F, [&] (llvm::LoadInst *LI) {
                 // get dominating stores
