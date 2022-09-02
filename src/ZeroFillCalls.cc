@@ -144,13 +144,10 @@ namespace clou {
   namespace {
     llvm::RegisterPass<ZeroFillCalls> X {"zero-fill-calls", "Zero Fill Calls Pass"};
 
-    void registerPass(const llvm::PassManagerBuilder&, llvm::legacy::PassManagerBase& PM) {
-      PM.add(new ZeroFillCalls());
-    }
-    llvm::RegisterStandardPasses Z {
+    util::RegisterClangPass<ZeroFillCalls> Y {
       llvm::PassManagerBuilder::EP_OptimizerLast,
-      registerPass,
-    };
+      llvm::PassManagerBuilder::EP_EnabledOnOptLevel0,
+      };
   }
   
 }

@@ -83,10 +83,10 @@ bool NonspeculativeTaint::runOnSCC(const MySCC& SCC) {
                     }
                 } else if (llvm::isa<llvm::AllocaInst, llvm::BranchInst, llvm::FenceInst, llvm::StoreInst, llvm::SwitchInst, llvm::UnreachableInst>(I)) {
                     // ignore
-                } else if (llvm::isa<llvm::ExtractValueInst, llvm::ExtractElementInst>(I)) {
+                } else if (llvm::isa<llvm::ExtractValueInst, llvm::ExtractElementInst, llvm::ShuffleVectorInst, llvm::InsertElementInst>(I)) {
                     // TODO: ignore for now, but can consider for more precision later on
                 } else {
-                    unhandled_instruction(*I);
+		  unhandled_instruction(*I);
                 }
             }
         }
@@ -212,9 +212,12 @@ void NonspeculativeTaint::print(llvm::raw_ostream& os, const llvm::Module *M) co
 }
 
 bool NonspeculativeTaint::secret(llvm::Value *V) const {
-    if (llvm::Argument *A = llvm::dyn_cast<llvm::Argument>(V)) {
-        return !pub_vals.contains(A);
-    } else if (const llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
+  if (pub_vals.empty()) {
+  llvm::errs() << "WARNING: pub_vals empty\n";
+}
+  if (llvm::Argument *A = llvm::dyn_cast<llvm::Argument>(V)) {
+    return !pub_vals.contains(A);
+  } else if (const llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
         if (!I->getType()->isVoidTy()) {
             return !pub_vals.contains(V);
         }

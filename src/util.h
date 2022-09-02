@@ -5,11 +5,15 @@
 #include <llvm/Analysis/LoopInfo.h>
 #include <llvm/Analysis/CallGraphSCCPass.h>
 #include <llvm/Analysis/CallGraph.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#include <llvm/IR/LegacyPassManager.h>
 
 #include <ostream>
 #include <set>
 #include <sstream>
 #include <string>
+#include <initializer_list>
+#include <vector>
 
 namespace util {
 // helper type for the visitor #4
@@ -184,17 +188,13 @@ OutputIt dominators(llvm::DominatorTree& DT, llvm::Instruction *I, OutputIt out)
 
 }
 
-#define unhandled_instruction(I)		\
-  do {									\
-    llvm::errs() << __FILE__ << ":" << __LINE__ << ":" << I << "\n";	\
-    std::abort();							\
-  } while (false)
-
 #define unhandled_value(V)			\
   do {						\
     llvm::errs() << __FILE__ << ":" << __LINE__ << ": unhandled value: " << (V) << "\n"; \
     std::abort();							\
   } while (false)
+
+#define unhandled_instruction(I) unhandled_value(I)
 
 namespace clou::util {
 
@@ -202,5 +202,28 @@ namespace clou::util {
    * Provide a more complete version of llvm::CallBase::getCalledFunction() that handles more cases.
    */
   llvm::Function *getCalledFunction(const llvm::CallBase *C);
+
+  template <class Pass>
+  class RegisterClangPass {
+  public:
+    RegisterClangPass(std::initializer_list<llvm::PassManagerBuilder::ExtensionPointTy> extension_points) {
+      for (auto extension_point : extension_points) {
+	extension_ids.push_back(llvm::PassManagerBuilder::addGlobalExtension(extension_point, &registerPass));
+      }
+    }
+
+    ~RegisterClangPass() {
+      for (auto extension_id : extension_ids) {
+	llvm::PassManagerBuilder::removeGlobalExtension(extension_id);
+      }
+    }
+    
+  private:
+    std::vector<llvm::PassManagerBuilder::GlobalExtensionID> extension_ids;
+
+    static void registerPass(const llvm::PassManagerBuilder&, llvm::legacy::PassManagerBase& PM) {
+      PM.add(new Pass());
+    }
+  };
   
 }

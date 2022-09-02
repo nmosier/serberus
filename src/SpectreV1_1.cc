@@ -20,7 +20,8 @@
 #include "NonspeculativeTaint.h"
 #include "util.h"
 
-namespace {
+namespace clou {
+  namespace {
 
 struct SpectreV11 final: public llvm::FunctionPass {
     static inline char ID = 0;
@@ -49,10 +50,13 @@ struct SpectreV11 final: public llvm::FunctionPass {
         });
         
         llvm::errs() << F.getName() << ": " << count << " fences\n";
+	if (F.getName() == "fill_block") {
+	  llvm::errs() << F << "\n";
+	}
         
         total += count;
         
-        return false;
+        return count > 0;
     }
     
     virtual void print(llvm::raw_ostream& os, const llvm::Module *M) const override {
@@ -65,4 +69,11 @@ llvm::RegisterPass<SpectreV11> X {
     "spectre-v1.1", "Spectre v1.1 Mitigation Pass"
 };
 
+  util::RegisterClangPass<SpectreV11> Y {
+    // llvm::PassManagerBuilder::EP_OptimizerLast,
+    llvm::PassManagerBuilder::EP_ModuleOptimizerEarly,
+    llvm::PassManagerBuilder::EP_EnabledOnOptLevel0,
+  };
+
+  }
 }
