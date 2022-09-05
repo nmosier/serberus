@@ -106,4 +106,30 @@ add_library(ZeroFillCalls SHARED
   $<TARGET_OBJECTS:util>
 )
 register_llvm_pass(ZeroFillCalls)
+
+add_library(FenceReplacementPass SHARED
+  FenceReplacementPass.cc
+  FenceReplacementPass.h
+)
+register_llvm_pass(FenceReplacementPass)
   
+add_library(LfencePass SHARED
+  LfencePass.cc
+  FenceReplacementPass
+  $<TARGET_OBJECTS:util>
+)
+register_llvm_pass(LfencePass)
+
+add_library(BreakPass SHARED
+  BreakPass.cc
+  FenceReplacementPass
+  $<TARGET_OBJECTS:util>
+)
+
+# lfence profiler
+add_executable(lfence_profiler
+  lfence_profiler.cc
+)
+target_include_directories(lfence_profiler PRIVATE ${Libunwind_INCLUDE_DIRS} ${Capstone_INCLUDE_DIRS})
+target_link_directories(lfence_profiler PRIVATE ${Libunwind_LIBRARY_DIRS} ${Capstone_LIBRARY_DIRS})
+target_link_libraries(lfence_profiler PRIVATE ${Libunwind_LIBRARIES} ${Capstone_LIBRARIES})
