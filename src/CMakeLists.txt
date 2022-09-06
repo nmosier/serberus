@@ -1,4 +1,4 @@
-add_compile_options(-fno-rtti)
+add_compile_options(-fno-rtti -Werror -Wall -Wextra)
 
 function(register_llvm_pass TARGET)
   target_include_directories(${TARGET} SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS})
@@ -133,3 +133,9 @@ add_executable(lfence_profiler
 target_include_directories(lfence_profiler PRIVATE ${Libunwind_INCLUDE_DIRS} ${Capstone_INCLUDE_DIRS})
 target_link_directories(lfence_profiler PRIVATE ${Libunwind_LIBRARY_DIRS} ${Capstone_LIBRARY_DIRS})
 target_link_libraries(lfence_profiler PRIVATE ${Libunwind_LIBRARIES} ${Capstone_LIBRARIES})
+
+add_library(LoopIndexPass SHARED
+  LoopIndexPass.cc
+  util
+)
+register_llvm_pass(LoopIndexPass)
