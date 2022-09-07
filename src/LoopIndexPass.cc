@@ -93,10 +93,10 @@ namespace clou {
       }
 
       bool runOnLoop(llvm::Loop *L, llvm::LPPassManager&) {
-	if (L->isInnermost()) {
+	if (!L->isInnermost()) {
 	  return false;
 	}
-	
+
 	if (!(L->getLoopLatch() && L->getLoopPredecessor() && llvm::isa<llvm::BranchInst>(L->getLoopLatch()->getTerminator()))) {
 	  return false;
 	}
@@ -158,6 +158,32 @@ namespace clou {
 	    return U.getUser() != select;
 	  });
 	  whitelist.insert(select);
+	}
+
+	// fix phi nodes: move constant phi operands to loop predecessor
+	{
+	  llvm::IRBuilder<> IRB (L->getLoopPredecessor()->getTerminator());
+
+	  // create allocas + stores
+	  std::vector<llvm::AllocaInst *> allocas;
+	  for (const Info& info : infos) {
+	    if (llvm::isa<llvm::Constant>(info.init_value)) {
+	      llvm::AllocaInst *alloca = IRB.CreateAlloca(info.init_value->getType());
+	      IRB.CreateStore(info.init_value, alloca);
+	      allocas.push_back(alloca);
+	    }
+	  }
+
+	  // insert fence
+	  IRB.CreateFence(llvm::AtomicOrdering::Acquire);	  
+
+	  // insert loads
+	  for (unsigned i = 0; i < allocas.size(); ++i) {
+	    const auto& info = infos[i];
+	    auto *alloca = allocas[i];
+	    llvm::LoadInst *load = IRB.CreateLoad(alloca->getType(), alloca);
+	    info.phi->replaceUsesOfWith(info.init_value, load);
+	  }
 	}
 
 	annotateLoop(L, whitelist);
