@@ -3,9 +3,12 @@
 #include <set>
 #include <sstream>
 #include <cassert>
+#include <algorithm>
 
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Operator.h>
+#include <llvm/IR/Function.h>
+#include <llvm/IR/Use.h>
 
 namespace {
 
@@ -34,6 +37,16 @@ bool has_incoming_addr(const llvm::Value *V,
 bool has_incoming_addr(const llvm::Value *V) {
   std::set<const llvm::Value *> seen;
   return has_incoming_addr(V, seen);
+}
+
+bool is_nonconstant_value(const llvm::Value *V) {
+  if (llvm::isa<llvm::LoadInst, llvm::Argument, llvm::PHINode>(V)) {
+    return true;
+  } else if (const auto *I = llvm::dyn_cast<llvm::Instruction>(V)) {
+    return std::any_of(I->op_begin(), I->op_end(), is_nonconstant_value);
+  } else {
+    return false;
+  }
 }
 
 std::set<llvm::Value *> get_incoming_loads(llvm::Value *I) {
@@ -135,5 +148,21 @@ namespace clou::util {
     return getCalledFunctionRec(C->getCalledOperand());
   }
   
+  bool functionIsDirectCallOnly(const llvm::Function *F) {
+    return std::all_of(F->use_begin(), F->use_end(), [] (const llvm::Use& use) -> bool {
+      if (llvm::isa<llvm::CallBase>(use.getUser()) && use.getOperandNo() == 0) {
+	return true;
+      }
+      return false;
+    });
+  }
+
+  void setMetadataFlag(llvm::Instruction *I, llvm::StringRef flag) {
+    I->setMetadata(flag, llvm::MDNode::get(I->getContext(), {}));
+  }
+  
+  bool getMetadataFlag(llvm::Instruction *I, llvm::StringRef flag) {
+    return I->getMetadata(flag) != nullptr;
+  }
   
 }

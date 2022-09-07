@@ -23,6 +23,7 @@ template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 } // namespace util
 
 bool has_incoming_addr(const llvm::Value *V);
+bool is_nonconstant_value(const llvm::Value *V);
 
 namespace impl {
 template <class OutputIt>
@@ -203,6 +204,8 @@ namespace clou::util {
    */
   llvm::Function *getCalledFunction(const llvm::CallBase *C);
 
+  bool functionIsDirectCallOnly(const llvm::Function *F);
+
   template <class Pass>
   class RegisterClangPass {
   public:
@@ -225,5 +228,8 @@ namespace clou::util {
       PM.add(new Pass());
     }
   };
+
   
+  void setMetadataFlag(llvm::Instruction *I, llvm::StringRef flag);
+  bool getMetadataFlag(llvm::Instruction *I, llvm::StringRef flag);
 }

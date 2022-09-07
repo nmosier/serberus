@@ -55,7 +55,48 @@ namespace clou {
 	return phi;
       }
 
+      using Whitelist = std::set<llvm::Value *>;
+
+      static bool isValueBounded(llvm::Value *V, llvm::Loop *L, const Whitelist& whitelist) {
+	if (L->isLoopInvariant(V)) {
+	  return true;
+	} else {
+	  auto *I = llvm::cast<llvm::Instruction>(V);
+	  if (whitelist.contains(I)) {
+	    return true;
+	  } else if (I->mayReadFromMemory()) {
+	    return false;
+	  } else {
+	    return std::all_of(I->op_begin(), I->op_end(), [&] (llvm::Value *V) {
+	      return isValueBounded(V, L, whitelist);
+	    });
+	  }
+	}
+      }
+
+      static bool isStoreInBounds(llvm::StoreInst *store, llvm::Loop *L, const Whitelist& whitelist) {
+	return isValueBounded(store->getPointerOperand(), L, whitelist);
+      }
+
+      static void annotateLoop(llvm::Loop *L, const Whitelist& whitelist) {
+	for (llvm::BasicBlock *B : L->blocks()) {
+	  for (llvm::Instruction& I : *B) {
+	    if (auto *SI = llvm::dyn_cast<llvm::StoreInst>(&I)) {
+	      if (isStoreInBounds(SI, L, whitelist)) {
+		util::setMetadataFlag(SI, "spec_inbounds");
+	      } else {
+		llvm::errs() << "not inbounds: " << *SI << "\n";
+	      }
+	    }
+	  }
+	}
+      }
+
       bool runOnLoop(llvm::Loop *L, llvm::LPPassManager&) {
+	if (L->isInnermost()) {
+	  return false;
+	}
+	
 	if (!(L->getLoopLatch() && L->getLoopPredecessor() && llvm::isa<llvm::BranchInst>(L->getLoopLatch()->getTerminator()))) {
 	  return false;
 	}
@@ -107,6 +148,7 @@ namespace clou {
 
 	// get first non-phi node
 	llvm::Instruction *nonphi = getFirstNonPhi(*L->getHeader());
+	std::set<llvm::Value *> whitelist;
 	for (const Info& info : infos) {
 	  llvm::IRBuilder<> IRB (nonphi);
 	  llvm::Value *TV = backedge_cond ? info.phi : info.init_value;
@@ -115,7 +157,10 @@ namespace clou {
 	  info.phi->replaceUsesWithIf(select, [&] (llvm::Use& U) {
 	    return U.getUser() != select;
 	  });
+	  whitelist.insert(select);
 	}
+
+	annotateLoop(L, whitelist);
 	
 	return true;
       }
