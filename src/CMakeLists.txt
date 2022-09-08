@@ -1,4 +1,4 @@
-add_compile_options(-fno-rtti -Werror -Wall -Wextra)
+add_compile_options(-fno-rtti -Wall -Wextra)
 
 function(register_llvm_pass TARGET)
   target_include_directories(${TARGET} SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS})
@@ -15,11 +15,17 @@ link_libraries(${Libprofiler_LIBRARIES})
 add_library(my_scc_pass STATIC
   my_scc_pass.cc
   my_scc_pass.h
-  )
+)
 
-add_library(util OBJECT
+add_library(metadata SHARED
+  metadata.cc
+  metadata.h
+)
+
+add_library(util STATIC
   util.cc
   util.h
+  metadata # TODO: shouldn't depend on this
 )
 
 add_library(InstructionPass OBJECT
@@ -31,7 +37,7 @@ register_llvm_pass(InstructionPass)
 add_library(min_cut OBJECT
   min-cut.cc
   min-cut.h
-  )
+)
 
 add_library(transmitter OBJECT
   transmitter.cc
@@ -86,14 +92,14 @@ add_library(NonspeculativeTaint SHARED
   NonspeculativeTaint.cc
   NonspeculativeTaint.h
   $<TARGET_OBJECTS:transmitter>
-  $<TARGET_OBJECTS:util>
-  )
+  util
+)
 register_llvm_pass(NonspeculativeTaint)
 target_link_libraries(NonspeculativeTaint PUBLIC my_scc_pass)
 
 add_library(SpectreV1_1 SHARED
   SpectreV1_1.cc
-  $<TARGET_OBJECTS:util>
+  util
   NonspeculativeTaint
   $<TARGET_OBJECTS:transmitter>
   my_scc_pass
@@ -103,7 +109,7 @@ register_llvm_pass(SpectreV1_1)
 add_library(ZeroFillCalls SHARED
   ZeroFillCalls.cc
   $<TARGET_OBJECTS:InstructionPass>
-  $<TARGET_OBJECTS:util>
+  util
 )
 register_llvm_pass(ZeroFillCalls)
 
@@ -116,14 +122,14 @@ register_llvm_pass(FenceReplacementPass)
 add_library(LfencePass SHARED
   LfencePass.cc
   FenceReplacementPass
-  $<TARGET_OBJECTS:util>
+  util
 )
 register_llvm_pass(LfencePass)
 
 add_library(BreakPass SHARED
   BreakPass.cc
   FenceReplacementPass
-  $<TARGET_OBJECTS:util>
+  util
 )
 
 # lfence profiler
@@ -137,5 +143,26 @@ target_link_libraries(lfence_profiler PRIVATE ${Libunwind_LIBRARIES} ${Capstone_
 add_library(LoopIndexPass SHARED
   LoopIndexPass.cc
   util
+  metadata
 )
 register_llvm_pass(LoopIndexPass)
+
+add_library(SpectreBCBSSecretPass SHARED
+  SpectreBCBSSecretPass.cc
+)
+target_link_libraries(SpectreBCBSSecretPass PRIVATE NonspeculativeTaint util metadata)
+
+add_library(TracePass SHARED
+  TracePass.cc
+  FenceReplacementPass
+)
+register_llvm_pass(TracePass)
+target_link_libraries(TracePass PRIVATE util)
+
+add_library(NoSpillLowering SHARED
+  NoSpillLowering.cc
+)
+register_llvm_pass(NoSpillLowering)
+target_link_libraries(NoSpillLowering PRIVATE util metadata)
+
+  

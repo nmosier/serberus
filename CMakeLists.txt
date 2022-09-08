@@ -29,4 +29,6 @@ find_program(CAT_EXE REQUIRED NAMES cat)
 
 add_subdirectory(src)
 add_subdirectory(runtime)
+add_subdirectory(tools)
+add_subdirectory(scripts)
 add_subdirectory(test)
