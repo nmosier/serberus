@@ -209,6 +209,7 @@ namespace clou::util {
   template <class Pass>
   class RegisterClangPass {
   public:
+    RegisterClangPass(): RegisterClangPass({llvm::PassManagerBuilder::EP_OptimizerLast, llvm::PassManagerBuilder::EP_EnabledOnOptLevel0}) {}
     RegisterClangPass(std::initializer_list<llvm::PassManagerBuilder::ExtensionPointTy> extension_points) {
       for (auto extension_point : extension_points) {
 	extension_ids.push_back(llvm::PassManagerBuilder::addGlobalExtension(extension_point, &registerPass));
@@ -229,7 +230,85 @@ namespace clou::util {
     }
   };
 
-  
-  void setMetadataFlag(llvm::Instruction *I, llvm::StringRef flag);
-  bool getMetadataFlag(llvm::Instruction *I, llvm::StringRef flag);
+  bool isSpeculativeInbounds(llvm::StoreInst *SI);
+
+  // TODO: template, and explicitly specialize to llvm::Function?
+  // Directly iterate over insturctions in functions.
+
+  template <class OuterIt, class InnerIt>
+  class NestedIterator {
+    public:
+
+    NestedIterator() = default;
+    template <class Outer>
+    NestedIterator(const Outer& o): NestedIterator(o.begin(), o.end()) {}
+    NestedIterator(OuterIt o_begin, OuterIt o_end): o_it(o_begin), o_end(o_end) {
+      if (o_it != o_end) {
+	advance();
+      }
+    }
+    
+    auto& operator++() {
+      next();
+      return *this;
+    }
+    
+    auto& operator++(int) {
+      next();
+      return *this;
+    }
+    
+    auto& operator*() const {
+      assert(!done());
+      return *i_it;
+    }
+    
+    auto *operator->() const {
+      assert(!done());
+      return &*i_it;
+    }
+
+  private:
+    OuterIt o_it;
+    OuterIt o_end;
+    InnerIt i_it;
+    InnerIt i_end;
+
+    bool done() const {
+      return !(o_it == o_end && i_it == i_end);
+    }
+
+    void next() {
+      assert(i_it != i_end);
+      ++i_it;
+      advance();
+    }
+    
+    void advance() {
+      assert(o_it != o_end);
+      while (i_it == i_end) {
+	++o_it;
+	if (o_it == o_end) {
+	  return;
+	}
+	i_it = o_it->begin();
+      }
+    }
+  };
+
+  using InstructionFunctionIterator = NestedIterator<llvm::Function::iterator, llvm::BasicBlock::iterator>;
+  inline InstructionFunctionIterator instructions_begin(llvm::Function& F) {
+    return InstructionFunctionIterator(F.begin(), F.end());
+  }
+
+  inline InstructionFunctionIterator instructions_end(llvm::Function& F) {
+    return InstructionFunctionIterator(F.end(), F.end());
+  }
+
+  using InstructionFunctionRange = llvm::iterator_range<InstructionFunctionIterator>;
+  inline InstructionFunctionRange instructions(llvm::Function& F) {
+    return InstructionFunctionRange(instructions_begin(F), instructions_end(F));
+  }
+
+  // TODO: Double-check this using test pass.
 }

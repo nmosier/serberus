@@ -10,6 +10,8 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Use.h>
 
+#include "metadata.h"
+
 namespace {
 
 bool has_incoming_addr(const llvm::Value *V,
@@ -157,12 +159,28 @@ namespace clou::util {
     });
   }
 
-  void setMetadataFlag(llvm::Instruction *I, llvm::StringRef flag) {
-    I->setMetadata(flag, llvm::MDNode::get(I->getContext(), {}));
+  namespace {
+
+    // FIXME: This isn't entirely correct...
+    bool isSpeculativeInboundsValue(const llvm::Value *V) {
+      if (const auto *I = llvm::dyn_cast<llvm::Instruction>(V)) {
+	if (llvm::isa<llvm::PHINode>(I) || I->mayReadFromMemory()) {
+	  return false;
+	} else {
+	  return std::all_of(I->op_begin(), I->op_end(), isSpeculativeInboundsValue);
+	}
+      } else {
+	return true;
+      }
+    }
   }
-  
-  bool getMetadataFlag(llvm::Instruction *I, llvm::StringRef flag) {
-    return I->getMetadata(flag) != nullptr;
+
+  bool isSpeculativeInbounds(llvm::StoreInst *SI) {
+    if (md::getMetadataFlag(SI, md::speculative_inbounds)) {
+      return true;
+    } else {
+      return isSpeculativeInboundsValue(SI->getPointerOperand());
+    }
   }
   
 }
