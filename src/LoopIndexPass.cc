@@ -1,4 +1,5 @@
 #include <vector>
+#include <fstream>
 
 #include <llvm/Analysis/LoopPass.h>
 #include <llvm/Analysis/LoopInfo.h>
@@ -7,8 +8,10 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/LegacyPassManager.h>
+#include <llvm/Support/raw_os_ostream.h>
 
 #include "util.h"
+#include "metadata.h"
 
 namespace clou {
   namespace {
@@ -54,10 +57,11 @@ namespace clou {
 	phi->addIncoming(L->getLatchCmpInst(), L->getLoopLatch());
 	return phi;
       }
-
+      
       using Whitelist = std::set<llvm::Value *>;
+      using NoSpills = std::set<llvm::Value *>;
 
-      static bool isValueBounded(llvm::Value *V, llvm::Loop *L, const Whitelist& whitelist) {
+      static bool isValueBounded(llvm::Value *V, llvm::Loop *L, const Whitelist& whitelist, NoSpills& nospills) {
 	if (L->isLoopInvariant(V)) {
 	  return true;
 	} else {
@@ -67,23 +71,30 @@ namespace clou {
 	  } else if (I->mayReadFromMemory()) {
 	    return false;
 	  } else {
+	    std::copy(I->op_begin(), I->op_end(), std::inserter(nospills, nospills.end()));
 	    return std::all_of(I->op_begin(), I->op_end(), [&] (llvm::Value *V) {
-	      return isValueBounded(V, L, whitelist);
+	      return isValueBounded(V, L, whitelist, nospills);
 	    });
 	  }
 	}
       }
 
-      static bool isStoreInBounds(llvm::StoreInst *store, llvm::Loop *L, const Whitelist& whitelist) {
-	return isValueBounded(store->getPointerOperand(), L, whitelist);
+      static bool isStoreInBounds(llvm::StoreInst *store, llvm::Loop *L, const Whitelist& whitelist, NoSpills& nospills) {
+	return isValueBounded(store->getPointerOperand(), L, whitelist, nospills);
       }
 
       static void annotateLoop(llvm::Loop *L, const Whitelist& whitelist) {
 	for (llvm::BasicBlock *B : L->blocks()) {
 	  for (llvm::Instruction& I : *B) {
 	    if (auto *SI = llvm::dyn_cast<llvm::StoreInst>(&I)) {
-	      if (isStoreInBounds(SI, L, whitelist)) {
-		util::setMetadataFlag(SI, "spec_inbounds");
+	      NoSpills nospills;
+	      if (isStoreInBounds(SI, L, whitelist, nospills)) {
+		md::setMetadataFlag(SI, md::speculative_inbounds);
+		for (llvm::Value *V : nospills) {
+		  if (auto *I = llvm::dyn_cast<llvm::Instruction>(V)) {
+		    md::setMetadataFlag(I, md::nospill);
+		  }
+		}
 	      } else {
 		llvm::errs() << "not inbounds: " << *SI << "\n";
 	      }
@@ -93,11 +104,18 @@ namespace clou {
       }
 
       bool runOnLoop(llvm::Loop *L, llvm::LPPassManager&) {
-	if (!L->isInnermost()) {
+	if (!L->isInnermost() ||
+	    !L->getLoopLatch() ||
+	    !L->getLoopPredecessor() ||
+	    !L->getLatchCmpInst()) {
 	  return false;
 	}
 
-	if (!(L->getLoopLatch() && L->getLoopPredecessor() && llvm::isa<llvm::BranchInst>(L->getLoopLatch()->getTerminator()))) {
+	if (const llvm::BranchInst *BI = llvm::dyn_cast<llvm::BranchInst>(L->getLoopLatch()->getTerminator())) {
+	  if (!BI->isConditional()) {
+	    return false;
+	  }
+	} else {
 	  return false;
 	}
 	
@@ -142,6 +160,9 @@ namespace clou {
 	  }
 	}
 
+	// llvm::errs() << "\nBefore Predecessor:\n" << *L->getPredecessor() << "\n\n";
+	// llvm::errs() << "\nBefore Header:\n" << *L->getHeader()
+
 	const bool backedge_cond = getBackedgeCond(L);
 
 	llvm::PHINode *cond_phi = createCondPHI(L, backedge_cond);
@@ -165,12 +186,12 @@ namespace clou {
 	  llvm::IRBuilder<> IRB (L->getLoopPredecessor()->getTerminator());
 
 	  // create allocas + stores
-	  std::vector<llvm::AllocaInst *> allocas;
+	  std::map<llvm::AllocaInst *, Info> allocas;
 	  for (const Info& info : infos) {
 	    if (llvm::isa<llvm::Constant>(info.init_value)) {
-	      llvm::AllocaInst *alloca = IRB.CreateAlloca(info.init_value->getType());
+	      llvm::AllocaInst *alloca = IRB.CreateAlloca(info.phi->getType());
 	      IRB.CreateStore(info.init_value, alloca);
-	      allocas.push_back(alloca);
+	      allocas[alloca] = info;
 	    }
 	  }
 
@@ -178,16 +199,14 @@ namespace clou {
 	  IRB.CreateFence(llvm::AtomicOrdering::Acquire);	  
 
 	  // insert loads
-	  for (unsigned i = 0; i < allocas.size(); ++i) {
-	    const auto& info = infos[i];
-	    auto *alloca = allocas[i];
-	    llvm::LoadInst *load = IRB.CreateLoad(alloca->getType(), alloca);
+	  for (const auto& [alloca, info] : allocas) {
+	    llvm::LoadInst *load = IRB.CreateLoad(alloca->getType()->getPointerElementType(), alloca);
 	    info.phi->replaceUsesOfWith(info.init_value, load);
 	  }
 	}
 
 	annotateLoop(L, whitelist);
-	
+
 	return true;
       }
     };
