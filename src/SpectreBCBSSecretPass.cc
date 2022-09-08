@@ -51,16 +51,57 @@ namespace clou {
 	AU.addRequired<NonspeculativeTaint>();
       }
 
-      template <class OutputIt>
-      void get_store_address_sources(llvm::Value *V, OutputIt out) {
+      template <class OutputIt1, class OutputIt2>
+      void get_store_address_sources(llvm::Value *V, OutputIt1& root_out, OutputIt2& interior_out, std::set<llvm::Value *>& seen) {
+	if (!seen.insert(V).second) { return; }
 	if (auto *I = llvm::dyn_cast<llvm::Instruction>(V)) {
-	  if (llvm::isa<llvm::AllocaInst>(V)) {
-	    // skip
+	  if (I->mayReadFromMemory()) {
+	    *root_out++ = I;
 	  } else {
-	    *out++ = I;
+	    *interior_out++ = I;
+	    for (llvm::Value *V : I->operands()) {
+	      get_store_address_sources(V, root_out, interior_out, seen);
+	    }
 	  }
 	} else if (llvm::isa<llvm::Argument>(V)) {
-	  *out++ = I;
+	  *root_out++ = V;
+	} else if (llvm::isa<llvm::Constant>(V)) {
+	  // ignore
+	} else {
+	  unhandled_value(*V);
+	}
+      }
+
+      template <class OutputIt1, class OutputIt2>
+      void get_store_address_sources(llvm::Value *V, OutputIt1 root_out, OutputIt2 interior_out) {
+	std::set<llvm::Value *> seen;
+	get_store_address_sources(V, root_out, interior_out, seen);
+      }
+
+      template <class InputIt>
+      void markIntermediatesNoSpill(llvm::Instruction *root, InputIt interior_begin, InputIt interior_end) {
+	// Find all instructions we can reach before hitting fences
+	std::queue<llvm::Instruction *> todo;
+	todo.push(root);
+	std::set<llvm::Instruction *> seen;
+	while (!todo.empty()) {
+	  llvm::Instruction *I = todo.front();
+	  todo.pop();
+	  if (seen.insert(I).second) {
+	    if (!llvm::isa<llvm::FenceInst>(I)) {
+	      for (llvm::Instruction *pred : llvm::predecessors(I)) {
+		todo.push(pred);
+	      }
+	    }
+	  }
+	}
+
+	// Find which interiors were found
+	for (InputIt interior_it = interior_begin; interior_it != interior_end; ++interior_it) {
+	  llvm::Instruction *I = *interior_it;
+	  if (seen.contains(I)) {
+	    md::setMetadataFlag(I, md::nospill);
+	  }
 	}
       }
 
@@ -80,6 +121,8 @@ namespace clou {
 
 	llvm::DominatorTree DT (F);
 	llvm::LoopInfo LI (DT);
+
+	// Add CFG to graph
 	for (llvm::BasicBlock& B : F) {
 	  for (llvm::Instruction& dst : B) {
 	    for (llvm::Instruction *src : llvm::predecessors(&dst)) {
@@ -92,14 +135,20 @@ namespace clou {
 	  }
 	}
 
+	// Add arguments
+	for (llvm::Argument& A : F.args()) {
+	  G[&A][&F.getEntryBlock().front()] = 1; // TODO: compute edge weight
+	}
+
 	// Source-transmitter structs
 	std::vector<Alg::ST> sts;
+	std::set<llvm::Instruction *> interior_sources;
 	for (llvm::StoreInst *SI : secret_oob_stores) {
 	  Alg::ST st;
 	  st.t = SI;
 
 	  // add definitions (Spectre v4, since which may lower to stores)
-	  get_store_address_sources(SI->getPointerOperand(), std::inserter(st.s, st.s.end()));
+	  get_store_address_sources(SI->getPointerOperand(), std::inserter(st.s, st.s.end()), std::inserter(interior_sources, interior_sources.end()));
 	  if (st.s.empty()) {
 	    llvm::errs() << "here\n";
 	    continue;
@@ -154,6 +203,9 @@ namespace clou {
 		nodes.emplace(&I, nodes.size());
 	      }
 	    }
+	    for (llvm::Argument& A : F.args()) {
+	      nodes.emplace(&A, nodes.size());
+	    }
 	    
 	    std::set<Node> special;
 	    for (const Alg::ST& st : sts) {
@@ -195,6 +247,12 @@ namespace clou {
 	  }
 	  llvm::IRBuilder<> IRB (ins);
 	  IRB.CreateFence(llvm::AtomicOrdering::Acquire);
+	}
+
+	// Mark nospills
+	for (const auto& st : sts) {
+	  auto *I = llvm::cast<llvm::Instruction>(st.t.V);
+	  markIntermediatesNoSpill(I, interior_sources.begin(), interior_sources.end());
 	}
 	
 	return true;
