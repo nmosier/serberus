@@ -12,6 +12,8 @@
 
 #include "metadata.h"
 
+namespace clou {
+
 namespace {
 
 bool has_incoming_addr(const llvm::Value *V,
@@ -99,22 +101,6 @@ bool is_nonspeculative_secret(const llvm::Value *V) {
   }
 }
 
-namespace llvm {
-
-std::vector<llvm::Instruction *> predecessors(llvm::Instruction *I) {
-  std::vector<llvm::Instruction *> res;
-  if (llvm::Instruction *pred = I->getPrevNode()) {
-    res.push_back(pred);
-  } else {
-    for (llvm::BasicBlock *B : llvm::predecessors(I->getParent())) {
-      res.push_back(&B->back());
-    }
-  }
-  return res;
-}
-
-} // namespace llvm
-
 unsigned instruction_loop_nest_depth(llvm::Instruction *I, const llvm::LoopInfo& LI) {
     if (const llvm::Loop *L = LI[I->getParent()]) {
         return L->getLoopDepth() + 1; // TODO: check
@@ -131,7 +117,7 @@ unsigned instruction_dominator_depth(llvm::Instruction *I, const llvm::Dominator
     }
 }
 
-namespace clou::util {
+namespace util {
 
   namespace {
     llvm::Function *getCalledFunctionRec(llvm::Value *V) {
@@ -184,3 +170,21 @@ namespace clou::util {
   }
   
 }
+
+}
+
+namespace llvm {
+
+std::vector<llvm::Instruction *> predecessors(llvm::Instruction *I) {
+  std::vector<llvm::Instruction *> res;
+  if (llvm::Instruction *pred = I->getPrevNode()) {
+    res.push_back(pred);
+  } else {
+    for (llvm::BasicBlock *B : llvm::predecessors(I->getParent())) {
+      res.push_back(&B->back());
+    }
+  }
+  return res;
+}
+
+} // namespace llvm

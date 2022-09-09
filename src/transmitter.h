@@ -7,6 +7,8 @@
 
 #include "util.h"
 
+namespace clou {
+
 struct TransmitterOperand {
     enum Kind {
         TRUE,
@@ -64,3 +66,4 @@ OutputIt get_transmitter_sensitive_operands(llvm::Instruction *I,
 
 std::set<TransmitterOperand> get_transmitter_sensitive_operands(llvm::Instruction *I);
 
+}

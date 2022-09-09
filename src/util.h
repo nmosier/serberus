@@ -15,6 +15,8 @@
 #include <initializer_list>
 #include <vector>
 
+namespace clou {
+
 namespace util {
 // helper type for the visitor #4
 template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
@@ -157,38 +159,6 @@ template <class T> std::string to_string(const T &x) {
 unsigned instruction_loop_nest_depth(llvm::Instruction *I, const llvm::LoopInfo& LI);
 unsigned instruction_dominator_depth(llvm::Instruction *I, const llvm::DominatorTree& DT);
 
-namespace llvm {
-
-std::vector<llvm::Instruction *> predecessors(llvm::Instruction *I);
-
-/**
- * Guaranteed to produce output in reverse dominating order.
- */
-template <class Inst, class OutputIt>
-OutputIt dominators(llvm::DominatorTree& DT, llvm::Instruction *I, OutputIt out) {
-    const auto output = [&out] (llvm::Instruction *I) {
-        if (Inst *I_ = llvm::dyn_cast<Inst>(I)) {
-            *out++ = I_;
-        }
-    };
-    
-    // dominators w/i basic block
-    for (llvm::Instruction *I_ = I; I_; I_ = I_->getPrevNode()) {
-        output(I_);
-    }
-    
-    // dominating basic blocks
-    for (auto *node = DT[I->getParent()]->getIDom(); node; node = node->getIDom()) {
-        for (llvm::Instruction& I : llvm::reverse(*node->getBlock())) {
-            output(&I);
-        }
-    }
-
-    return out;
-}
-
-}
-
 #define unhandled_value(V)			\
   do {						\
     llvm::errs() << __FILE__ << ":" << __LINE__ << ": unhandled value: " << (V) << "\n"; \
@@ -197,7 +167,7 @@ OutputIt dominators(llvm::DominatorTree& DT, llvm::Instruction *I, OutputIt out)
 
 #define unhandled_instruction(I) unhandled_value(I)
 
-namespace clou::util {
+namespace util {
 
   /**
    * Provide a more complete version of llvm::CallBase::getCalledFunction() that handles more cases.
@@ -311,4 +281,38 @@ namespace clou::util {
   }
 
   // TODO: Double-check this using test pass.
+}
+
+}
+
+namespace llvm {
+
+std::vector<llvm::Instruction *> predecessors(llvm::Instruction *I);
+
+/**
+ * Guaranteed to produce output in reverse dominating order.
+ */
+template <class Inst, class OutputIt>
+OutputIt dominators(llvm::DominatorTree& DT, llvm::Instruction *I, OutputIt out) {
+    const auto output = [&out] (llvm::Instruction *I) {
+        if (Inst *I_ = llvm::dyn_cast<Inst>(I)) {
+            *out++ = I_;
+        }
+    };
+    
+    // dominators w/i basic block
+    for (llvm::Instruction *I_ = I; I_; I_ = I_->getPrevNode()) {
+        output(I_);
+    }
+    
+    // dominating basic blocks
+    for (auto *node = DT[I->getParent()]->getIDom(); node; node = node->getIDom()) {
+        for (llvm::Instruction& I : llvm::reverse(*node->getBlock())) {
+            output(&I);
+        }
+    }
+
+    return out;
+}
+
 }
