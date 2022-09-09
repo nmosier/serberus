@@ -135,14 +135,6 @@ add_library(BreakPass SHARED
   util
 )
 
-# lfence profiler
-add_executable(lfence_profiler
-  lfence_profiler.cc
-)
-target_include_directories(lfence_profiler PRIVATE ${Libunwind_INCLUDE_DIRS} ${Capstone_INCLUDE_DIRS})
-target_link_directories(lfence_profiler PRIVATE ${Libunwind_LIBRARY_DIRS} ${Capstone_LIBRARY_DIRS})
-target_link_libraries(lfence_profiler PRIVATE ${Libunwind_LIBRARIES} ${Capstone_LIBRARIES})
-
 add_library(LoopIndexPass SHARED
   LoopIndexPass.cc
   util
