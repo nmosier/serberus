@@ -27,8 +27,12 @@ enable_testing()
 find_program(AWK_EXE REQUIRED NAMES awk gawk nawk)
 find_program(CAT_EXE REQUIRED NAMES cat)
 
+get_filename_component(LLVM_DIR ${LLVM_DIR} ABSOLUTE ${CMAKE_BINARY_DIR})
+
 add_subdirectory(src)
 add_subdirectory(runtime)
 add_subdirectory(tools)
 add_subdirectory(scripts)
 add_subdirectory(test)
+
+message("LLVM_DIR=${LLVM_DIR}")
