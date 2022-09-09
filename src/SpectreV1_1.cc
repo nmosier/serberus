@@ -33,13 +33,13 @@ struct SpectreV11 final: public llvm::FunctionPass {
     
     unsigned total = 0;
     
-    virtual bool runOnFunction(llvm::Function& F) override {
+    bool runOnFunction(llvm::Function& F) override {
         NonspeculativeTaint& NST = getAnalysis<NonspeculativeTaint>();
         
         // find stores with secret operands
         unsigned count = 0;
         for_each_inst<llvm::StoreInst>(F, [&] (llvm::StoreInst *SI) {
-            if (has_incoming_addr(SI->getPointerOperand())) {
+            if (is_nonconstant_value(SI->getPointerOperand())) {
                 llvm::Value *op_V = SI->getValueOperand();
                 if (NST.secret(op_V)) {
                     llvm::IRBuilder<> IRB (SI);
@@ -50,9 +50,6 @@ struct SpectreV11 final: public llvm::FunctionPass {
         });
         
         llvm::errs() << F.getName() << ": " << count << " fences\n";
-	if (F.getName() == "fill_block") {
-	  llvm::errs() << F << "\n";
-	}
         
         total += count;
         
