@@ -9,6 +9,8 @@
 #include "util.h"
 #include "transmitter.h"
 
+namespace clou {
+
 char NonspeculativeTaint::ID = 0;
 
 NonspeculativeTaint::NonspeculativeTaint(): MySCCPass(ID) {}
@@ -92,7 +94,7 @@ bool NonspeculativeTaint::runOnSCC(const MySCC& SCC) {
         }
     } while (changed);
     
-    // 4. Initialize public values with (a) true transmitter operands, (b) call arguments, (c) public annotations.
+    // 4. Initialize public values with (a) true transmitter operands, (b) call arguments, (c) public annotations, (d) return values.
     // 4(a) true transmitter operands
     for_each_inst<llvm::Instruction>(Fs.begin(), Fs.end(), [&] (llvm::Instruction *I) {
         for (const TransmitterOperand& op : get_transmitter_sensitive_operands(I)) {
@@ -124,6 +126,13 @@ bool NonspeculativeTaint::runOnSCC(const MySCC& SCC) {
             }
         }
     });
+
+    // 4(d) return values
+    for_each_inst<llvm::ReturnInst>(Fs.begin(), Fs.end(), [&] (llvm::ReturnInst *RI) {
+      if (llvm::Value *RV = RI->getReturnValue()) {
+	pub_vals.insert(RV);
+      }
+    });
     
     // 5. Propogate public values
     const auto pub_vals_insert = [&] (llvm::Value *V) {
@@ -144,6 +153,7 @@ bool NonspeculativeTaint::runOnSCC(const MySCC& SCC) {
             if (llvm::Function *called_F = CI->getCalledFunction()) {
                 if (!called_F->isDeclaration()) {
                     for (llvm::Argument& A : called_F->args()) {
+		      // TODO: pub_vals should *always* contain A. Might need to rewrite this pass to conform to new assumptions.
                         if (pub_vals.contains(&A)) {
                             pub_vals_insert(CI->getArgOperand(A.getArgNo()));
                         }
@@ -177,10 +187,10 @@ bool NonspeculativeTaint::runOnSCC(const MySCC& SCC) {
                     }
                 } else if (llvm::isa<llvm::AllocaInst, llvm::BranchInst>(I)) {
                     // ignore
-                } else if (llvm::isa<llvm::ExtractValueInst, llvm::InsertElementInst, llvm::InsertValueInst, llvm::ShuffleVectorInst>(I)) {
+                } else if (llvm::isa<llvm::ExtractValueInst, llvm::InsertElementInst, llvm::InsertValueInst, llvm::ShuffleVectorInst, llvm::ExtractElementInst>(I)) {
                     // TODO: ignored, handle later for higher precision
                 } else {
-                    unhandled_instruction(*I);
+		  unhandled_instruction(*I);
                 }
             }
             
@@ -230,5 +240,7 @@ namespace {
 llvm::RegisterPass<NonspeculativeTaint> X {
     "nonspeculative-taint", "Nonspeculative Taint Pass"
 };
+
+}
 
 }
