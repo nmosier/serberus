@@ -3,7 +3,14 @@
 #include <set>
 #include <map>
 
+#include <llvm/IR/Value.h>
+#include <llvm/Pass.h>
+#include <llvm/IR/Module.h>
+#include <llvm/Support/raw_ostream.h>
+
 #include "my_scc_pass.h"
+
+namespace clou {
 
 class NonspeculativeTaint final: public MySCCPass {
 public:
@@ -24,3 +31,5 @@ private:
 public:
     bool secret(llvm::Value *V) const;
 };
+
+}
