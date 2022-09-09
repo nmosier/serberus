@@ -186,3 +186,10 @@ libsodium_library(libsodium_cloucc
   CFLAGS -O3
   LLVMFLAGS -clou-nospill -clou-nospill-max=8 -exhaustive-register-search
 )
+
+libsodium_trace(libsodium_cloucc_trace
+  PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering TracePass
+  CFLAGS -O3
+  LLVMFLAGS -clou-nospill -clou-nospill-max=8 -exhaustive-register-search
+  LDFLAGS -Wl,-rpath,${TRACE_RUNTIME_DIR} -L${TRACE_RUNTIME_DIR} -ltrace_runtime
+)
