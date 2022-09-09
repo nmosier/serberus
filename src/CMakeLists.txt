@@ -1,7 +1,8 @@
 add_compile_options(-fno-rtti -Wall -Wextra)
 
+message("LLVM_INCLUDE_DIRS=${LLVM_INCLUDE_DIRS}")
 function(register_llvm_pass TARGET)
-  target_include_directories(${TARGET} SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS})
+  target_include_directories(${TARGET} SYSTEM BEFORE PUBLIC ${LLVM_INCLUDE_DIRS})
   target_compile_definitions(${TARGET} PRIVATE ${LLVM_DEFINITIONS})
   if(APPLE)
     target_link_options(${TARGET} PRIVATE -undefined dynamic_lookup)
@@ -21,6 +22,12 @@ add_library(metadata SHARED
   metadata.cc
   metadata.h
 )
+
+add_library(CommandLine SHARED
+  CommandLine.cc
+  CommandLine.h
+)
+register_llvm_pass(CommandLine)
 
 add_library(util STATIC
   util.cc
@@ -50,12 +57,8 @@ add_library(SpeculativeTaint SHARED
   $<TARGET_OBJECTS:transmitter>
   util
   )
-register_llvm_pass(SpeculativeTaint)
-
-add_library(count_addr_stores SHARED
-  count_addr_stores.cc
-  )
-register_llvm_pass(count_addr_stores)
+  register_llvm_pass(SpeculativeTaint)
+  target_link_libraries(SpeculativeTaint PRIVATE CommandLine)
 
 add_library(count_spectre_v1_1 SHARED
   count_spectre_v1_1.cc
@@ -150,7 +153,8 @@ register_llvm_pass(LoopIndexPass)
 add_library(SpectreBCBSSecretPass SHARED
   SpectreBCBSSecretPass.cc
 )
-target_link_libraries(SpectreBCBSSecretPass PRIVATE NonspeculativeTaint util metadata)
+register_llvm_pass(SpectreBCBSSecretPass)
+target_link_libraries(SpectreBCBSSecretPass PRIVATE NonspeculativeTaint util metadata CommandLine)
 
 add_library(TracePass SHARED
   TracePass.cc
