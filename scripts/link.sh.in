@@ -1,0 +1,36 @@
+#!/bin/bash
+
+set -eu
+
+usage() {
+    cat <<EOF
+usage: $0 staticlib
+Filters out any objfiles that aren't LLVM bitcode, and then passes to llvm-link.
+Output LLVM bitcode written to stdout.
+EOF
+}
+
+if [[ $# -ne 1 ]]; then
+    usage >&2
+    exit 1
+fi
+
+LIB="$1"
+shift 1
+
+OBJDIR="$(mktemp -d)"
+trap "rm -rf \"${OBJDIR}\"" EXIT
+cd "${OBJDIR}"
+ar -x "${LIB}"
+
+LLVM_BIN="@LLVM_BINARY_DIR@/bin"
+
+bitcodes=()
+for objfile in *.o; do
+    if "${LLVM_BIN}/llvm-dis" < "${objfile}" >/dev/null 2>/dev/null; then
+	bitcodes+=("${objfile}")
+    fi
+done
+
+"${LLVM_BIN}/llvm-link" "${bitcodes[@]}"
+
