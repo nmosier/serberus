@@ -19,14 +19,10 @@
 #include "util.h"
 #include "min-cut.h"
 #include "metadata.h"
+#include "CommandLine.h"
 
 namespace clou {
   namespace {
-
-    llvm::cl::opt<std::string> emit_dot("emit-dot",
-					llvm::cl::desc("Emit dot graphs"),
-					llvm::cl::init(""),
-					llvm::cl::OptionHidden::NotHidden);    
 
     struct Node {
       llvm::Value *V;
@@ -129,7 +125,7 @@ namespace clou {
 	      if (llvm::isa<llvm::FenceInst>(src)) {
 		// don't add, since already mitigated
 	      } else {
-		G[src][&dst] = 1; // compute_edge_weight(dst, DT, LI);
+		G[src][&dst] = compute_edge_weight(&dst, DT, LI);
 	      }
 	    }
 	  }
@@ -137,7 +133,8 @@ namespace clou {
 
 	// Add arguments
 	for (llvm::Argument& A : F.args()) {
-	  G[&A][&F.getEntryBlock().front()] = 1; // TODO: compute edge weight
+	  auto *dst = &F.getEntryBlock().front();
+	  G[&A][dst] = compute_edge_weight(dst, DT, LI);
 	}
 
 	// Source-transmitter structs
@@ -257,6 +254,14 @@ namespace clou {
 	
 	return true;
       }
+
+      // TODO: unify with other definition
+      static unsigned compute_edge_weight(llvm::Instruction *I, const llvm::DominatorTree& DT, const llvm::LoopInfo& LI) {
+        float score = 1.;
+        score *= instruction_loop_nest_depth(I, LI) + 1;
+        score *= 1. / (instruction_dominator_depth(I, DT) + 1);
+        return score * 100;
+      }      
     };
 
     llvm::RegisterPass<SpectreBCBSPass> X {"spectre-bcbs-secret", "Spectre BCBS Secret Pass"};
