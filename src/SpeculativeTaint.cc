@@ -23,14 +23,12 @@
 #include "min-cut.h"
 #include "util.h"
 #include "transmitter.h"
+#include "CommandLine.h"
+
+namespace clou {
 
 // constexpr bool emit_dot = true;
 constexpr bool debug = false;
-
-llvm::cl::opt<std::string> emit_dot("emit-dot",
-                                    llvm::cl::desc("Emit dot graphs"),
-                                    llvm::cl::init(""),
-                                    llvm::cl::OptionHidden::NotHidden);
 
 struct ValueNode {
     enum class Kind { transmitter, source, interior };
@@ -87,8 +85,7 @@ std::ostream &operator<<(std::ostream &os, SuperNode::Kind SNK) {
 }
 
 std::ostream &operator<<(std::ostream &os, const Value &V) {
-    std::visit(
-               util::overloaded{[&os](const ValueNode &VN) { os << VN.kind << *VN.V; },
+    std::visit(util::overloaded{[&os](const ValueNode &VN) { os << VN.kind << *VN.V; },
                    [&os](const SuperNode &SN) { os << SN.kind; }},
                V);
     return os;
@@ -235,6 +232,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         
         // Spectre v1.1, non-speculative secret operand, mitigations
         for_each_inst<llvm::StoreInst>(F, [&](llvm::StoreInst *SI) {
+	  // TODO: Need to use correct function here.
             if (has_incoming_addr(SI->getPointerOperand()) && is_nonspeculative_secret(SI->getValueOperand())) {
                 create_fence(SI);
             }
@@ -443,6 +441,8 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
 };
 
 namespace {
-llvm::RegisterPass<SpeculativeTaint> X{"speculative-taint",
-    "Speculative Taint Pass"};
+llvm::RegisterPass<SpeculativeTaint> X{"clou-mitigate",
+				       "Clou Mitigation Pass"};
+}
+  util::RegisterClangPass<SpeculativeTaint> X;
 }
