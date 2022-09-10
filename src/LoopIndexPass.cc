@@ -52,6 +52,7 @@ namespace clou {
 	llvm::LLVMContext& ctx = L->getHeader()->getContext();
 	llvm::Type *i1ty = llvm::IntegerType::get(ctx, 1);
 	llvm::IRBuilder<> IRB (&L->getHeader()->front());
+	IRB.SetCurrentDebugLocation(L->getStartLoc());
 	llvm::PHINode *phi = IRB.CreatePHI(i1ty, 2);
 	phi->addIncoming(llvm::ConstantInt::getBool(ctx, backedge_cond), L->getLoopPredecessor());
 	phi->addIncoming(L->getLatchCmpInst(), L->getLoopLatch());
@@ -172,6 +173,7 @@ namespace clou {
 	std::set<llvm::Value *> whitelist;
 	for (const Info& info : infos) {
 	  llvm::IRBuilder<> IRB (nonphi);
+	  IRB.SetCurrentDebugLocation(L->getStartLoc());
 	  llvm::Value *TV = backedge_cond ? info.phi : info.init_value;
 	  llvm::Value *FV = backedge_cond ? info.init_value : info.phi;
 	  llvm::Value *select = IRB.CreateSelect(cond_phi, TV, FV);
@@ -184,6 +186,7 @@ namespace clou {
 	// fix phi nodes: move constant phi operands to loop predecessor
 	{
 	  llvm::IRBuilder<> IRB (L->getLoopPredecessor()->getTerminator());
+	  IRB.SetCurrentDebugLocation(L->getStartLoc());
 
 	  // create allocas + stores
 	  std::map<llvm::AllocaInst *, Info> allocas;
@@ -196,7 +199,8 @@ namespace clou {
 	  }
 
 	  // insert fence
-	  IRB.CreateFence(llvm::AtomicOrdering::Acquire);	  
+	  llvm::Instruction *FI = IRB.CreateFence(llvm::AtomicOrdering::Acquire);
+	  
 
 	  // insert loads
 	  for (const auto& [alloca, info] : allocas) {

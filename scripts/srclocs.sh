@@ -2,20 +2,19 @@
 
 usage() {
     cat <<EOF
-usage: $0 [-h] [-c] binary
+usage: $0 [-h] -t col binary
 EOF
 }
 
-show_counts=0
-
-while getopts optc "hc"; do
+col=
+while getopts "ht:" optc; do
     case $optc in
 	h)
 	    usage
 	    exit
 	    ;;
-	c)
-	    show_counts=1
+	t)
+	    col=$((OPTARG-1))
 	    ;;
 	*)
 	    usage >&2
@@ -25,28 +24,24 @@ while getopts optc "hc"; do
 done
 shift $((OPTIND-1))
 
-if [[ $# -ne 1 ]]; then
+if [[ $# -ne 1 || -z "${col+x}" ]]; then
     usage >&2
     exit 1
 fi
+
 binary="$1"
 shift 1
 
-counts=()
-locations=()
-while read -r count loc; do
-    counts+=(${count})
-    locations+=(${loc})
-done
+file=$(mktemp)
+trap "rm -rf ${file}" EXIT
 
-get_counts() {
-    printf '%s\n' ${counts[@]}
-}
+# Copy all input to file so we can re-read it
+cat > ${file}
 
 get_locations() {
+    cut -f${col} -d' ' ${file}
     printf '%s\n' ${locations[@]}
 }
-
 get_lldb_input() {
     while read -r loc; do
 	echo "source list -a ${loc}"
@@ -59,7 +54,7 @@ BEGIN {
   seen_cmd = 0;	     
 } 
 {
-  if (seen_cmd) {
+  if (seen_cmd) { 
     print $NF;
     seen_cmd = 0;
   }
@@ -70,4 +65,16 @@ BEGIN {
 '
 }
 
-paste -d' ' <(get_counts) <(get_locations) <(get_locations | lookups 2>/dev/null) | sort -t' ' -k1 -n
+srclines=$(mktemp)
+trap "rm -rf ${srclines}" EXIT
+cut -f${col} -d' ' ${file} | lookups 2>/dev/null >${srclines}
+
+wc -l < ${srclines} >&2
+wc -l < ${file} >&2
+diff ${file} ${srclines}
+if [[ $(wc -l < ${srclines}) -ne $(wc -l < ${file}) ]]; then
+    echo 'internal error' >&2
+    exit 1
+fi
+
+paste -d' ' ${file} ${srclines}

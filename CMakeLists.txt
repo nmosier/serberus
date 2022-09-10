@@ -26,6 +26,7 @@ enable_testing()
 
 find_program(AWK_EXE REQUIRED NAMES awk gawk nawk)
 find_program(CAT_EXE REQUIRED NAMES cat)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 get_filename_component(LLVM_DIR ${LLVM_DIR} ABSOLUTE ${CMAKE_BINARY_DIR})
 
