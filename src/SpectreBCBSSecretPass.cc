@@ -20,6 +20,7 @@
 #include "min-cut.h"
 #include "metadata.h"
 #include "CommandLine.h"
+#include "Mitigation.h"
 
 namespace clou {
   namespace {
@@ -84,7 +85,7 @@ namespace clou {
 	  llvm::Instruction *I = todo.front();
 	  todo.pop();
 	  if (seen.insert(I).second) {
-	    if (!llvm::isa<llvm::FenceInst>(I)) {
+	    if (!llvm::isa<MitigationInst>(I)) {
 	      for (llvm::Instruction *pred : llvm::predecessors(I)) {
 		todo.push(pred);
 	      }
@@ -122,7 +123,7 @@ namespace clou {
 	for (llvm::BasicBlock& B : F) {
 	  for (llvm::Instruction& dst : B) {
 	    for (llvm::Instruction *src : llvm::predecessors(&dst)) {
-	      if (llvm::isa<llvm::FenceInst>(src)) {
+	      if (llvm::isa<MitigationInst>(src)) {
 		// don't add, since already mitigated
 	      } else {
 		G[src][&dst] = compute_edge_weight(&dst, DT, LI);
@@ -242,10 +243,9 @@ namespace clou {
 	  while (llvm::isa<llvm::PHINode>(ins)) {
 	    ins = ins->getNextNode();
 	  }
-	  llvm::IRBuilder<> IRB (ins);
-	  IRB.CreateFence(llvm::AtomicOrdering::Acquire);
+	  CreateMitigation(ins, "oob-secret-store");
 	}
-
+	
 	// Mark nospills
 	for (const auto& st : sts) {
 	  auto *I = llvm::cast<llvm::Instruction>(st.t.V);

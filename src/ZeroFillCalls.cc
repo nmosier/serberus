@@ -129,6 +129,7 @@ namespace clou {
       llvm::FunctionType *func_ty = llvm::FunctionType::get(void_ty, false);
       llvm::InlineAsm *inline_asm = getInlineAsm(func_ty);
       llvm::IRBuilder<> IRB (C);
+      IRB.SetCurrentDebugLocation(C->getDebugLoc());
       IRB.CreateCall(func_ty, inline_asm);
 
       return true;

@@ -129,7 +129,7 @@ struct SecretParamAnalysis final: public MySCCPass {
                         for (llvm::Value *op_V : I->operands()) {
                             ret_vals_insert(op_V);
                         }
-                    } else if (llvm::isa<llvm::AllocaInst, llvm::BranchInst, llvm::FenceInst, llvm::StoreInst, llvm::SwitchInst, llvm::UnreachableInst>(I)) {
+                    } else if (llvm::isa<llvm::AllocaInst, llvm::BranchInst, llvm::FenceInst, MitigationInst, llvm::StoreInst, llvm::SwitchInst, llvm::UnreachableInst>(I)) {
                         // ignore
 		    } else if (llvm::isa<llvm::ExtractValueInst, llvm::ExtractElementInst>(I)) {
 		      // TODO: ignore for now, but can consider for more precision later on

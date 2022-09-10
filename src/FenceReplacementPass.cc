@@ -6,24 +6,24 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/IntrinsicInst.h>
 
+#include "Mitigation.h"
+
 namespace clou {
 
   bool FenceReplacementPass::runOnFunction(llvm::Function& F) {
     auto& ctx = F.getContext();
     
-    std::vector<llvm::FenceInst *> todo;
+    std::vector<MitigationInst *> todo;
     for (llvm::BasicBlock& B : F) {
       for (llvm::Instruction& I : B) {
-	if (auto *FI = llvm::dyn_cast<llvm::FenceInst>(&I)) {
-	  if (FI->getOrdering() == llvm::AtomicOrdering::Acquire) {
-	    todo.push_back(FI);
-	  }
+	if (auto *MI = llvm::dyn_cast<MitigationInst>(&I)) {
+	  todo.push_back(MI);
 	}
       }
     }
 
     uint64_t id = 0;
-    for (llvm::FenceInst *FI : todo) {
+    for (MitigationInst *FI : todo) {
       // replace with X86 LFENCE
       llvm::IRBuilder<> IRB {FI};
       // TODO: Revert this since it doesn't seem to help
@@ -36,9 +36,9 @@ namespace clou {
       }
       // IRB.SetCurrentDebugLocation(FI->getDebugLoc());
       llvm::ConstantInt *fenceid = llvm::ConstantInt::get(IRB.getInt64Ty(), id);
-      llvm::ConstantDataArray *fence_str = nullptr;
-      if (const auto *mdnode = fence_str->getMetadata("clou.lfencestr")) {
-	llvm::StringRef str = llvm::cast<llvm::MDString>(mdnode->getOperand(0)->get())->getString();
+      llvm::Constant *fence_str = nullptr;
+      if (const auto *mdnode = FI->getMetadata("clou.lfencestr")) {
+	llvm::StringRef str = llvm::cast<llvm::MDString>(mdnode->getOperand(0))->getString();
 	fence_str = llvm::ConstantDataArray::getString(IRB.getContext(), str);
       }
 

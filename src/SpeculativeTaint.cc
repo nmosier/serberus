@@ -24,6 +24,7 @@
 #include "util.h"
 #include "transmitter.h"
 #include "CommandLine.h"
+#include "Mitigation.h"
 
 namespace clou {
 
@@ -93,8 +94,7 @@ std::ostream &operator<<(std::ostream &os, const Value &V) {
 
 struct SpeculativeTaint final : public llvm::FunctionPass {
     static inline char ID = 0;
-    
-    static inline constexpr const char *speculative_secret_label = "specsec";
+    static inline constexpr const char speculative_secret_label[] = "specsec";
     
     SpeculativeTaint() : llvm::FunctionPass(ID) {}
     
@@ -103,8 +103,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
     }
     
     virtual bool runOnFunction(llvm::Function &F) override {
-        llvm::AliasAnalysis &AA =
-        getAnalysis<llvm::AAResultsWrapperPass>().getAAResults();
+        llvm::AliasAnalysis &AA = getAnalysis<llvm::AAResultsWrapperPass>().getAAResults();
 
         /* Propogate taint rules */
         propogate_taint(F, AA);
@@ -175,7 +174,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
                         
                         // ignore: functions will never return speculatively tainted values (this is an invariant we must uphold)
                         
-                    } else if (llvm::isa<llvm::FenceInst>(&I)) {
+                    } else if (llvm::isa<llvm::FenceInst, MitigationInst>(&I)) {
                         
                         // ignore: we deal with them later on during graph analysis
                         
@@ -230,14 +229,6 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         using Alg = FordFulkersonMulti<ValueNode, int>;
         Alg::Graph G;
         
-        // Spectre v1.1, non-speculative secret operand, mitigations
-        for_each_inst<llvm::StoreInst>(F, [&](llvm::StoreInst *SI) {
-	  // TODO: Need to use correct function here.
-            if (has_incoming_addr(SI->getPointerOperand()) && is_nonspeculative_secret(SI->getValueOperand())) {
-                create_fence(SI);
-            }
-        });
-        
         // add CFG
         llvm::DominatorTree DT (F);
         llvm::LoopInfo LI (DT);
@@ -275,7 +266,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
             G[src_VN][dst_VN] = compute_edge_weight(llvm::cast<llvm::Instruction>(source)->getNextNode(), DT, LI);
         }
         
-        for_each_inst<llvm::FenceInst>(F, [&](llvm::FenceInst *FI) {
+        for_each_inst<MitigationInst>(F, [&](MitigationInst *FI) {
             for (llvm::Instruction *pred : llvm::predecessors(FI)) {
                 ValueNode src = {.kind = ValueNode::Kind::interior, .V = pred};
                 ValueNode dst = {.kind = ValueNode::Kind::interior, .V = FI};
@@ -406,7 +397,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
                 P = P->getNextNode();
                 assert(P);
             }
-            create_fence(P);
+	    CreateMitigation(P, "udt-mitigation");
         }
     }
     
@@ -429,20 +420,11 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         score *= 1. / (instruction_dominator_depth(I, DT) + 1);
         return score * 100;
     }
-    
-    static void create_fence(llvm::Instruction *I) {
-        while (llvm::isa<llvm::PHINode>(I)) {
-            I = I->getNextNode();
-            assert(I);
-        }
-        llvm::IRBuilder<> IRB (I);
-        IRB.CreateFence(llvm::AtomicOrdering::Acquire);
-    }
 };
 
 namespace {
 llvm::RegisterPass<SpeculativeTaint> X{"clou-mitigate",
 				       "Clou Mitigation Pass"};
+  util::RegisterClangPass<SpeculativeTaint> Y;
 }
-  util::RegisterClangPass<SpeculativeTaint> X;
 }

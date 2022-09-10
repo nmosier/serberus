@@ -16,7 +16,7 @@ namespace clou {
       static inline char ID = 0;
       LfencePass(): FenceReplacementPass(ID) {}
 
-      llvm::Instruction *createInst(llvm::IRBuilder<>& IRB, llvm::ConstantInt *lfenceid, llvm::ConstantDataArray *lfencestr) const override {
+      llvm::Instruction *createInst(llvm::IRBuilder<>& IRB, llvm::ConstantInt *lfenceid, llvm::ConstantDataArray *) const override {
 	return IRB.CreateIntrinsic(llvm::Intrinsic::x86_sse2_lfence, {}, {});
       }
     };

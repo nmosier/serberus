@@ -27,6 +27,7 @@ namespace clou {
 	    if (md::getMetadataFlag(I, md::nospill)) {
 	      // insert call
 	      llvm::IRBuilder<> IRB (B.getTerminator()); // use terminator to avoid accounting for PHI nodes
+	      IRB.SetCurrentDebugLocation(I->getDebugLoc());
 	      IRB.CreateCall(getNoSpillIntrinsic(F.getParent(), I->getType()), {I});
 	      changed = true;
 	    }

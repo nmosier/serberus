@@ -208,6 +208,7 @@ struct Mitigate final : public llvm::FunctionPass {
 
       if (is_speculative_secret(C)) {
 	llvm::IRBuilder<> IRB (I);
+	IRB.SetCurrentDebugLocation(C->getDebugLoc());
 	IRB.CreateFence(llvm::AtomicOrdering::Acquire);
 	++fences;
       }

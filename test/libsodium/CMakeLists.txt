@@ -1,7 +1,11 @@
 get_filename_component(LIBSODIUM_DIR ${LIBSODIUM_DIR} ABSOLUTE BASE_DIR ${CMAKE_BINARY_DIR})
 
+
+set(MERGE_COUNTS_PY ${CMAKE_SOURCE_DIR}/scripts/merge_counts.py)
+set(SYMBOLIZE_SH ${CMAKE_SOURCE_DIR}/scripts/srclocs2.sh)
+
 function(libsodium_library NAME)
-  set(multi_value_args DEPENDS PASS CPPFLAGS CFLAGS LDFLAGS LLVMFLAGS)
+  set(multi_value_args DEPENDS PASS CPPFLAGS CFLAGS LDFLAGS LLVMFLAGS CONFIGURE_OPTIONS)
   cmake_parse_arguments(LIBSODIUM "" "" "${multi_value_args}" ${ARGN})
 
   # Add arguments for pass
@@ -24,8 +28,8 @@ function(libsodium_library NAME)
   ExternalProject_Add(${NAME}
     # URL https://download.libsodium.org/libsodium/releases/libsodium-1.0.18.tar.gz
     SOURCE_DIR ${LIBSODIUM_DIR}
-    CONFIGURE_COMMAND ${LIBSODIUM_DIR}/configure --quiet --prefix=${CMAKE_CURRENT_BINARY_DIR}/${NAME}-prefix CC=${LLVM_BINARY_DIR}/bin/clang "CPPFLAGS=${LIBSODIUM_CPPFLAGS}" "CFLAGS=${LIBSODIUM_CFLAGS}" "LDFLAGS=${LIBSODIUM_LDFLAGS}"
-    BUILD_COMMAND ${MAKE_EXE} --quiet; ${MAKE_EXE} --quiet check || true # TESTS_ENVIRONMENT="true" # Don't actually run any tests; just want to build the runners.
+    CONFIGURE_COMMAND ${LIBSODIUM_DIR}/configure --quiet --prefix=${CMAKE_CURRENT_BINARY_DIR}/${NAME}-prefix CC=${LLVM_BINARY_DIR}/bin/clang "CPPFLAGS=${LIBSODIUM_CPPFLAGS}" "CFLAGS=${LIBSODIUM_CFLAGS}" "LDFLAGS=${LIBSODIUM_LDFLAGS}" ${LIBSODIUM_CONFIGURE_OPTIONS}
+    BUILD_COMMAND ${MAKE_EXE} --quiet -j32; ${MAKE_EXE} --quiet check -j32 || true # TESTS_ENVIRONMENT="true" # Don't actually run any tests; just want to build the runners.
     # BUILD_ALWAYS ON
     INSTALL_COMMAND ${MAKE_EXE} --quiet install
   )
@@ -81,7 +85,7 @@ foreach(PASS IN ITEMS ZeroFillCalls SpeculativeTaint)
   )
 endforeach()
 libsodium_correctness_test(libsodium_correctness_SpectreV1
-  PASS SpectreV1_1 LfencePass
+  PASS SpectreV1_1
 )
 
 # libsodium_library(libsodium_profile_SpectreV11
@@ -117,38 +121,48 @@ function(libsodium_profile NAME)
 
   # Merge logs
   set(LFENCE_SUMMARY_LOG ${NAME}_lfences.log)
-  set(MERGE_LFENCES_AWK ${CMAKE_SOURCE_DIR}/scripts/merge_lfences.awk)
   add_custom_command(OUTPUT ${LFENCE_SUMMARY_LOG}
-    COMMAND ${CAT_EXE} ${LFENCE_LOGS} | ${AWK_EXE} -f ${MERGE_LFENCES_AWK} > ${LFENCE_SUMMARY_LOG}
+    COMMAND ${CAT_EXE} ${LFENCE_LOGS} | ${AWK_EXE} -f ${MERGE_COUNT_PY} > ${LFENCE_SUMMARY_LOG}
     DEPENDS ${MERGE_LFENCE_AWK} ${LFENCE_LOGS}
   )
-  add_custom_target(${NAME}_lfences ALL DEPENDS ${LFENCE_SUMMARY_LOG})
+  add_custom_target(${NAME}_lfences DEPENDS ${LFENCE_SUMMARY_LOG})
 
   # Symbolize logs
   set(LFENCE_LINES_LOG ${NAME}_lfences_src.log)
-  set(SYMBOLIZE_SH ${CMAKE_SOURCE_DIR}/scripts/srclocs.sh)
   add_custom_command(OUTPUT ${LFENCE_LINES_LOG}
     COMMAND ${SYMBOLIZE_SH} ${NAME}-prefix/lib/libsodium.so < ${LFENCE_SUMMARY_LOG} > ${LFENCE_LINES_LOG}
     DEPENDS ${LFENCE_SUMMARY_LOG} ${SYMBOLIZE_SH} ${NAME}
   )
-  add_custom_target(${NAME}_lfence_src ALL DEPENDS ${LFENCE_LINES_LOG})
+  add_custom_target(${NAME}_lfence_src DEPENDS ${LFENCE_LINES_LOG})
 endfunction()
 
 function(libsodium_trace NAME)
-  libsodium_library(${NAME}_lib ${ARGN})
+  set(TRACE_RUNTIME_DIR ${CMAKE_BINARY_DIR}/tools)
+  
+  libsodium_library(${NAME}_lib ${ARGN}
+    PASS TracePass # ensure this comes after all the passes above
+    LDFLAGS -Wl,-rpath,${TRACE_RUNTIME_DIR} -L${TRACE_RUNTIME_DIR} -ltrace_runtime    
+    DEPENDS trace_runtime
+  )
 
   set(LIB ${NAME}_lib)
   ExternalProject_Get_Property(${LIB} BINARY_DIR)
   ExternalProject_Get_Property(${LIB} INSTALL_DIR)
-  set(LOG ${NAME}.log)
-  set(SYMBOLIZE_SH ${CMAKE_SOURCE_DIR}/scripts/srclocs.sh)
+  set(LINES_LOG ${NAME}_lines.log)
+  set(FUNCS_LOG ${NAME}_funcs.log)
   set(MERGE_COUNTS_SH ${CMAKE_SOURCE_DIR}/scripts/merge_counts.sh)
-  add_custom_command(OUTPUT ${LOG}
-    COMMAND find ${BINARY_DIR}/test/default/ -name *.log -exec cat "{}" ";" | grep "^[[:digit:]]\\+[[:space:]]" | ${MERGE_COUNTS_SH} | ${SYMBOLIZE_SH} ${INSTALL_DIR}/lib/libsodium.so > ${LOG}
-    DEPENDS ${SYMBOLIZE_SH} ${LIB}  ${MERGE_COUNTS_SH}
+  set(FUNCS_AWK ${CMAKE_SOURCE_DIR}/scripts/trace_function_totals.awk)
+  add_custom_command(OUTPUT ${LINES_LOG}
+    COMMAND find ${BINARY_DIR}/test/default/ -name *.log -exec cat "{}" ";" | grep "^[[:digit:]]\\+[[:space:]]" | ${Python3_EXECUTABLE} ${MERGE_COUNTS_PY} -t1 | ${SYMBOLIZE_SH} -t2 ${INSTALL_DIR}/lib/libsodium.so | sort -k1 "-t " -n > ${LINES_LOG}
+    DEPENDS ${SYMBOLIZE_SH} ${LIB}  ${MERGE_COUNTS_SH} ${Python3_EXECUTABLE}
     VERBATIM
   )
-  add_custom_target(${NAME} DEPENDS ${LOG})
+  add_custom_command(OUTPUT ${FUNCS_LOG}
+    COMMAND ${AWK_EXE} -f ${FUNCS_AWK} ${LINES_LOG} | sort -k1 -n "-t " > ${FUNCS_LOG}
+    DEPENDS ${FUNCS_AWK} ${LINES_LOG}
+    VERBATIM
+  )
+  add_custom_target(${NAME} DEPENDS ${LINES_LOG} ${FUNCS_LOG})
   
 endfunction()
 
@@ -156,40 +170,40 @@ libsodium_profile(libsodium_profile_SpectreV11
   PASS SpectreV1_1
 )
 
+libsodium_library(libsodium_baseline_none
+  CFLAGS -O3
+)
+
 libsodium_library(libsodium_baseline_lfence
-  CFLAGS "-mllvm -x86-speculative-load-hardening -mllvm -x86-slh-lfence -mretpoline -O3"
+  PASS BaselinePass
+  CFLAGS -O3
+  LLVMFLAGS -x86-speculative-load-hardening -x86-slh-lfence -x86-slh-fence-call-and-ret
 )
 
 libsodium_library(libsodium_baseline_slh
-  CFLAGS "-mllvm -x86-speculative-load-hardening -mretpoline -O3"
-)
-
-libsodium_library(libsodium_bcbs_secret
-  PASS LoopIndexPass SpectreBCBSSecretPass NoSpillLowering LfencePass
-  CFLAGS "-O3 -mllvm -clou-nospill -mllvm -clou-nospill-max=8 -mllvm -exhaustive-register-search"
-)
-
-set(TRACE_RUNTIME_DIR ${CMAKE_BINARY_DIR}/tools)
-
-libsodium_trace(libsodium_bcbs_secret_trace
-  PASS LoopIndexPass SpectreBCBSSecretPass NoSpillLowering TracePass
-  CFLAGS "-O3 -mllvm -clou-nospill -mllvm -clou-nospill-max=8 -mllvm -exhaustive-register-search"
-  LDFLAGS "-Wl,-rpath,${TRACE_RUNTIME_DIR} -L${TRACE_RUNTIME_DIR} -ltrace_runtime"
+  CFLAGS -O3 -mretpoline
+  LLVMFLAGS -x86-speculative-load-hardening
 )
 
 libsodium_bc(libsodium_bc libsodium.bc
   CFLAGS "-O1"
 )
 
+libsodium_bc(libsodium_cloucc_bc libsodium_cloucc.bc
+  PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
+  CFLAGS -O3
+  LLVMFLAGS -clou-nospill -clou-nospill-max=8 -exhaustive-register-search
+  CONFIGURE_OPTIONS --disable-shared
+)
+
 libsodium_library(libsodium_cloucc
-  PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering LfencePass
+  PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
   CFLAGS -O3
   LLVMFLAGS -clou-nospill -clou-nospill-max=8 -exhaustive-register-search
 )
 
 libsodium_trace(libsodium_cloucc_trace
-  PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering TracePass
+  PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
   CFLAGS -O3
   LLVMFLAGS -clou-nospill -clou-nospill-max=8 -exhaustive-register-search
-  LDFLAGS -Wl,-rpath,${TRACE_RUNTIME_DIR} -L${TRACE_RUNTIME_DIR} -ltrace_runtime
 )

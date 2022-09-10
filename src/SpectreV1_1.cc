@@ -42,9 +42,8 @@ struct SpectreV11 final: public llvm::FunctionPass {
             if (is_nonconstant_value(SI->getPointerOperand())) {
                 llvm::Value *op_V = SI->getValueOperand();
                 if (NST.secret(op_V)) {
-                    llvm::IRBuilder<> IRB (SI);
-                    IRB.CreateFence(llvm::AtomicOrdering::Acquire);
-                    ++count;
+		  CreateMitigation(SI, "spectre-v1.1-arch");
+		  ++count;
                 }
             }
         });

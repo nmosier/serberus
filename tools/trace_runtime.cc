@@ -9,27 +9,31 @@
   do {								\
     const int err_ = (res);					\
     if (err_ < 0) {						\
-      errx(EXIT_FAILURE, name ": %s", unw_strerror(-err));	\
+      errx(EXIT_FAILURE, name ": %s", unw_strerror(-err_));	\
     }								\
   } while (false)
 
 namespace {
 
+  struct Record {
+    size_t n = 0;
+    unw_word_t off;
+    int64_t id;
+    const char *s;
+    char func[256];
+  };
+
   static FILE *log = stderr;
 
   struct Trace {
     using Key = uintptr_t;
-    struct Value {
-      char func[256];
-      unw_word_t off;
-      size_t n = 0;
-    };
+    using Value = Record;
 
     std::map<Key, Value> locs;
 
     ~Trace() {
       for (const auto& [key, value] : locs) {
-	fprintf(log, "%zu %s%+zd\n", value.n, value.func, value.off);
+	std::fprintf(log, "%zu %s%+zd %zd %s\n", value.n, value.func, value.off, value.id, value.s);
       }
     }
     
@@ -37,7 +41,7 @@ namespace {
 
 }
 
-extern "C" void clou_trace(void) {
+extern "C" void clou_trace(int64_t id, const char *s) {
   unw_context_t ctx;
   int err;
   UNW_CHK("unw_getcontext", unw_getcontext(&ctx));
@@ -58,8 +62,9 @@ extern "C" void clou_trace(void) {
   
   auto& record = trace.locs[rip];
   if (record.n == 0) {
-    char name[1024];
     UNW_CHK("unw_get_proc_name", unw_get_proc_name(&cursor, record.func, sizeof record.func, &record.off));
   }
   ++record.n;
+  record.s = s;
+  record.id = id;
 }

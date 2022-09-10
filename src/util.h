@@ -174,7 +174,7 @@ namespace util {
    */
   llvm::Function *getCalledFunction(const llvm::CallBase *C);
 
-  bool functionIsDirectCallOnly(const llvm::Function *F);
+  bool functionIsDirectCallOnly(const llvm::Function& F);
 
   template <class Pass>
   class RegisterClangPass {

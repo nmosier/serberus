@@ -23,6 +23,12 @@ add_library(metadata SHARED
   metadata.h
 )
 
+add_library(Mitigation SHARED
+  Mitigation.cc
+  Mitigation.h
+)
+target_link_libraries(Mitigation PRIVATE metadata)
+
 add_library(CommandLine SHARED
   CommandLine.cc
   CommandLine.h
@@ -56,9 +62,9 @@ add_library(SpeculativeTaint SHARED
   $<TARGET_OBJECTS:min_cut>
   $<TARGET_OBJECTS:transmitter>
   util
-  )
-  register_llvm_pass(SpeculativeTaint)
-  target_link_libraries(SpeculativeTaint PRIVATE CommandLine)
+)
+register_llvm_pass(SpeculativeTaint)
+target_link_libraries(SpeculativeTaint PRIVATE CommandLine Mitigation)
 
 add_library(count_spectre_v1_1 SHARED
   count_spectre_v1_1.cc
@@ -98,7 +104,7 @@ add_library(NonspeculativeTaint SHARED
   util
 )
 register_llvm_pass(NonspeculativeTaint)
-target_link_libraries(NonspeculativeTaint PUBLIC my_scc_pass)
+target_link_libraries(NonspeculativeTaint PUBLIC my_scc_pass Mitigation)
 
 add_library(SpectreV1_1 SHARED
   SpectreV1_1.cc
@@ -116,22 +122,8 @@ add_library(ZeroFillCalls SHARED
 )
 register_llvm_pass(ZeroFillCalls)
 
-add_library(FenceReplacementPass SHARED
-  FenceReplacementPass.cc
-  FenceReplacementPass.h
-)
-register_llvm_pass(FenceReplacementPass)
-  
-add_library(LfencePass SHARED
-  LfencePass.cc
-  FenceReplacementPass
-  util
-)
-register_llvm_pass(LfencePass)
-
 add_library(BreakPass SHARED
   BreakPass.cc
-  FenceReplacementPass
   util
 )
 
@@ -150,7 +142,6 @@ target_link_libraries(SpectreBCBSSecretPass PRIVATE NonspeculativeTaint util met
 
 add_library(TracePass SHARED
   TracePass.cc
-  FenceReplacementPass
 )
 register_llvm_pass(TracePass)
 target_link_libraries(TracePass PRIVATE util)
@@ -161,4 +152,8 @@ add_library(NoSpillLowering SHARED
 register_llvm_pass(NoSpillLowering)
 target_link_libraries(NoSpillLowering PRIVATE util metadata)
 
-  
+add_library(BaselinePass SHARED
+  BaselinePass.cc
+)
+register_llvm_pass(BaselinePass)
+target_link_libraries(BaselinePass PRIVATE Mitigation util)

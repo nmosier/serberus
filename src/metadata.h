@@ -9,6 +9,6 @@ namespace clou::md {
   inline const char nospill[] = "nospill";
 
   void setMetadataFlag(llvm::Instruction *I, llvm::StringRef flag);
-  bool getMetadataFlag(llvm::Instruction *I, llvm::StringRef flag);  
+  bool getMetadataFlag(const llvm::Instruction *I, llvm::StringRef flag);  
   
 }

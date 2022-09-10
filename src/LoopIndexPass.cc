@@ -12,6 +12,7 @@
 
 #include "util.h"
 #include "metadata.h"
+#include "Mitigation.h"
 
 namespace clou {
   namespace {
@@ -199,9 +200,8 @@ namespace clou {
 	  }
 
 	  // insert fence
-	  llvm::Instruction *FI = IRB.CreateFence(llvm::AtomicOrdering::Acquire);
+	  CreateMitigation(IRB, "loop-index-hardening");
 	  
-
 	  // insert loads
 	  for (const auto& [alloca, info] : allocas) {
 	    llvm::LoadInst *load = IRB.CreateLoad(alloca->getType()->getPointerElementType(), alloca);

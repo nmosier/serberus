@@ -135,14 +135,34 @@ namespace util {
   llvm::Function *getCalledFunction(const llvm::CallBase *C) {
     return getCalledFunctionRec(C->getCalledOperand());
   }
-  
-  bool functionIsDirectCallOnly(const llvm::Function *F) {
-    return std::all_of(F->use_begin(), F->use_end(), [] (const llvm::Use& use) -> bool {
-      if (llvm::isa<llvm::CallBase>(use.getUser()) && use.getOperandNo() == 0) {
-	return true;
+
+  namespace {
+    bool functionIsDirectCallOnlyRec(const llvm::Use& use, std::set<const llvm::User *>& seen) {
+      const llvm::User *user = use.getUser();
+      llvm::errs() << "User: " << *user << "\n";
+      if (!seen.insert(user).second) {
+	return false;
+      } else if (llvm::isa<llvm::Operator, llvm::Constant>(user)) {
+	return std::all_of(user->use_begin(), user->use_end(), [&] (const llvm::Use& use) {
+	  return functionIsDirectCallOnlyRec(use, seen);
+	});
+      } else if (llvm::isa<llvm::Instruction>(user)) {
+	return llvm::isa<llvm::CallBase>(user) && use.getOperandNo() == 0;
+      } else {
+	unhandled_value(*user);
       }
+    }
+  }
+  
+  bool functionIsDirectCallOnly(const llvm::Function& F) {
+    if (llvm::Function::isLocalLinkage(F.getLinkage())) {
+      std::set<const llvm::User *> seen;
+      return std::all_of(F.use_begin(), F.use_end(), [&] (const llvm::Use& use) {
+	return functionIsDirectCallOnlyRec(use, seen);
+      });
+    } else {
       return false;
-    });
+    }
   }
 
   namespace {

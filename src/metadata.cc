@@ -6,7 +6,7 @@ namespace clou::md {
     I->setMetadata(flag, llvm::MDNode::get(I->getContext(), {}));
   }
   
-  bool getMetadataFlag(llvm::Instruction *I, llvm::StringRef flag) {
+  bool getMetadataFlag(const llvm::Instruction *I, llvm::StringRef flag) {
     return I->getMetadata(flag) != nullptr;
   }
   
