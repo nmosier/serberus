@@ -207,4 +207,34 @@ std::vector<llvm::Instruction *> predecessors(llvm::Instruction *I) {
   return res;
 }
 
+  loop_pred_range predecessors(llvm::Loop *L) {
+    std::vector<llvm::BasicBlock *> preds;
+    for (llvm::BasicBlock *B : llvm::predecessors(L->getHeader())) {
+      if (B != L->getHeader()) {
+	preds.push_back(B);
+      }
+    }
+    return preds;
+  }
+  
+  loop_succ_range successors(llvm::Loop *L) {
+    loop_succ_range exits;
+    L->getExitBlocks(exits);
+    return exits;
+  }
+
+
 } // namespace llvm
+
+
+namespace clou::impl {
+
+  void warn_unhandled_intrinsic_(llvm::Intrinsic::ID id, const char *file, size_t line) {
+    llvm::errs() << file << ":" << line << ": warning: " << llvm::Intrinsic::getBaseName(id) << "\n";
+  }
+
+  void warn_unhandled_intrinsic_(const llvm::IntrinsicInst *II, const char *file, size_t line) {
+    warn_unhandled_intrinsic_(II->getIntrinsicID(), file, line);
+  }
+  
+}

@@ -7,6 +7,8 @@
 #include <llvm/Analysis/CallGraph.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/Intrinsics.h>
+#include <llvm/IR/IntrinsicInst.h>
 
 #include <ostream>
 #include <set>
@@ -287,7 +289,11 @@ namespace util {
 
 namespace llvm {
 
-std::vector<llvm::Instruction *> predecessors(llvm::Instruction *I);
+  std::vector<llvm::Instruction *> predecessors(llvm::Instruction *I);
+  using loop_pred_range = std::vector<llvm::BasicBlock *>;
+  loop_pred_range predecessors(llvm::Loop *L);
+  using loop_succ_range = llvm::SmallVector<llvm::BasicBlock *, 4>;
+  loop_succ_range successors(llvm::Loop *L);
 
 /**
  * Guaranteed to produce output in reverse dominating order.
@@ -315,4 +321,10 @@ OutputIt dominators(llvm::DominatorTree& DT, llvm::Instruction *I, OutputIt out)
     return out;
 }
 
+}
+
+namespace clou::impl {
+  void warn_unhandled_intrinsic_(llvm::Intrinsic::ID id, const char *file, size_t line);
+  void warn_unhandled_intrinsic_(const llvm::IntrinsicInst *II, const char *file, size_t line);
+#define warn_unhandled_intrinsic(id) ::clou::impl::warn_unhandled_intrinsic_(id, __FILE__, __LINE__)
 }

@@ -52,15 +52,15 @@ add_library(min_cut OBJECT
   min-cut.h
 )
 
-add_library(transmitter OBJECT
-  transmitter.cc
-  transmitter.h
+add_library(Transmitter OBJECT
+  Transmitter.cc
+  Transmitter.h
   )
 
 add_library(SpeculativeTaint SHARED
   SpeculativeTaint.cc
   $<TARGET_OBJECTS:min_cut>
-  $<TARGET_OBJECTS:transmitter>
+  $<TARGET_OBJECTS:Transmitter>
   util
 )
 register_llvm_pass(SpeculativeTaint)
@@ -92,7 +92,7 @@ register_llvm_pass(print_dom_loop)
 add_library(secret_param_analysis SHARED
   SecretParamAnalysis.cc
   util
-  transmitter
+  Transmitter
   my_scc_pass
   )
 register_llvm_pass(secret_param_analysis)
@@ -100,7 +100,7 @@ register_llvm_pass(secret_param_analysis)
 add_library(NonspeculativeTaint SHARED
   NonspeculativeTaint.cc
   NonspeculativeTaint.h
-  $<TARGET_OBJECTS:transmitter>
+  $<TARGET_OBJECTS:Transmitter>
   util
 )
 register_llvm_pass(NonspeculativeTaint)
@@ -110,7 +110,7 @@ add_library(SpectreV1_1 SHARED
   SpectreV1_1.cc
   util
   NonspeculativeTaint
-  $<TARGET_OBJECTS:transmitter>
+  $<TARGET_OBJECTS:Transmitter>
   my_scc_pass
   )
 register_llvm_pass(SpectreV1_1)
@@ -157,3 +157,16 @@ add_library(BaselinePass SHARED
 )
 register_llvm_pass(BaselinePass)
 target_link_libraries(BaselinePass PRIVATE Mitigation util)
+
+add_library(OOBLoopPass SHARED
+  OOBLoopPass.cc
+)
+register_llvm_pass(OOBLoopPass)
+target_link_libraries(OOBLoopPass PRIVATE Transmitter Mitigation util)
+
+add_library(LogPass SHARED
+  LogPass.cc
+)
+register_llvm_pass(LogPass)
+target_link_libraries(LogPass PRIVATE util)
+  

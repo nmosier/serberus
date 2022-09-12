@@ -154,7 +154,7 @@ function(libsodium_trace NAME)
   set(FUNCS_AWK ${CMAKE_SOURCE_DIR}/scripts/trace_function_totals.awk)
   add_custom_command(OUTPUT ${LINES_LOG}
     COMMAND find ${BINARY_DIR}/test/default/ -name *.log -exec cat "{}" ";" | grep "^[[:digit:]]\\+[[:space:]]" | ${Python3_EXECUTABLE} ${MERGE_COUNTS_PY} -t1 | ${SYMBOLIZE_SH} -t2 ${INSTALL_DIR}/lib/libsodium.so | sort -k1 "-t " -n > ${LINES_LOG}
-    DEPENDS ${SYMBOLIZE_SH} ${LIB}  ${MERGE_COUNTS_SH} ${Python3_EXECUTABLE}
+    DEPENDS ${SYMBOLIZE_SH} ${LIB} ${MERGE_COUNTS_SH} ${Python3_EXECUTABLE}
     VERBATIM
   )
   add_custom_command(OUTPUT ${FUNCS_LOG}
@@ -185,8 +185,12 @@ libsodium_library(libsodium_baseline_slh
   LLVMFLAGS -x86-speculative-load-hardening
 )
 
-libsodium_bc(libsodium_bc libsodium.bc
-  CFLAGS "-O1"
+libsodium_bc(libsodium_bc_O1 libsodium.O1.bc
+  CFLAGS -O1
+)
+
+libsodium_bc(libsodium_bc_O3 libsodium.O3.bc
+  CFLAGS -O3
 )
 
 libsodium_bc(libsodium_cloucc_bc libsodium_cloucc.bc
@@ -197,13 +201,15 @@ libsodium_bc(libsodium_cloucc_bc libsodium_cloucc.bc
 )
 
 libsodium_library(libsodium_cloucc
-  PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
+  # PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
+  PASS OOBLoopPass SpeculativeTaint NoSpillLowering
   CFLAGS -O3
   LLVMFLAGS -clou-nospill -clou-nospill-max=8 -exhaustive-register-search
 )
 
 libsodium_trace(libsodium_cloucc_trace
-  PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
+  # PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
+  PASS OOBLoopPass SpeculativeTaint NoSpillLowering
   CFLAGS -O3
   LLVMFLAGS -clou-nospill -clou-nospill-max=8 -exhaustive-register-search
 )

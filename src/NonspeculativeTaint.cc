@@ -7,7 +7,7 @@
 #include <llvm/IR/Operator.h>
 
 #include "util.h"
-#include "transmitter.h"
+#include "Transmitter.h"
 #include "Mitigation.h"
 
 namespace clou {

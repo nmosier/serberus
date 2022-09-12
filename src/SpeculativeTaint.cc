@@ -22,7 +22,7 @@
 
 #include "min-cut.h"
 #include "util.h"
-#include "transmitter.h"
+#include "Transmitter.h"
 #include "CommandLine.h"
 #include "Mitigation.h"
 
@@ -110,9 +110,36 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         
         return true;
     }
-    
+
+  template <class OutputIt>
+  static void getSecureLoops(llvm::LoopInfo& LI, OutputIt out) {
+    for (llvm::Loop *L : LI) {
+      if (llvm::MDNode *loop_id = L->getLoopID()) {
+	for (llvm::Metadata *metadata : loop_id->operands()) {
+	  if (llvm::MDString *mdstr = llvm::dyn_cast<llvm::MDString>(metadata)) {
+	    if (mdstr->getString() == "clou.loop.secure") {
+	      *out++ = L;
+	    }
+	  }
+	}
+      }
+    }
+  }
+
     void propogate_taint(llvm::Function &F, llvm::AliasAnalysis &AA) const {
+      llvm::DominatorTree DT(F);
+      llvm::LoopInfo LI(DT);
+      
         bool changed;
+
+	// Get set of never-taint instructions. These are populated from results of optimization analyses.
+	std::vector<llvm::Loop *> secure_loops;
+	getSecureLoops(LI, std::back_inserter(secure_loops));
+	const auto inSecureLoop = [&secure_loops] (llvm::Instruction *I) -> bool {
+	  return std::find_if(secure_loops.begin(), secure_loops.end(), [I] (llvm::Loop *L) {
+	    return L->contains(I);
+	  }) != secure_loops.end();
+	};
         
         /* Approach:
          * Update taint as we go.
@@ -197,8 +224,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
                     }
                 }
             }
-            
-            /* meet */            
+
             changed = (taints != taints_bak || mem != mem_bak || rfs != rfs_bak);
             
             taints_bak = taints;
@@ -209,29 +235,28 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         
         // gather transmitters
         std::map<llvm::Instruction *, std::set<llvm::Instruction *>> transmitters;
-        for_each_inst<llvm::Instruction>(F, [&transmitters,
-                                              &taints](llvm::Instruction *I) {
+        for_each_inst<llvm::Instruction>(F, [&](llvm::Instruction *I) {
+	  if (!inSecureLoop(I)) {
             const auto ops = get_transmitter_sensitive_operands(I);
             std::set<llvm::Instruction *> tainted_ops;
             for (const TransmitterOperand& op : ops) {
-                llvm::Value *V = op.V;
-                if (llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
-                    if (taints.contains(I)) {
-                        tainted_ops.insert(I);
-                    }
-                }
+	      llvm::Value *V = op.V;
+	      if (llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
+		if (taints.contains(I)) {
+		  tainted_ops.insert(I);
+		}
+	      }
             }
             if (!tainted_ops.empty()) {
-                transmitters[I] = std::move(tainted_ops);
+	      transmitters[I] = std::move(tainted_ops);
             }
+	  }
         });
         
         using Alg = FordFulkersonMulti<ValueNode, int>;
         Alg::Graph G;
         
         // add CFG
-        llvm::DominatorTree DT (F);
-        llvm::LoopInfo LI (DT);
         for_each_inst<llvm::Instruction>(F, [&](llvm::Instruction *dst) {
             for (llvm::Instruction *src : llvm::predecessors(dst)) {
                 ValueNode src_VN = {.kind = ValueNode::Kind::interior, .V = src};
