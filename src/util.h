@@ -328,3 +328,9 @@ namespace clou::impl {
   void warn_unhandled_intrinsic_(const llvm::IntrinsicInst *II, const char *file, size_t line);
 #define warn_unhandled_intrinsic(id) ::clou::impl::warn_unhandled_intrinsic_(id, __FILE__, __LINE__)
 }
+
+namespace clou {
+  
+  size_t countNonDebugInstructions(const llvm::BasicBlock& B);
+  
+}

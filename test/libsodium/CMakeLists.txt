@@ -202,15 +202,15 @@ libsodium_bc(libsodium_cloucc_bc libsodium_cloucc.bc
 
 libsodium_library(libsodium_cloucc
   # PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
-  PASS OOBLoopPass SpeculativeTaint NoSpillLowering
+  PASS SecureOOBPass SpeculativeTaint NoSpillLowering
   CFLAGS -O3
-  CPPFLAGS -Xclang -load -Xclang $<TARGET_FILE:Log> -mllvm -clou-log-ll
+  # CPPFLAGS -Xclang -load -Xclang $<TARGET_FILE:Log> -mllvm -clou-log-ll
   LLVMFLAGS -clou-nospill -clou-nospill-max=8 -exhaustive-register-search
 )
 
 libsodium_trace(libsodium_cloucc_trace
   # PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
-  PASS OOBLoopPass SpeculativeTaint NoSpillLowering
+  PASS SecureOOBPass SpeculativeTaint NoSpillLowering
   CFLAGS -O3
   LLVMFLAGS -clou-nospill -clou-nospill-max=8 -exhaustive-register-search
 )

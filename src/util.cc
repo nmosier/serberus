@@ -238,3 +238,17 @@ namespace clou::impl {
   }
   
 }
+
+namespace clou {
+
+  size_t countNonDebugInstructions(const llvm::BasicBlock& B) {
+    return std::count_if(B.begin(), B.end(), [] (const llvm::Instruction& I) {
+      if (const auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(&I)) {
+	return !II->isAssumeLikeIntrinsic();
+      } else {
+	return true;
+      }
+    });
+  }
+
+}

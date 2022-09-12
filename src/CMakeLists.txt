@@ -163,11 +163,11 @@ add_library(BaselinePass SHARED
 register_llvm_pass(BaselinePass)
 target_link_libraries(BaselinePass PRIVATE Mitigation util)
 
-add_library(OOBLoopPass SHARED
-  OOBLoopPass.cc
+add_library(SecureOOBPass SHARED
+  SecureOOBPass.cc
 )
-register_llvm_pass(OOBLoopPass)
-target_link_libraries(OOBLoopPass PRIVATE Transmitter Mitigation util)
+register_llvm_pass(SecureOOBPass)
+target_link_libraries(SecureOOBPass PRIVATE Transmitter Mitigation util Log)
   
 add_library(PrintRegions SHARED
   PrintRegions.cc
