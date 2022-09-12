@@ -25,6 +25,7 @@
 #include "Transmitter.h"
 #include "CommandLine.h"
 #include "Mitigation.h"
+#include "Log.h"
 
 namespace clou {
 
@@ -103,6 +104,8 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
     }
     
     virtual bool runOnFunction(llvm::Function &F) override {
+      FunctionLogger logger(F, ".", "SpeculativeTaint");
+      
         llvm::AliasAnalysis &AA = getAnalysis<llvm::AAResultsWrapperPass>().getAAResults();
 
         /* Propogate taint rules */
@@ -111,21 +114,6 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         return true;
     }
 
-  template <class OutputIt>
-  static void getSecureLoops(llvm::LoopInfo& LI, OutputIt out) {
-    for (llvm::Loop *L : LI) {
-      if (llvm::MDNode *loop_id = L->getLoopID()) {
-	for (llvm::Metadata *metadata : loop_id->operands()) {
-	  if (llvm::MDString *mdstr = llvm::dyn_cast<llvm::MDString>(metadata)) {
-	    if (mdstr->getString() == "clou.loop.secure") {
-	      *out++ = L;
-	    }
-	  }
-	}
-      }
-    }
-  }
-
     void propogate_taint(llvm::Function &F, llvm::AliasAnalysis &AA) const {
       llvm::DominatorTree DT(F);
       llvm::LoopInfo LI(DT);
@@ -133,13 +121,14 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         bool changed;
 
 	// Get set of never-taint instructions. These are populated from results of optimization analyses.
-	std::vector<llvm::Loop *> secure_loops;
-	getSecureLoops(LI, std::back_inserter(secure_loops));
-	const auto inSecureLoop = [&secure_loops] (llvm::Instruction *I) -> bool {
-	  return std::find_if(secure_loops.begin(), secure_loops.end(), [I] (llvm::Loop *L) {
-	    return L->contains(I);
-	  }) != secure_loops.end();
-	};
+	std::set<const llvm::Instruction *> secure;
+	for (llvm::BasicBlock& B : F) {
+	  for (llvm::Instruction& I : B) {
+	    if (I.getMetadata("clou.secure")) {
+	      secure.insert(&I);
+	    }
+	  }
+	}
         
         /* Approach:
          * Update taint as we go.
@@ -236,7 +225,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         // gather transmitters
         std::map<llvm::Instruction *, std::set<llvm::Instruction *>> transmitters;
         for_each_inst<llvm::Instruction>(F, [&](llvm::Instruction *I) {
-	  if (!inSecureLoop(I)) {
+	  if (!secure.contains(I)) {
             const auto ops = get_transmitter_sensitive_operands(I);
             std::set<llvm::Instruction *> tainted_ops;
             for (const TransmitterOperand& op : ops) {
@@ -307,7 +296,6 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
                 nodes.emplace(dst.first, nodes.size());
             }
         }
-        llvm::errs() << "min cut for " << F.getName() << ": " << nodes.size() << " vertices\n";
         
         // source-transmitter pairs
         std::vector<Alg::ST> sts;
@@ -406,7 +394,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
             
             // output edges
         }
-        
+
         // mitigate edges
         for (const auto& [src, dst] : cut_edges) {
             if (debug) {
@@ -423,7 +411,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
                 assert(P);
             }
 	    CreateMitigation(P, "udt-mitigation");
-        }
+	}
     }
     
     static llvm::FunctionCallee get_clou_rf_intrinsic(llvm::Module &M) {

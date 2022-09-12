@@ -35,6 +35,11 @@ add_library(CommandLine SHARED
 )
 register_llvm_pass(CommandLine)
 
+add_library(Log SHARED
+  Log.cc
+  Log.h
+)
+
 add_library(util STATIC
   util.cc
   util.h
@@ -64,7 +69,7 @@ add_library(SpeculativeTaint SHARED
   util
 )
 register_llvm_pass(SpeculativeTaint)
-target_link_libraries(SpeculativeTaint PRIVATE CommandLine Mitigation)
+target_link_libraries(SpeculativeTaint PRIVATE CommandLine Mitigation Log)
 
 add_library(count_spectre_v1_1 SHARED
   count_spectre_v1_1.cc
@@ -163,10 +168,9 @@ add_library(OOBLoopPass SHARED
 )
 register_llvm_pass(OOBLoopPass)
 target_link_libraries(OOBLoopPass PRIVATE Transmitter Mitigation util)
-
-add_library(LogPass SHARED
-  LogPass.cc
-)
-register_llvm_pass(LogPass)
-target_link_libraries(LogPass PRIVATE util)
   
+add_library(PrintRegions SHARED
+  PrintRegions.cc
+)
+register_llvm_pass(PrintRegions)
+

@@ -1,7 +1,7 @@
 #include <vector>
 #include <set>
 
-#include <llvm/Analysis/LoopPass.h>
+#include <llvm/Pass.h>
 #include <llvm/Analysis/LoopInfo.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Dominators.h>
@@ -9,6 +9,7 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/CFG.h>
+#include <llvm/Transforms/Utils/LoopUtils.h>
 
 #include "util.h"
 #include "Transmitter.h"
@@ -17,9 +18,9 @@
 namespace clou {
   namespace {
 
-    struct OOBLoopPass final : public llvm::LoopPass {
+    struct OOBLoopPass final : public llvm::FunctionPass {
       static inline char ID = 0;
-      OOBLoopPass(): llvm::LoopPass(ID) {}
+      OOBLoopPass(): llvm::FunctionPass(ID) {}
 
       /// Loops that are Spectre-v1.1-safe according to our analysis and only require one fence at all exits.      
       std::set<llvm::Loop *> loops;
@@ -43,8 +44,16 @@ namespace clou {
 	}
       }
 
+      static bool isDedicatedExit(const llvm::Loop *L, const llvm::BasicBlock *exit) {
+	return std::all_of(llvm::pred_begin(exit),
+			   llvm::pred_end(exit),
+			   [L] (const llvm::BasicBlock *pred) {
+			     return L->contains(pred);
+			   });
+      }
+
       /// Check if we can avoid mitigating Spectre v1.1 in this loop.
-			     static bool checkLoop(const llvm::Loop& L) {
+      static bool checkLoop(const llvm::Loop& L) {
 	// We can't handle any calls in the loop, since OOB stores will violate the callee's assumptions.
 	for (const llvm::BasicBlock *B : L.blocks()) {
 	  for (const llvm::Instruction& I : *B) {
@@ -123,7 +132,7 @@ namespace clou {
 	return true;
       }
 
-      bool runOnLoop(llvm::Loop *L, llvm::LPPassManager&) override {
+      bool runOnLoop(llvm::Loop *L, llvm::DominatorTree *DT, llvm::LoopInfo *LI) {
 	if (checkLoop(*L) && propagateTaint(*L)) {
 	  llvm::LLVMContext& ctx = L->getBlocks().front()->getContext();
 	  llvm::MDNode *extra = llvm::MDNode::get(ctx, {llvm::MDString::get(ctx, "clou.loop.secure")});
@@ -144,16 +153,48 @@ namespace clou {
 	    }
 	  }
 
-	  // Fence before and after loop
-	  for (llvm::BasicBlock *B : llvm::predecessors(L)) {
-	    CreateMitigation(B->getTerminator(), "loop-entry");
+	  // Add loop preheader, if necessary
+	  if (!L->getLoopPreheader()) {
+	    llvm::InsertPreheaderForLoop(L, DT, LI, nullptr, false);
 	  }
-	  for (llvm::BasicBlock *B : llvm::successors(L)) {
-	    CreateMitigation(&B->front(), "loop-exit");
-	  }
+
+	  // Create dedicated exit block, if necessary
+	  llvm::formDedicatedExitBlocks(L, DT, LI, nullptr, false);
 	  
+	  // Fence before and after loop
+	  CreateMitigation(L->getLoopPreheader()->getTerminator(), "loop-entry");
+	  llvm::SmallVector<llvm::BasicBlock *, 4> exits;
+	  L->getExitBlocks(exits);
+	  for (llvm::BasicBlock *exit : exits) {
+	    CreateMitigation(&exit->front(), "loop-exit");
+	  }
+
+	  return true;
+	} else {
+	  return false;
 	}
-	return false;
+      }
+
+      bool runOnLoopRec(llvm::Loop *L, llvm::DominatorTree *DT, llvm::LoopInfo *LI) {
+	if (runOnLoop(L, DT, LI)) {
+	  return true;
+	} else {
+	  bool changed = false;
+	  for (llvm::Loop *L : L->getSubLoops()) {
+	    changed |= runOnLoopRec(L, DT, LI);
+	  }
+	  return changed;
+	}
+      }
+
+      bool runOnFunction(llvm::Function& F) override {
+	llvm::DominatorTree DT(F);
+	llvm::LoopInfo LI(DT);
+	bool changed = false;
+	for (llvm::Loop *L : LI) {
+	  changed |= runOnLoopRec(L, &DT, &LI);
+	}
+	return changed;
       }
 
     };

@@ -204,6 +204,7 @@ libsodium_library(libsodium_cloucc
   # PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
   PASS OOBLoopPass SpeculativeTaint NoSpillLowering
   CFLAGS -O3
+  CPPFLAGS -Xclang -load -Xclang $<TARGET_FILE:Log> -mllvm -clou-log-ll
   LLVMFLAGS -clou-nospill -clou-nospill-max=8 -exhaustive-register-search
 )
 

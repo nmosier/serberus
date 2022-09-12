@@ -7,5 +7,6 @@
 namespace clou {
 
   extern llvm::cl::opt<std::string> emit_dot;
+  extern int verbose;
   
 }
