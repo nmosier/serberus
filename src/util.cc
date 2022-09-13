@@ -207,6 +207,18 @@ std::vector<llvm::Instruction *> predecessors(llvm::Instruction *I) {
   return res;
 }
 
+  std::vector<llvm::Instruction *> successors_inst(llvm::Instruction *I) {
+    if (I->isTerminator()) {
+      std::vector<llvm::Instruction *> succs;
+      for (auto *B : llvm::successors(I)) {
+	succs.push_back(&B->front());
+      }
+      return succs;
+    } else {
+      return {I->getNextNode()};
+    }
+  }
+
   loop_pred_range predecessors(llvm::Loop *L) {
     std::vector<llvm::BasicBlock *> preds;
     for (llvm::BasicBlock *B : llvm::predecessors(L->getHeader())) {

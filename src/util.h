@@ -290,6 +290,7 @@ namespace util {
 namespace llvm {
 
   std::vector<llvm::Instruction *> predecessors(llvm::Instruction *I);
+  std::vector<llvm::Instruction *> successors_inst(llvm::Instruction *I);
   using loop_pred_range = std::vector<llvm::BasicBlock *>;
   loop_pred_range predecessors(llvm::Loop *L);
   using loop_succ_range = llvm::SmallVector<llvm::BasicBlock *, 4>;
