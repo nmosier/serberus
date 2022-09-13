@@ -108,7 +108,10 @@ namespace clou {
 	// find stores with secret operands
 	std::vector<llvm::StoreInst *> secret_oob_stores;
 	for_each_inst<llvm::StoreInst>(F, [&] (llvm::StoreInst *store) {
-	  if (!md::getMetadataFlag(store, md::speculative_inbounds) && NST.secret(store->getValueOperand())) {
+	  if (!md::getMetadataFlag(store, md::speculative_inbounds) &&
+	      NST.secret(store->getValueOperand()) &&
+	      !store->getMetadata("clou.secure")
+	      ) {
 	    secret_oob_stores.push_back(store);
 	  }
 	});

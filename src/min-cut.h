@@ -50,16 +50,38 @@ struct FordFulkersonMultiOld {
             }
             
             Weight path_flow = std::numeric_limits<Weight>::max();
+#if 0	    
             for (Node v = it->st.t; v != it->st.s; v = parent.at(v)) {
                 const Node& u = parent.at(v);
                 path_flow = std::min(path_flow, R[u][v]);
             }
-            
+#else
+	    {
+	      Node v = it->st.t;
+	      do {
+		const Node& u = parent.at(v);
+		path_flow = std::min(path_flow, R[u][v]);
+		v = u;
+	      } while (v != it->st.s);
+	    }
+#endif
+#if 0
             for (Node v = it->st.t; v != it->st.s; v = parent.at(v)) {
                 const Node& u = parent.at(v);
                 R[u][v] -= path_flow;
                 R[v][u] += path_flow;
             }
+#else
+	    {
+	      Node v = it->st.t;
+	      do {
+		const Node& u = parent.at(v);
+		R[u][v] -= path_flow;
+		R[v][u] += path_flow;
+		v = u;
+	      } while (v != it->st.s);
+	    }
+#endif
             
             max_flow += path_flow;
         }
@@ -71,11 +93,11 @@ private:
     
     static bool bfs(WGraph& G, const Node& s, const Node& t, Graph& H, std::map<Node, Node, NodeLess>& parent) {
         std::set<Node, NodeLess> visited;
-        
+
         std::queue<Node> q;
         q.push(s);
         visited.insert(s);
-        
+
         while (!q.empty()) {
             Node u = q.front();
             q.pop();
@@ -93,7 +115,25 @@ private:
                 }
             }
         }
-        
+
+
+#if 0 
+	std::queue<Node> q;
+	q.push(s);
+
+	while (!q.empty()) {
+	  Node u = q.front();
+	  q.pop();
+	  if (visited.insert(u).second) {
+	    for (const Node& v : H[u]) {
+	      Weight w = G[u][v];
+	      if (w > 0) {
+		if (v == t) {
+	      }
+	    }
+	  }
+	}
+#endif        
         return false;
     }
     
@@ -127,6 +167,7 @@ struct FordFulkersonMulti {
             }
             
             Weight path_flow = std::numeric_limits<Weight>::max();
+#if 0
             for (Node v = it->t; !it->s.contains(v); v = parent.at(v)) {
                 const Node& u = parent.at(v);
                 path_flow = std::min(path_flow, R[u][v]);
@@ -137,6 +178,23 @@ struct FordFulkersonMulti {
                 R[u][v] -= path_flow;
                 R[v][u] += path_flow;
             }
+#else
+	    {
+	      Node v;
+	      v = it->t;
+	      do {
+		const Node& u = parent.at(v);
+                path_flow = std::min(path_flow, R[u][v]);
+		v = u;
+	      } while (!it->s.contains(v));
+	      v = it->t;
+	      do {
+                const Node& u = parent.at(v);
+                R[u][v] -= path_flow;
+		v = u;
+	      } while (!it->s.contains(v));
+	    }
+#endif
             
             max_flow += path_flow;
             
@@ -150,16 +208,22 @@ struct FordFulkersonMulti {
         }
         
         // get all edges from reachable vertex to unreachable
-        for (const auto& up : G) {
-            const Node& u = up.first;
-            for (const auto& vp : up.second) {
-                const Node& v = vp.first;
-                if (vp.second > 0 && visited.contains(u) && !visited.contains(v)) {
-                    assert(R[u][v] <= 0);
-                    *out++ = std::make_pair(u, v);
-                }
+        for (const auto& [u, vs] : G) {
+	  for (const auto& [v, w] : vs) {
+	    if (w > 0 && visited.contains(u) &&
+#if 0
+		!visited.contains(v)
+#else
+		R[u][v] <= 0
+#endif
+		) {
+#if 0
+	      assert(R[u][v] <= 0);
+#endif
+	      *out++ = std::make_pair(u, v);
             }
-        }
+	  }
+	}
         
         return out;
     }
@@ -167,8 +231,9 @@ struct FordFulkersonMulti {
 private:
     static bool bfs(Graph& G, const std::set<Node, NodeLess>& s, const Node& t, std::map<Node, Node, NodeLess>& parent) {
         std::set<Node, NodeLess> visited;
-        
+
         std::queue<Node> q;
+#if 0
         for (const Node& s_ : s) {
             q.push(s_);
             visited.insert(s_);
@@ -192,7 +257,32 @@ private:
                 }
             }
         }
-        
+#else
+	for (const Node& s_ : s) {
+	  q.push(s_);
+	}
+
+	while (!q.empty()) {
+	  Node u = q.front();
+	  q.pop();
+	  if (visited.insert(u).second) {
+	    for (const auto& [v, w] : G[u]) {
+	      if (w > 0) {
+#if 0
+		parent[v] = u;
+#else
+		parent.emplace(v, u);
+#endif
+		if (v == t) {
+		  return true;
+		}
+		q.push(v);
+	      }
+	    }
+	  }
+	}
+#endif
+
         return false;
     }
     

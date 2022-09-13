@@ -174,3 +174,21 @@ add_library(PrintRegions SHARED
 )
 register_llvm_pass(PrintRegions)
 
+add_library(MitigateDT SHARED
+  MitigateDT.cc
+)
+register_llvm_pass(MitigateDT)
+target_link_libraries(MitigateDT util Mitigation Transmitter CommandLine)
+
+add_library(SpeculativeTaint2 SHARED
+  SpeculativeTaint2.h
+  SpeculativeTaint2.cc
+)
+register_llvm_pass(SpeculativeTaint2)
+target_link_libraries(SpeculativeTaint2 PRIVATE util Mitigation)
+
+add_library(MitigatePass SHARED
+  Mitigate.cc
+)
+register_llvm_pass(MitigatePass)
+target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaint SpeculativeTaint2 CommandLine)

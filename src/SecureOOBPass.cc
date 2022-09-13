@@ -9,6 +9,7 @@
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 #include <llvm/Analysis/LoopInfo.h>
 #include <llvm/IR/Dominators.h>
+#include <llvm/IR/IntrinsicsX86.h>
 
 #include "util.h"
 #include "Transmitter.h"
@@ -171,6 +172,9 @@ namespace clou {
 	    switch (II->getIntrinsicID()) {
 	    case llvm::Intrinsic::fshr:
 	    case llvm::Intrinsic::fshl:
+	    case llvm::Intrinsic::x86_aesni_aesenc:
+	    case llvm::Intrinsic::x86_aesni_aeskeygenassist:
+	    case llvm::Intrinsic::x86_aesni_aesenclast:
 	      return true;
 	    default:
 	      warn_unhandled_intrinsic(II);
@@ -303,11 +307,14 @@ namespace clou {
 	  CreateMitigation(exit, "secure-exit");
 	}	
 
+#if 0
+	// NOTE: Don't actually need to mitigate this since inputs are assumed to be non-secret anyways.
 	// Check if first instruction in function
 	auto *first_I = &part.getFunction()->getEntryBlock().front();
 	if (part.insts.contains(first_I)) {
 	  CreateMitigation(first_I, "secure-enter");
-	}	
+	}
+#endif
 	
 	// Mitigate any return instructions
 	for (auto *I : part.insts) {

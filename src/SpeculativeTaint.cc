@@ -226,7 +226,7 @@ struct SpeculativeTaint final : public llvm::FunctionPass {
         std::map<llvm::Instruction *, std::set<llvm::Instruction *>> transmitters;
         for_each_inst<llvm::Instruction>(F, [&](llvm::Instruction *I) {
 	  if (!secure.contains(I)) {
-            const auto ops = get_transmitter_sensitive_operands(I);
+            const auto ops = get_transmitter_sensitive_operands(I, false);
             std::set<llvm::Instruction *> tainted_ops;
             for (const TransmitterOperand& op : ops) {
 	      llvm::Value *V = op.V;

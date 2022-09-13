@@ -35,12 +35,12 @@ namespace clou {
 
 template <class OutputIt>
 OutputIt get_transmitter_sensitive_operands(llvm::Instruction *I,
-                                            OutputIt out) {
+                                            OutputIt out, bool pseudoStoreValues) {
     if (llvm::isa<llvm::LoadInst, llvm::StoreInst>(I)) {
         *out++ = TransmitterOperand(TransmitterOperand::TRUE, llvm::getPointerOperand(I));
     }
     if (llvm::StoreInst *SI = llvm::dyn_cast<llvm::StoreInst>(I)) {
-      if (util::isSpeculativeInbounds(SI)) {
+      if (!util::isSpeculativeInbounds(SI) && pseudoStoreValues) {
 	*out++ = TransmitterOperand(TransmitterOperand::PSEUDO, SI->getValueOperand());
       }
     }
@@ -70,6 +70,6 @@ OutputIt get_transmitter_sensitive_operands(llvm::Instruction *I,
     return out;
 }
 
-std::set<TransmitterOperand> get_transmitter_sensitive_operands(llvm::Instruction *I);
+  std::set<TransmitterOperand> get_transmitter_sensitive_operands(llvm::Instruction *I, bool pseudStoreValues = true);
 
 }

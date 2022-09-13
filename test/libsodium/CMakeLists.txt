@@ -29,7 +29,7 @@ function(libsodium_library NAME)
     # URL https://download.libsodium.org/libsodium/releases/libsodium-1.0.18.tar.gz
     SOURCE_DIR ${LIBSODIUM_DIR}
     CONFIGURE_COMMAND ${LIBSODIUM_DIR}/configure --quiet --prefix=${CMAKE_CURRENT_BINARY_DIR}/${NAME}-prefix CC=${LLVM_BINARY_DIR}/bin/clang "CPPFLAGS=${LIBSODIUM_CPPFLAGS}" "CFLAGS=${LIBSODIUM_CFLAGS}" "LDFLAGS=${LIBSODIUM_LDFLAGS}" ${LIBSODIUM_CONFIGURE_OPTIONS}
-    BUILD_COMMAND ${MAKE_EXE} --quiet -j32; ${MAKE_EXE} --quiet check -j32 || true # TESTS_ENVIRONMENT="true" # Don't actually run any tests; just want to build the runners.
+    BUILD_COMMAND ${MAKE_EXE} -j32 && ${MAKE_EXE} --quiet check -j32  # TESTS_ENVIRONMENT="true" # Don't actually run any tests; just want to build the runners.
     # BUILD_ALWAYS ON
     INSTALL_COMMAND ${MAKE_EXE} --quiet install
   )
@@ -202,7 +202,8 @@ libsodium_bc(libsodium_cloucc_bc libsodium_cloucc.bc
 
 libsodium_library(libsodium_cloucc
   # PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
-  PASS SecureOOBPass SpeculativeTaint NoSpillLowering
+  # PASS SecureOOBPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
+  PASS SpeculativeTaint NoSpillLowering
   CFLAGS -O3
   # CPPFLAGS -Xclang -load -Xclang $<TARGET_FILE:Log> -mllvm -clou-log-ll
   LLVMFLAGS -clou-nospill -clou-nospill-max=8 -exhaustive-register-search
@@ -210,7 +211,28 @@ libsodium_library(libsodium_cloucc
 
 libsodium_trace(libsodium_cloucc_trace
   # PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
-  PASS SecureOOBPass SpeculativeTaint NoSpillLowering
+  # PASS SecureOOBPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
+  PASS SpeculativeTaint NoSpillLowering
   CFLAGS -O3
   LLVMFLAGS -clou-nospill -clou-nospill-max=8 -exhaustive-register-search
+)
+
+libsodium_library(libsodium_dt
+  PASS MitigateDT
+  CFLAGS -O3
+)
+
+libsodium_trace(libsodium_dt_trace
+  PASS MitigateDT
+  CFLAGS -O3
+)
+
+libsodium_library(libsodium_mitigate
+  PASS MitigatePass
+  CFLAGS -O3
+)
+
+libsodium_trace(libsodium_mitigate_trace
+  PASS MitigatePass
+  CFLAGS -O3
 )

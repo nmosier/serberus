@@ -175,8 +175,12 @@ namespace util {
 	} else {
 	  return std::all_of(I->op_begin(), I->op_end(), isSpeculativeInboundsValue);
 	}
-      } else {
+      } else if (llvm::isa<llvm::Argument>(V)) {
+	return false;
+      } else if (llvm::isa<llvm::Constant>(V)) {
 	return true;
+      } else {
+	unhandled_value(*V);
       }
     }
   }

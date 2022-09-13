@@ -28,9 +28,9 @@ namespace clou {
   }
 
 std::set<TransmitterOperand>
-get_transmitter_sensitive_operands(llvm::Instruction *I) {
+get_transmitter_sensitive_operands(llvm::Instruction *I, bool pseudoStoreValues) {
   std::set<TransmitterOperand> set;
-  get_transmitter_sensitive_operands(I, std::inserter(set, set.end()));
+  get_transmitter_sensitive_operands(I, std::inserter(set, set.end()), pseudoStoreValues);
   return set;
 }
 
