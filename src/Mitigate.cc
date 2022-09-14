@@ -213,7 +213,7 @@ namespace clou {
 	}
 
 	Alg::Graph G;
-
+	
 	// Add CFG to graph
 	for (auto& B : F) {
 	  for (auto& dst : B) {
@@ -222,6 +222,12 @@ namespace clou {
 	    }
 	  }
 	}
+
+	// Add arguments
+	for (auto& A_src : F.args()) {
+	  auto *I_dst = &F.getEntryBlock().front();
+	  G[&A_src][I_dst] = compute_edge_weight(I_dst, DT, LI);
+	}	
 
 	/* Add edge connecting return instructions to entry instructions. 
 	 * This allows us to capture aliases across invocations of the same function.

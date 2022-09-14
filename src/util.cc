@@ -22,7 +22,7 @@ bool has_incoming_addr(const llvm::Value *V,
     return false;
   }
 
-  if (llvm::isa<llvm::LoadInst, llvm::Argument>(V)) {
+  if (llvm::isa<llvm::LoadInst, llvm::Argument, llvm::PHINode>(V)) {
     return true;
   } else if (const llvm::Instruction *I =
                  llvm::dyn_cast<llvm::Instruction>(V)) {
