@@ -1,3 +1,11 @@
+#include <fstream>
+#include <map>
+#include <memory>
+#include <set>
+#include <sstream>
+#include <vector>
+#include <variant>
+
 #include <llvm/Analysis/AliasAnalysis.h>
 #include <llvm/Analysis/CallGraph.h>
 #include <llvm/IR/Function.h>
@@ -13,14 +21,6 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/IR/IntrinsicsX86.h>
 
-#include <fstream>
-#include <map>
-#include <memory>
-#include <set>
-#include <sstream>
-#include <vector>
-#include <variant>
-
 #include "min-cut.h"
 #include "util.h"
 #include "Transmitter.h"
@@ -32,6 +32,8 @@
 
 namespace clou {
   namespace {
+
+    constexpr bool StackMitigations = true;
 
     using ISet = std::set<llvm::Instruction *>;
     using VSet = std::set<llvm::Value *>;
@@ -181,6 +183,7 @@ namespace clou {
 
 	std::vector<Alg::ST> sts;
 
+#if 0
 	// Create ST-pairs for {oob_sec_stores X spec_pub_loads}
 	for (auto *LI : spec_pub_loads) {
 	  Alg::ST st;
@@ -190,6 +193,7 @@ namespace clou {
 	  }
 	  sts.push_back(std::move(st));
 	}
+#endif
 
 	// Create ST-pairs for {oob_sec_stores X ctrls}
 	for (auto *ctrl : ctrls) {
@@ -201,6 +205,7 @@ namespace clou {
 	  sts.push_back(std::move(st));
 	}
 
+#if 0
 	// Create ST-pairs for {source X transmitter}
 	for (const auto& [transmitter, transmit_ops] : transmitters) {
 	  Alg::ST st;
@@ -212,6 +217,48 @@ namespace clou {
 	  sts.push_back(std::move(st));
 	}
 
+	// EXPERIMENTAL: Create ST-pairs for {entry, return}.
+	for (auto& B : F) {
+	  for (auto& I : B) {
+	    if (llvm::isa<llvm::ReturnInst>(&I)) {
+	      Alg::ST st;
+	      st.t = &I;
+	      st.s.insert(&F.getEntryBlock().front());
+	      sts.push_back(std::move(st));
+	    }
+	  }
+	}
+#endif
+
+#if 0
+	// EXPERIMENTAL: Create ST-pairs for {argument, argument-use}
+	for (llvm::Argument& A : F.args()) {
+	  for (llvm::Use& use : A.uses()) {
+	    llvm::Instruction *user = llvm::cast<llvm::Instruction>(use.getUser());
+	    Alg::ST st;
+	    st.t = user;
+	    st.s.insert(&A);
+	    sts.push_back(std::move(st));
+	  }
+	}
+#elif 1
+	for (llvm::Argument& A : F.args()) {
+	  for (llvm::Use& use : A.uses()) {
+	    llvm::Instruction *user = llvm::cast<llvm::Instruction>(use.getUser());
+	    if (auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(user)) {
+	      if (II->isAssumeLikeIntrinsic() || llvm::isa<llvm::DbgInfoIntrinsic>(II)) {
+		continue;
+	      }
+	    }
+	    Alg::ST st;
+	    st.t = user;
+	    st.s.insert(&F.getEntryBlock().front());
+	    sts.push_back(std::move(st));
+	  }
+	}
+#endif
+	
+	// Create graph
 	Alg::Graph G;
 	
 	// Add CFG to graph
@@ -223,35 +270,47 @@ namespace clou {
 	  }
 	}
 
+#if 1
 	// Add arguments
 	for (auto& A_src : F.args()) {
 	  auto *I_dst = &F.getEntryBlock().front();
 	  G[&A_src][I_dst] = compute_edge_weight(I_dst, DT, LI);
-	}	
+	}
+#endif
 
+#if 0
 	/* Add edge connecting return instructions to entry instructions. 
 	 * This allows us to capture aliases across invocations of the same function.
 	 */
 	for (auto& B : F) {
 	  for (auto& I : B) {
 	    if (llvm::isa<llvm::ReturnInst>(&I)) {
+#if 1
 	      auto *entry = &F.getEntryBlock().front();
 	      G[&I][entry] = compute_edge_weight(entry, DT, LI);
+#else
+	      for (auto& A : F.args()) {
+		G[&I][&A] = compute_edge_weight(&F.getEntryBlock().front(), DT, LI);
+	      }
+#endif
 	    }
 	  }
 	}
+#endif
 
 	// Run algorithm to obtain min-cut
 	std::vector<std::pair<Node, Node>> cut_edges;
 	Alg::run(G, sts.begin(), sts.end(), std::back_inserter(cut_edges));
 
-
-	for (const auto& st : sts) {
-	  llvm::errs() << "\nSources:\n";
-	  for (const auto& s : st.s) {
-	    llvm::errs() << s << "\n";
+	
+	if (verbose) {
+	  for (const auto& st : sts) {
+	    llvm::errs() << "\nSources:\n";
+	    for (const auto& s : st.s) {
+	      llvm::errs() << s << "\n";
+	    }
+	    llvm::errs() << "Transmitter: " << st.t << "\n";
 	  }
-	  llvm::errs() << "Transmitter: " << st.t << "\n";
 	}
 
 	

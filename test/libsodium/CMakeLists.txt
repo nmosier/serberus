@@ -5,7 +5,7 @@ set(MERGE_COUNTS_PY ${CMAKE_SOURCE_DIR}/scripts/merge_counts.py)
 set(SYMBOLIZE_SH ${CMAKE_SOURCE_DIR}/scripts/srclocs2.sh)
 
 function(libsodium_library NAME)
-  set(multi_value_args DEPENDS PASS CPPFLAGS CFLAGS LDFLAGS LLVMFLAGS CONFIGURE_OPTIONS)
+  set(multi_value_args DEPENDS PASS CPPFLAGS CFLAGS LDFLAGS LLVMFLAGS CLOUFLAGS CONFIGURE_OPTIONS)
   cmake_parse_arguments(LIBSODIUM "" "" "${multi_value_args}" ${ARGN})
 
   # Add arguments for pass
@@ -18,6 +18,10 @@ function(libsodium_library NAME)
 
   foreach(llvmflag IN LISTS LIBSODIUM_LLVMFLAGS)
     list(APPEND LIBSODIUM_CFLAGS -mllvm ${llvmflag})
+  endforeach()
+
+  foreach(clouflag IN LISTS LIBSODIUM_CLOUFLAGS)
+    list(APPEND LIBSODIUM_CPPFLAGS -mllvm ${clouflag})
   endforeach()
   
   list(APPEND LIBSODIUM_CFLAGS "-g")
@@ -236,3 +240,13 @@ libsodium_trace(libsodium_mitigate_trace
   PASS MitigatePass
   CFLAGS -O3
 )
+
+# libsodium_library(libsodium_mitigate2
+#   PASS MitigatePass
+#   CFLAGS -O3
+# )
+# 
+# libsodium_trace(libsodium_mitigate2_trace
+#   PASS MitigatePass
+#   CFLAGS -O3
+# )

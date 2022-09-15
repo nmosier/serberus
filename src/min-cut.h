@@ -7,6 +7,7 @@
 #include <iostream>
 #include <cassert>
 
+#if 0
 std::vector<std::pair<int, int>> minCut(const std::vector<std::vector<int>>& graph, int s, int t);
 
 /**
@@ -138,7 +139,7 @@ private:
     }
     
 };
-
+#endif
 
 template <class Node, class Weight, class NodeLess = std::less<Node>>
 struct FordFulkersonMulti {
@@ -167,18 +168,6 @@ struct FordFulkersonMulti {
             }
             
             Weight path_flow = std::numeric_limits<Weight>::max();
-#if 0
-            for (Node v = it->t; !it->s.contains(v); v = parent.at(v)) {
-                const Node& u = parent.at(v);
-                path_flow = std::min(path_flow, R[u][v]);
-            }
-            
-            for (Node v = it->t; !it->s.contains(v); v = parent.at(v)) {
-                const Node& u = parent.at(v);
-                R[u][v] -= path_flow;
-                R[v][u] += path_flow;
-            }
-#else
 	    {
 	      Node v;
 	      v = it->t;
@@ -194,7 +183,6 @@ struct FordFulkersonMulti {
 		v = u;
 	      } while (!it->s.contains(v));
 	    }
-#endif
             
             max_flow += path_flow;
             
@@ -210,16 +198,7 @@ struct FordFulkersonMulti {
         // get all edges from reachable vertex to unreachable
         for (const auto& [u, vs] : G) {
 	  for (const auto& [v, w] : vs) {
-	    if (w > 0 && visited.contains(u) &&
-#if 0
-		!visited.contains(v)
-#else
-		R[u][v] <= 0
-#endif
-		) {
-#if 0
-	      assert(R[u][v] <= 0);
-#endif
+	    if (w > 0 && visited.contains(u) && R[u][v] <= 0) {
 	      *out++ = std::make_pair(u, v);
             }
 	  }
@@ -233,31 +212,6 @@ private:
         std::set<Node, NodeLess> visited;
 
         std::queue<Node> q;
-#if 0
-        for (const Node& s_ : s) {
-            q.push(s_);
-            visited.insert(s_);
-        }
-        
-        while (!q.empty()) {
-            Node u = q.front();
-            q.pop();
-            
-            for (const auto& vp : G[u]) {
-                const Node& v = vp.first;
-                Weight w = G[u][v];
-                if (!visited.contains(v) && w > 0) {
-                    if (v == t) {
-                        parent[v] = u;
-                        return true;
-                    }
-                    q.push(v);
-                    parent[v] = u;
-                    visited.insert(v);
-                }
-            }
-        }
-#else
 	for (const Node& s_ : s) {
 	  q.push(s_);
 	}
@@ -268,11 +222,7 @@ private:
 	  if (visited.insert(u).second) {
 	    for (const auto& [v, w] : G[u]) {
 	      if (w > 0) {
-#if 0
-		parent[v] = u;
-#else
 		parent.emplace(v, u);
-#endif
 		if (v == t) {
 		  return true;
 		}
@@ -281,7 +231,6 @@ private:
 	    }
 	  }
 	}
-#endif
 
         return false;
     }

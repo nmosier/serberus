@@ -6,12 +6,19 @@ namespace clou {
 
   int verbose = 0;
   namespace {
-    llvm::cl::opt<bool> verbose_flag("clou-verbose", llvm::cl::callback([] (const bool& value) {
-      if (value)
-	++verbose;
-      else
-	verbose = 0;
-    }));
+    llvm::cl::opt<bool> verbose_flag {
+      "clou-verbose",
+      llvm::cl::desc("verbose output"),
+      llvm::cl::callback([] (const bool& value) {
+	if (value) {
+	  ++verbose;
+	} else {
+	  verbose = 0;
+	}
+      }),
+      llvm::cl::init(false),
+    };
+
   }
 
 }
