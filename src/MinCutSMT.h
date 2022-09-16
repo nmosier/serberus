@@ -1,6 +1,9 @@
 #pragma once
 
+#include <map>
+
 #include <z3++.h>
+
 #include <llvm/ADT/StringRef.h>
 
 #include "MinCutBase.h"
@@ -8,14 +11,14 @@
 namespace clou {
 
   template <class Node, class Weight>
-  class MinCutSMT final : public MinCutBase<Node, Weight> {
+  class MinCutSMT_Base : public MinCutBase<Node, Weight> {
   public:
     using Super = MinCutBase<Node, Weight>;
     using Graph = Super::Graph;
     using Edge = Super::Edge;
     using ST = Super::ST;
-    
-    void run() override {
+
+    void run() final {
       // Name nodes
       std::map<Node, size_t> ids;
       for (const auto& [src, dsts] : this->G) {
@@ -32,9 +35,9 @@ namespace clou {
 	  Grev[dst][src] = weight;
 	}
       }
-
+      
       z3::context ctx;
-      z3::expr empty_set = z3::empty_set(ctx.int_sort());
+      z3::expr empty_set = get_empty_set(ctx, ids.size());
       z3::sort set_sort = empty_set.get_sort();
 
       // Variable name generators
@@ -77,9 +80,9 @@ namespace clou {
 	// Define set_in
 	z3::expr set_in = empty_set;
 	for (const auto& [src, _] : Grev[dst]) {
-	  const z3::expr cut = edge_cut_var({.src = src, .dst = dst});
-	  const z3::expr src_set_out = z3::ite(cut, empty_set, set_out_var(src));
-	  set_in = z3::set_union(set_in, src_set_out);
+	  z3::expr cut = edge_cut_var({.src = src, .dst = dst});
+	  z3::expr src_set_out = z3::ite(cut, empty_set, set_out_var(src));
+	  set_in = set_union(set_in, src_set_out);
 	}
 	solver.add(set_in == set_in_var(dst));
       }
@@ -88,14 +91,14 @@ namespace clou {
       for (const auto& [node, id] : ids) {
 	z3::expr set_out = set_in_var(node);
 	if (sources.contains(node)) {
-	  set_out = z3::set_add(set_out, ctx.int_val(id));
+	  set_out = set_add(set_out, id);
 	}
 	solver.add(set_out == set_out_var(node));
       }
 
       // Assert that transmitters never recieve a set containing their sources
       for (const ST& st : this->sts) {
-	solver.add(!z3::set_member(ctx.int_val(ids.at(st.s)), set_in_var(st.t)));
+	solver.add(!set_member(set_in_var(st.t), ids.at(st.s)));
       }
 
       // Minimize cut weights
@@ -130,6 +133,61 @@ namespace clou {
 	  }
 	}
       }
+    }
+
+  protected:
+    virtual z3::expr get_empty_set(z3::context& ctx, size_t n) const = 0;
+    virtual z3::expr set_union(const z3::expr& a, const z3::expr& b) const = 0;
+    virtual z3::expr set_add(const z3::expr& set, size_t i) const = 0;
+    virtual z3::expr set_member(const z3::expr& set, size_t i) const = 0;
+  };
+
+  template <class Node, class Weight>
+  class MinCutSMT_Set final : public MinCutSMT_Base<Node, Weight> {
+  private:
+    z3::expr get_empty_set(z3::context& ctx, size_t n) const final {
+      return z3::empty_set(ctx.int_sort());
+    }
+
+    z3::expr set_union(const z3::expr& a, const z3::expr& b) const final {
+      return z3::set_union(a, b);
+    }
+
+    z3::expr set_add(const z3::expr& set, size_t i) const final {
+      return z3::set_add(set, set.ctx().int_val(i));
+    }
+
+    z3::expr set_member(const z3::expr& set, size_t i) const final {
+      return z3::set_member(set.ctx().int_val(i), set);
+    }
+  };
+
+  template <class Node, class Weight>
+  class MinCutSMT_BV final : public MinCutSMT_Base<Node, Weight> {
+  private:
+    z3::expr get_singleton(const z3::expr& ref, size_t i) const {
+      z3::sort sort = ref.get_sort();
+      assert(sort.is_bv());
+      const auto n = sort.bv_size();
+      z3::context& ctx = ref.ctx();
+      return z3::shl(ctx.bv_val(1, n), i);
+    }
+    
+    z3::expr get_empty_set(z3::context& ctx, size_t n) const final {
+      return ctx.bv_val(0, n);
+    }
+    
+    z3::expr set_union(const z3::expr& a, const z3::expr& b) const final {
+      return a | b;
+    }
+    
+    z3::expr set_add(const z3::expr& set, size_t i) const final {
+      return set_union(set, get_singleton(set, i));
+    }
+    
+    z3::expr set_member(const z3::expr& set, size_t i) const final {
+      z3::context& ctx = set.ctx();
+      return set.extract(i, i) == ctx.bv_val(1, 1);
     }
   };
   

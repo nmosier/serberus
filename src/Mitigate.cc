@@ -62,7 +62,7 @@ namespace clou {
     
       MitigatePass() : llvm::FunctionPass(ID) {}
     
-      using Alg = MinCutSMT<Node, int>;
+      using Alg = MinCutSMT_BV<Node, int>;
 
       void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
 	AU.addRequired<NonspeculativeTaint>();
@@ -216,6 +216,7 @@ namespace clou {
 	  }
 	}
 
+	// EXPERIMENTAL: Create ST-pairs for {arg-def, arg-use}
 	for (llvm::Argument& arg : F.args()) {
 	  for (llvm::Use& use : arg.uses()) {
 	    llvm::Instruction *user = llvm::cast<llvm::Instruction>(use.getUser());
