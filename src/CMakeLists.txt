@@ -1,5 +1,9 @@
 add_compile_options(-fno-rtti -Wall -Wextra)
 
+link_libraries(${Z3_LIBRARIES})
+link_directories(${Z3_LIBRARY_DIRS})
+include_directories(${Z3_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+
 message("LLVM_INCLUDE_DIRS=${LLVM_INCLUDE_DIRS}")
 function(register_llvm_pass TARGET)
   target_include_directories(${TARGET} SYSTEM BEFORE PUBLIC ${LLVM_INCLUDE_DIRS})
@@ -52,11 +56,6 @@ add_library(InstructionPass OBJECT
 )
 register_llvm_pass(InstructionPass)
 
-add_library(min_cut OBJECT
-  min-cut.cc
-  min-cut.h
-)
-
 add_library(Transmitter OBJECT
   Transmitter.cc
   Transmitter.h
@@ -64,7 +63,6 @@ add_library(Transmitter OBJECT
 
 add_library(SpeculativeTaint SHARED
   SpeculativeTaint.cc
-  $<TARGET_OBJECTS:min_cut>
   $<TARGET_OBJECTS:Transmitter>
   util
 )
@@ -85,7 +83,6 @@ register_llvm_pass(mitigate)
 
 add_executable(min_cut_driver
   min-cut-driver.cc
-  $<TARGET_OBJECTS:min_cut>
   )
 
 add_library(print_dom_loop SHARED

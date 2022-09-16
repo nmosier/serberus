@@ -21,7 +21,7 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/IR/IntrinsicsX86.h>
 
-#include "min-cut.h"
+#include "MinCutSMT.h"
 #include "util.h"
 #include "Transmitter.h"
 #include "CommandLine.h"
@@ -62,7 +62,7 @@ namespace clou {
     
       MitigatePass() : llvm::FunctionPass(ID) {}
     
-      using Alg = FordFulkersonMulti<Node, int>;
+      using Alg = MinCutSMT<Node, int>;
 
       void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
 	AU.addRequired<NonspeculativeTaint>();
@@ -181,85 +181,52 @@ namespace clou {
 	std::map<llvm::Instruction *, ISet> transmitters;
 	getTransmitters(F, ST, transmitters);
 
-	std::vector<Alg::ST> sts;
+	Alg A;
+	Alg::Graph& G = A.G;
 
-#if 0
 	// Create ST-pairs for {oob_sec_stores X spec_pub_loads}
 	for (auto *LI : spec_pub_loads) {
-	  Alg::ST st;
-	  st.t = LI;
 	  for (auto *SI : oob_sec_stores) {
-	    st.s.insert(SI);
+	    A.add_st({.s = SI, .t = LI});
 	  }
-	  sts.push_back(std::move(st));
 	}
-#endif
 
 	// Create ST-pairs for {oob_sec_stores X ctrls}
 	for (auto *ctrl : ctrls) {
-	  Alg::ST st;
-	  st.t = ctrl;
 	  for (auto *SI : oob_sec_stores) {
-	    st.s.insert(SI);
+	    A.add_st({.s = SI, .t = ctrl});
 	  }
-	  sts.push_back(std::move(st));
 	}
 
-#if 0
 	// Create ST-pairs for {source X transmitter}
 	for (const auto& [transmitter, transmit_ops] : transmitters) {
-	  Alg::ST st;
-	  st.t = transmitter;
 	  for (auto *op_I : transmit_ops) {
-	    const auto& sources = ST.taints.at(op_I);
-	    st.s.insert(sources.begin(), sources.end());
+	    for (auto *source : ST.taints.at(op_I)) {
+	      A.add_st({.s = source, .t = transmitter});
+	    }
 	  }
-	  sts.push_back(std::move(st));
 	}
 
 	// EXPERIMENTAL: Create ST-pairs for {entry, return}.
 	for (auto& B : F) {
 	  for (auto& I : B) {
 	    if (llvm::isa<llvm::ReturnInst>(&I)) {
-	      Alg::ST st;
-	      st.t = &I;
-	      st.s.insert(&F.getEntryBlock().front());
-	      sts.push_back(std::move(st));
+	      A.add_st({.s = &F.getEntryBlock().front(), .t = &I});
 	    }
 	  }
 	}
-#endif
 
-#if 0
-	// EXPERIMENTAL: Create ST-pairs for {argument, argument-use}
-	for (llvm::Argument& A : F.args()) {
-	  for (llvm::Use& use : A.uses()) {
-	    llvm::Instruction *user = llvm::cast<llvm::Instruction>(use.getUser());
-	    Alg::ST st;
-	    st.t = user;
-	    st.s.insert(&A);
-	    sts.push_back(std::move(st));
-	  }
-	}
-#elif 1
-	for (llvm::Argument& A : F.args()) {
-	  for (llvm::Use& use : A.uses()) {
+	for (llvm::Argument& arg : F.args()) {
+	  for (llvm::Use& use : arg.uses()) {
 	    llvm::Instruction *user = llvm::cast<llvm::Instruction>(use.getUser());
 	    if (auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(user)) {
 	      if (II->isAssumeLikeIntrinsic() || llvm::isa<llvm::DbgInfoIntrinsic>(II)) {
 		continue;
 	      }
 	    }
-	    Alg::ST st;
-	    st.t = user;
-	    st.s.insert(&F.getEntryBlock().front());
-	    sts.push_back(std::move(st));
+	    A.add_st({.s = &F.getEntryBlock().front(), .t = user});
 	  }
 	}
-#endif
-	
-	// Create graph
-	Alg::Graph G;
 	
 	// Add CFG to graph
 	for (auto& B : F) {
@@ -270,39 +237,24 @@ namespace clou {
 	  }
 	}
 
-#if 1
-	// Add arguments
-	for (auto& A_src : F.args()) {
-	  auto *I_dst = &F.getEntryBlock().front();
-	  G[&A_src][I_dst] = compute_edge_weight(I_dst, DT, LI);
-	}
-#endif
 
-#if 0
 	/* Add edge connecting return instructions to entry instructions. 
 	 * This allows us to capture aliases across invocations of the same function.
 	 */
 	for (auto& B : F) {
 	  for (auto& I : B) {
 	    if (llvm::isa<llvm::ReturnInst>(&I)) {
-#if 1
 	      auto *entry = &F.getEntryBlock().front();
 	      G[&I][entry] = compute_edge_weight(entry, DT, LI);
-#else
-	      for (auto& A : F.args()) {
-		G[&I][&A] = compute_edge_weight(&F.getEntryBlock().front(), DT, LI);
-	      }
-#endif
 	    }
 	  }
 	}
-#endif
 
 	// Run algorithm to obtain min-cut
-	std::vector<std::pair<Node, Node>> cut_edges;
-	Alg::run(G, sts.begin(), sts.end(), std::back_inserter(cut_edges));
+	A.run();
+	auto& cut_edges = A.cut_edges;	
 
-	
+#if 0
 	if (verbose) {
 	  for (const auto& st : sts) {
 	    llvm::errs() << "\nSources:\n";
@@ -312,7 +264,7 @@ namespace clou {
 	    llvm::errs() << "Transmitter: " << st.t << "\n";
 	  }
 	}
-
+#endif
 	
 	// Output DOT graph, color cut edges
 	if (!emit_dot.getValue().empty()) {
@@ -333,11 +285,9 @@ namespace clou {
 	  }
 
 	  std::map<Node, std::string> special;
-	  for (const Alg::ST& st : sts) {
+	  for (const Alg::ST& st : A.sts) {
 	    special[st.t] = "green";
-	    for (const auto& s : st.s) {
-	      special[s] = "blue";
-	    }
+	    special[st.s] = "blue";
 	  }
 	    
 	  for (const auto& [node, i] : nodes) {
@@ -352,7 +302,9 @@ namespace clou {
 	    for (const auto& [v, weight] : usucc) {
 	      if (weight > 0) {
 		f << "node" << nodes.at(u) << " -> " << "node" << nodes.at(v) << " [label=\"" << weight << "\"";
-		if (std::find(cut_edges.begin(), cut_edges.end(), std::pair<Node, Node>(u, v)) != cut_edges.end()) {
+		if (std::find(cut_edges.begin(),
+			      cut_edges.end(),
+			      Alg::Edge({.src = u, .dst = v})) != cut_edges.end()) {
 		  f << ", color=\"red\"";
 		}
 		f << "];\n";
