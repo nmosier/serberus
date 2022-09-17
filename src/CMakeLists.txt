@@ -184,8 +184,14 @@ add_library(SpeculativeTaint2 SHARED
 register_llvm_pass(SpeculativeTaint2)
 target_link_libraries(SpeculativeTaint2 PRIVATE util Mitigation)
 
+add_library(AllocaInitPass SHARED
+  AllocaInitPass.h
+  AllocaInitPass.cc
+)
+register_llvm_pass(AllocaInitPass)
+
 add_library(MitigatePass SHARED
   Mitigate.cc
 )
 register_llvm_pass(MitigatePass)
-target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaint SpeculativeTaint2 CommandLine)
+target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaint SpeculativeTaint2 CommandLine AllocaInitPass)

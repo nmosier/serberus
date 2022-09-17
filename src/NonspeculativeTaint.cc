@@ -239,7 +239,7 @@ bool NonspeculativeTaint::secret(llvm::Value *V) const {
 namespace {
 
 llvm::RegisterPass<NonspeculativeTaint> X {
-    "nonspeculative-taint", "Nonspeculative Taint Pass"
+  "nonspeculative-taint", "Nonspeculative Taint Pass", true, true
 };
 
 }

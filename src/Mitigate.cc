@@ -29,6 +29,7 @@
 #include "Log.h"
 #include "SpeculativeTaint2.h"
 #include "NonspeculativeTaint.h"
+#include "AllocaInitPass.h"
 
 namespace clou {
   namespace {
@@ -65,8 +66,9 @@ namespace clou {
       using Alg = MinCutSMT_BV<Node, int>;
 
       void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
-	AU.addRequired<NonspeculativeTaint>();
+	// AU.addRequired<NonspeculativeTaint>();
 	AU.addRequired<SpeculativeTaint>();
+	AU.addRequired<AllocaInitPass>();
       }
 
       static bool ignoreCall(const llvm::CallBase *C) {
@@ -159,9 +161,13 @@ namespace clou {
       }
     
       bool runOnFunction(llvm::Function &F) override {
+	std::exit(0);
 	auto& NST = getAnalysis<NonspeculativeTaint>();
 	auto& ST = getAnalysis<SpeculativeTaint>();
+	auto& AIA = getAnalysis<AllocaInitPass>().results;
 
+	llvm::errs() << getPassName() << ": " << F.getName() << "\n";
+	
 	llvm::DominatorTree DT(F);
 	llvm::LoopInfo LI(DT);
 
@@ -226,6 +232,15 @@ namespace clou {
 	      }
 	    }
 	    A.add_st({.s = &F.getEntryBlock().front(), .t = user});
+	  }
+	}
+
+	// SUPER EXPERIMENTAL: Create ST-pairs for {alloca-first-init, alloca-first-use}
+	for (const auto& [alloca, result] : AIA) {
+	  for (auto *store : result.stores) {
+	    for (auto *load : result.loads) {
+	      A.add_st({.s = store, .t = load});
+	    }
 	  }
 	}
 	
