@@ -17,6 +17,7 @@ public:
   struct ST {
     Node s;
     Node t;
+    bool operator==(const ST& o) const { return s == o.s && t == o.t; }
   };
   
   using Graph = std::map<Node, std::map<Node, Weight>>;

@@ -2,6 +2,7 @@ add_compile_options(-fno-rtti -Wall -Wextra)
 
 link_libraries(${Z3_LIBRARIES})
 link_directories(${Z3_LIBRARY_DIRS})
+add_link_options(-pthread)
 include_directories(${Z3_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 
 message("LLVM_INCLUDE_DIRS=${LLVM_INCLUDE_DIRS}")
@@ -189,9 +190,10 @@ add_library(AllocaInitPass SHARED
   AllocaInitPass.cc
 )
 register_llvm_pass(AllocaInitPass)
+target_link_libraries(AllocaInitPass PRIVATE util NonspeculativeTaint SpeculativeTaint2)
 
 add_library(MitigatePass SHARED
   Mitigate.cc
 )
 register_llvm_pass(MitigatePass)
-target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaint SpeculativeTaint2 CommandLine AllocaInitPass)
+target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaint SpeculativeTaint2 CommandLine AllocaInitPass ${Z3_LIBRARIES})

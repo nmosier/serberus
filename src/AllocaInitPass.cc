@@ -3,6 +3,7 @@
 #include <map>
 #include <set>
 #include <numeric>
+#include <queue>
 
 #include <llvm/IR/Instructions.h>
 #include <llvm/Analysis/AliasAnalysis.h>
@@ -10,6 +11,8 @@
 #include <llvm/IR/Dominators.h>
 
 #include "util.h"
+#include "NonspeculativeTaint.h"
+#include "SpeculativeTaint2.h"
 
 namespace clou {
 
@@ -19,6 +22,8 @@ namespace clou {
 
   void AllocaInitPass::getAnalysisUsage(llvm::AnalysisUsage& AU) const {
     AU.addRequired<llvm::AAResultsWrapperPass>();
+    AU.addRequired<NonspeculativeTaint>();
+    AU.addRequired<SpeculativeTaint>();
     AU.setPreservesAll();
   }
 
@@ -56,7 +61,8 @@ namespace clou {
     }
   }
 
-  AllocaInitPass::ISet AllocaInitPass::pruneAccesses(llvm::Function& F, const ISet& in) {
+  AllocaInitPass::ISet AllocaInitPass::pruneAccesses(llvm::Function& F, NonspeculativeTaint& NST, SpeculativeTaint& ST,
+						     const ISet& in) {
     ISet out;
 
     std::set<llvm::Instruction *> seen;
@@ -67,7 +73,7 @@ namespace clou {
       llvm::Instruction *I = todo.front();
       todo.pop();
       if (seen.insert(I).second) {
-	if (in.contains(I)) {
+	if (in.contains(I) && !NST.secret(I) && !ST.secret(I)) {
 	  out.insert(I);
 	} else {
 	  for (llvm::Instruction *succ : llvm::successors_inst(I)) {
@@ -81,10 +87,12 @@ namespace clou {
   }
 
   bool AllocaInitPass::runOnFunction(llvm::Function& F) {
+    results.clear();
+    
     auto& AA = getAnalysis<llvm::AAResultsWrapperPass>().getAAResults();
-
-    llvm::errs() << "here\n";
-
+    auto& NST = getAnalysis<NonspeculativeTaint>();
+    auto& ST = getAnalysis<SpeculativeTaint>();
+    
     /* Really, just need to collect the set of instructions that may alias.
      * Then we can prune using dominator tree.
      */
@@ -112,13 +120,13 @@ namespace clou {
     
     // Prune load and store sets
     for (auto& [_, result] : results) {
-      result.loads = pruneAccesses(F, result.loads);
-      result.stores = pruneAccesses(F, result.stores);
+      result.loads = pruneAccesses(F, NST, ST, result.loads);
+      result.stores = pruneAccesses(F, NST, ST, result.stores);
     }
 
     return false;
   }
 
-  llvm::RegisterPass<AllocaInitPass> X {"clou-alloca-init", "Clou's Alloca Init Pass", true, true};
+  static llvm::RegisterPass<AllocaInitPass> X {"clou-alloca-init", "Clou's Alloca Init Pass", true, true};
   
 }

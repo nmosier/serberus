@@ -1,6 +1,7 @@
 #pragma once
 
 #include <map>
+#include <vector>
 
 #include <z3++.h>
 
@@ -18,16 +19,73 @@ namespace clou {
     using Edge = Super::Edge;
     using ST = Super::ST;
 
-    void run() final {
-      // Name nodes
-      std::map<Node, size_t> ids;
-      for (const auto& [src, dsts] : this->G) {
-	ids.emplace(src, ids.size());
-	for (const auto& [dst, _] : dsts) {
-	  ids.emplace(dst, ids.size());
-	}
+#if 1
+    void eraseNode(Graph& G, Graph& Grev, const Node& node) {
+      for (const auto& [succ, _] : G[node]) {
+	Grev[succ].erase(node);
+      }
+      for (const auto& [pred, _] : Grev[node]) {
+	G[pred].erase(node);
+      }
+      G.erase(node);
+      Grev.erase(node);
+    }
+
+    void removeEdge(Graph& G, Graph& Grev, const Node& src, const Node& dst) {
+      G[src].erase(dst);
+      Grev[dst].erase(src);
+    }
+
+    void simplifyGraph(Graph& G, Graph& Grev) {
+      std::set<Node> sources, transmitters;
+      for (const ST& st : this->sts) {
+	sources.insert(st.s);
+	transmitters.insert(st.t);
       }
 
+      bool changed;
+      do {
+	changed = false;
+
+	// Elide any nodes with singleton same-weight in and out edges
+	for (const auto& [node, _] : G) {
+	  if (!sources.contains(node) && !transmitters.contains(node)) {
+	    auto& succs = G[node];
+	    auto& preds = Grev[node];
+	    if (succs.size() == 1 && preds.size() == 1) {
+	      auto& [succ, succ_weight] = *succs.begin();
+	      auto& [pred, pred_weight] = *preds.begin();
+	      if (pred_weight == succ_weight) {
+		const Weight weight = succ_weight;
+		eraseNode(G, Grev, node);
+		G[pred][succ] = weight;
+		Grev[succ][pred] = weight;
+		changed = true;
+		break;
+	      }
+	    }
+	  }
+	}
+
+	// Insert edges that we know must be placed
+	for (const auto& [src, dsts] : G) {
+	  for (const auto& [dst, _] : dsts) {
+	    ST st = {.s = src, .t = dst};
+	    if (std::find(this->sts.begin(), this->sts.end(), st) != this->sts.end()) {
+	      removeEdge(G, Grev, src, dst);
+	      this->cut_edges.push_back({.src = src, .dst = dst});
+	      changed = true;
+	      goto done;
+	    }
+	  }
+	}
+      done: ;
+      } while (changed);
+    }
+#endif
+
+    void run() final {
+      
       // Reverse graph
       Graph Grev;
       for (const auto& [src, dsts] : this->G) {
@@ -35,6 +93,19 @@ namespace clou {
 	  Grev[dst][src] = weight;
 	}
       }
+
+#if 1
+      simplifyGraph(this->G, Grev);
+#endif
+
+      // Name nodes
+      std::map<Node, size_t> ids;
+      for (const auto& [src, dsts] : this->G) {
+	ids.emplace(src, ids.size());
+	for (const auto& [dst, _] : dsts) {
+	  ids.emplace(dst, ids.size());
+	}
+      }      
       
       z3::context ctx;
       z3::expr empty_set = get_empty_set(ctx, ids.size());

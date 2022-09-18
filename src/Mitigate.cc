@@ -66,7 +66,7 @@ namespace clou {
       using Alg = MinCutSMT_BV<Node, int>;
 
       void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
-	// AU.addRequired<NonspeculativeTaint>();
+	AU.addRequired<NonspeculativeTaint>();
 	AU.addRequired<SpeculativeTaint>();
 	AU.addRequired<AllocaInitPass>();
       }
@@ -159,9 +159,25 @@ namespace clou {
 	  }
 	}
       }
+
+      template <class OutputIt>
+      static void checkArgs(llvm::Function& F, OutputIt out) {
+	llvm::DataLayout DL(F.getParent());
+	unsigned counter = 0;
+	for (llvm::Argument& A : F.args()) {
+	  if (counter >= 6) {
+	    *out++ = std::make_pair(&A, false);
+	  } else {
+	    llvm::Type *T = A.getType();
+	    const auto bits = DL.getTypeSizeInBits(T);
+	    constexpr auto regbits = 64;
+	    counter += ((bits + regbits - 1) / regbits);
+	    *out++ = std::make_pair(&A, counter <= 6);
+	  }
+	}
+      }
     
       bool runOnFunction(llvm::Function &F) override {
-	std::exit(0);
 	auto& NST = getAnalysis<NonspeculativeTaint>();
 	auto& ST = getAnalysis<SpeculativeTaint>();
 	auto& AIA = getAnalysis<AllocaInitPass>().results;
@@ -213,6 +229,7 @@ namespace clou {
 	  }
 	}
 
+#if 1
 	// EXPERIMENTAL: Create ST-pairs for {entry, return}.
 	for (auto& B : F) {
 	  for (auto& I : B) {
@@ -223,15 +240,18 @@ namespace clou {
 	}
 
 	// EXPERIMENTAL: Create ST-pairs for {arg-def, arg-use}
-	for (llvm::Argument& arg : F.args()) {
-	  for (llvm::Use& use : arg.uses()) {
-	    llvm::Instruction *user = llvm::cast<llvm::Instruction>(use.getUser());
-	    if (auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(user)) {
-	      if (II->isAssumeLikeIntrinsic() || llvm::isa<llvm::DbgInfoIntrinsic>(II)) {
-		continue;
+	std::vector<std::pair<llvm::Argument *, bool>> args_regs;
+	for (auto& [arg, isreg] : args_regs) {
+	  if (!isreg) {
+	    for (llvm::Use& use : arg->uses()) {
+	      llvm::Instruction *user = llvm::cast<llvm::Instruction>(use.getUser());
+	      if (auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(user)) {
+		if (II->isAssumeLikeIntrinsic() || llvm::isa<llvm::DbgInfoIntrinsic>(II)) {
+		  continue;
+		}
 	      }
+	      A.add_st({.s = &F.getEntryBlock().front(), .t = user});
 	    }
-	    A.add_st({.s = &F.getEntryBlock().front(), .t = user});
 	  }
 	}
 
@@ -243,6 +263,7 @@ namespace clou {
 	    }
 	  }
 	}
+#endif
 	
 	// Add CFG to graph
 	for (auto& B : F) {
@@ -334,6 +355,15 @@ namespace clou {
 	// Mitigations
 	for (const auto& [src, dst] : cut_edges) {
 	  CreateMitigation(llvm::cast<llvm::Instruction>(dst.V), "clou-mitigate-pass");
+	}
+
+	// Mark all public values as nospill
+	for (auto& B : F) {
+	  for (auto& I : B) {
+	    if (!(ST.secret(&I) || I.getType()->isVoidTy())) {
+	      I.setMetadata("clou.nospill", llvm::MDNode::get(F.getContext(), {}));
+	    }
+	  }
 	}
 	
         return true;

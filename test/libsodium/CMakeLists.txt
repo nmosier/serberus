@@ -23,6 +23,8 @@ function(libsodium_library NAME)
   foreach(clouflag IN LISTS LIBSODIUM_CLOUFLAGS)
     list(APPEND LIBSODIUM_CPPFLAGS -mllvm ${clouflag})
   endforeach()
+
+  list(APPEND LIBSODIUM_LDFLAGS -pthread)
   
   list(APPEND LIBSODIUM_CFLAGS "-g")
   list(JOIN LIBSODIUM_CFLAGS " " LIBSODIUM_CFLAGS)
@@ -33,7 +35,7 @@ function(libsodium_library NAME)
     # URL https://download.libsodium.org/libsodium/releases/libsodium-1.0.18.tar.gz
     SOURCE_DIR ${LIBSODIUM_DIR}
     CONFIGURE_COMMAND ${LIBSODIUM_DIR}/configure --quiet --prefix=${CMAKE_CURRENT_BINARY_DIR}/${NAME}-prefix CC=${LLVM_BINARY_DIR}/bin/clang "CPPFLAGS=${LIBSODIUM_CPPFLAGS}" "CFLAGS=${LIBSODIUM_CFLAGS}" "LDFLAGS=${LIBSODIUM_LDFLAGS}" ${LIBSODIUM_CONFIGURE_OPTIONS}
-    BUILD_COMMAND ${MAKE_EXE} -j32 && ${MAKE_EXE} --quiet check -j32  # TESTS_ENVIRONMENT="true" # Don't actually run any tests; just want to build the runners.
+    BUILD_COMMAND ${MAKE_EXE} -j64 && ${MAKE_EXE} check -j64  # TESTS_ENVIRONMENT="true" # Don't actually run any tests; just want to build the runners.
     # BUILD_ALWAYS ON
     INSTALL_COMMAND ${MAKE_EXE} --quiet install
   )

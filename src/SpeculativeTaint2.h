@@ -24,7 +24,6 @@ namespace clou {
     void print(llvm::raw_ostream& os, const llvm::Module *M) const override;
 
     bool secret(llvm::Value *V);
-
   };
   
 }

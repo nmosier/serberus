@@ -11,6 +11,10 @@
 
 namespace clou {
 
+  // Forward Declarations
+  class NonspeculativeTaint;
+  class SpeculativeTaint;
+
   class AllocaInitPass final : public llvm::FunctionPass {
   public:
     using ISet = std::set<llvm::Instruction *>;
@@ -31,7 +35,7 @@ namespace clou {
     
   private:
     void getAccessSets(llvm::Function& F, llvm::AliasAnalysis& AA);
-    static ISet pruneAccesses(llvm::Function& F, const ISet& in);
+    static ISet pruneAccesses(llvm::Function& F, NonspeculativeTaint& NST, SpeculativeTaint& ST, const ISet& in);
   };
   
 }

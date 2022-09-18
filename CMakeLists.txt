@@ -7,9 +7,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 find_package(LLVM REQUIRED CONFIG)
 find_package(Boost REQUIRED)
-# find_package(PkgConfig REQUIRED)
+find_package(PkgConfig REQUIRED)
 # pkg_check_modules(Libprofiler libprofiler)
-# pkg_check_modules(Libunwind REQUIRED libunwind-ptrace)
+pkg_check_modules(Libunwind REQUIRED libunwind-generic)
 # pkg_check_modules(Capstone REQUIRED capstone)
 
 if(DEFINED Z3_DIR)
