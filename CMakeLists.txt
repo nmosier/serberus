@@ -2,19 +2,23 @@ cmake_minimum_required(VERSION 3.16)
 
 project(clou2)
 
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 find_package(LLVM REQUIRED CONFIG)
-find_package(Boost REQUIRED)
 find_package(PkgConfig REQUIRED)
 # pkg_check_modules(Libprofiler libprofiler)
 pkg_check_modules(Libunwind REQUIRED libunwind-generic)
+pkg_check_modules(GoogleBenchmark REQUIRED benchmark)
+
+message("GoogleBenchmark @ ${GoogleBenchmark_LIBRARY_DIRS}")
 # pkg_check_modules(Capstone REQUIRED capstone)
 
 if(DEFINED Z3_DIR)
   # TODO: Figure out why LLVM'ds F
-  find_library(Z3_LIBRARIES PATHS ${Z3_DIR}/bin ${Z3_DIR}/lib REQUIRED)
+  find_library(Z3_LIBRARIES PATHS ${Z3_DIR}/bin ${Z3_DIR}/lib REQUIRED NAMES z3)
   set(Z3_INCLUDE_DIR ${Z3_DIR}/include)
 else()
   find_package(Z3 REQUIRED)
@@ -23,6 +27,11 @@ endif()
 if("${CMAKE_GENERATOR}" STREQUAL Xcode)
   add_link_options(-w)
 endif()
+
+if(NOT DEFINED LIBSODIUM_DIR)
+  message(FATAL_ERROR "LIBSODIUM_DIR is not defined. Please define it.")
+endif()
+get_filename_component(LIBSODIUM_DIR ${LIBSODIUM_DIR} ABSOLUTE BASE_DIR ${CMAKE_BINARY_DIR})
 
 add_compile_options(-Wall -Wextra -pedantic)
 
@@ -45,5 +54,6 @@ add_subdirectory(runtime)
 add_subdirectory(tools)
 add_subdirectory(scripts)
 add_subdirectory(test)
+add_subdirectory(bench)
 
 message("LLVM_DIR=${LLVM_DIR}")

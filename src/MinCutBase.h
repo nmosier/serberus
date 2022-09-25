@@ -57,4 +57,7 @@ public:
 private:
 };
 
+  // TODO: Move this to source file.
+  extern bool optimized_min_cut;
+
 }

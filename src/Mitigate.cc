@@ -34,6 +34,8 @@
 namespace clou {
   namespace {
 
+					  
+
     constexpr bool StackMitigations = true;
 
     using ISet = std::set<llvm::Instruction *>;
@@ -323,7 +325,7 @@ namespace clou {
 
 	  std::map<Node, std::string> special;
 	  for (const Alg::ST& st : A.sts) {
-	    special[st.t] = "green";
+	    special[st.t] = "blue"; // TODO: used to be green, but sometimes nodes are both sources and sinks.
 	    special[st.s] = "blue";
 	  }
 	    
@@ -334,6 +336,12 @@ namespace clou {
 	    }
 	    f << "];\n";
 	  }
+
+	  // Add ST-pairs as dotted gray edges
+	  for (const auto& st : A.sts) {
+	    f << "node" << nodes.at(st.s) << " -> node" << nodes.at(st.t) << " [style=\"dashed\", color=\"gray\"]\n";
+	  }
+	  
             
 	  for (const auto& [u, usucc] : G) {
 	    for (const auto& [v, weight] : usucc) {

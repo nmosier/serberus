@@ -1,0 +1,28 @@
+# ClouCC Development Docker Container
+
+FROM ubuntu:20.04
+
+CMD bash
+
+ARG UID
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get -qq update
+
+# Packages for building
+RUN apt-get -qq install build-essential libunwind-dev libz3-dev binutils-dev cmake ninja-build git pkg-config libbenchmark-dev
+
+# Packages for testing
+RUN apt-get -qq install valgrind linux-tools-5.4.0-48-generic
+
+# Packages for development
+RUN apt-get -qq install emacs-nox tmux sudo
+
+# RUN echo 'kernel.perf_event_paranoid = -1' >> /etc/sysctl.conf
+
+RUN groupadd -r cloucc && useradd -r -g cloucc cloucc
+RUN usermod -u ${UID} cloucc
+RUN usermod -aG sudo cloucc
+RUN echo 'cloucc:cloucc' | chpasswd
+USER cloucc

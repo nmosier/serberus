@@ -1,0 +1,2 @@
+LLVM_DIR=$PWD/../../clouxx-llvm/install PKG_CONFIG_PATH="$PWD/../../libunwind/lib/pkgconfig;$PWD/../../z3/install/lib/pkgconfig;$PWD/../../google-benchmark/install/lib/pkgconfig" cmake -DLIBSODIUM_DIR="$PWD/../../libsodium" -DZ3_DIR="$PWD/../../z3/install" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ..
+LLVM_DIR=$PWD/../../clouxx-llvm/install cmake -G Ninja -DLIBSODIUM_DIR="$PWD/../../libsodium" ..

@@ -28,6 +28,12 @@ add_library(metadata SHARED
   metadata.h
 )
 
+add_library(MinCut SHARED
+  MinCutBase.h
+  MinCutBase.cc
+  MinCutSMT.h
+)
+
 add_library(Mitigation SHARED
   Mitigation.cc
   Mitigation.h
@@ -196,4 +202,4 @@ add_library(MitigatePass SHARED
   Mitigate.cc
 )
 register_llvm_pass(MitigatePass)
-target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaint SpeculativeTaint2 CommandLine AllocaInitPass ${Z3_LIBRARIES})
+target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaint SpeculativeTaint2 CommandLine AllocaInitPass ${Z3_LIBRARIES} MinCut)

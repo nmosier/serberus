@@ -15,11 +15,10 @@ namespace clou {
   class MinCutSMT_Base : public MinCutBase<Node, Weight> {
   public:
     using Super = MinCutBase<Node, Weight>;
-    using Graph = Super::Graph;
-    using Edge = Super::Edge;
-    using ST = Super::ST;
+    using Graph = typename Super::Graph;
+    using Edge = typename Super::Edge;
+    using ST = typename Super::ST;
 
-#if 1
     void eraseNode(Graph& G, Graph& Grev, const Node& node) {
       for (const auto& [succ, _] : G[node]) {
 	Grev[succ].erase(node);
@@ -82,7 +81,6 @@ namespace clou {
       done: ;
       } while (changed);
     }
-#endif
 
     void run() final {
       
@@ -94,9 +92,9 @@ namespace clou {
 	}
       }
 
-#if 1
-      simplifyGraph(this->G, Grev);
-#endif
+      if (optimized_min_cut) {
+	simplifyGraph(this->G, Grev);
+      }
 
       // Name nodes
       std::map<Node, size_t> ids;
@@ -105,6 +103,13 @@ namespace clou {
 	for (const auto& [dst, _] : dsts) {
 	  ids.emplace(dst, ids.size());
 	}
+      }
+
+      // Collect sources and transmitters
+      std::set<Node> sources, transmitters;
+      for (const ST& st : this->sts) {
+	sources.insert(st.s);
+	transmitters.insert(st.t);
       }      
       
       z3::context ctx;
@@ -135,13 +140,6 @@ namespace clou {
       const auto edge_cut_var = [&] (const Edge& edge) -> z3::expr {
 	return ctx.bool_const(edge_name(edge, "cut").c_str());
       };
-
-      // Collect sources and transmitters
-      std::set<Node> sources, transmitters;
-      for (const ST& st : this->sts) {
-	sources.insert(st.s);
-	transmitters.insert(st.t);
-      }
       
       // Construct graph
       z3::optimize solver(ctx);
