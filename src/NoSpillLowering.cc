@@ -17,7 +17,11 @@ namespace clou {
       static llvm::FunctionCallee getNoSpillIntrinsic(llvm::Module *M, llvm::Type *T) {
 	llvm::LLVMContext& ctx = M->getContext();
 	llvm::FunctionType *fty = llvm::FunctionType::get(llvm::Type::getVoidTy(ctx), {T}, false);
+#if 1
 	return llvm::InlineAsm::get(fty, "clou.nospill", "r", true);
+#else
+	return M->getOrInsertFunction("clou.nospill", fty);
+#endif
       }
 
       bool runOnFunction(llvm::Function& F) override {
@@ -25,6 +29,9 @@ namespace clou {
 	for (llvm::BasicBlock& B : F) {
 	  for (llvm::Instruction *I = &B.front(); I != nullptr; I = I->getNextNode()) {
 	    if (md::getMetadataFlag(I, md::nospill)) {
+	      // FIXME: Currently ignoring composite values
+	      if (!I->getType()->isSingleValueType()) { continue; }
+
 	      // insert call
 	      llvm::IRBuilder<> IRB (B.getTerminator()); // use terminator to avoid accounting for PHI nodes
 	      IRB.SetCurrentDebugLocation(I->getDebugLoc());

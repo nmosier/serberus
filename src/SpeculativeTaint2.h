@@ -14,8 +14,7 @@ namespace clou {
     SpeculativeTaint();
 
     using ISet = std::set<llvm::Instruction *>;
-    using VSet = std::set<llvm::Value *>;
-    using TaintMap = std::map<llvm::Instruction *, VSet>;
+    using TaintMap = std::map<llvm::Instruction *, ISet>;
 
     TaintMap taints;
 

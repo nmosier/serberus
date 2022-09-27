@@ -27,7 +27,7 @@ namespace clou {
     llvm::DominatorTree DT(F);
     llvm::LoopInfo LI(DT);
 
-    std::map<llvm::StoreInst *, VSet> mem, mem_bak;
+    std::map<llvm::StoreInst *, ISet> mem, mem_bak;
     TaintMap taints_bak;
     taints.clear();
     do {

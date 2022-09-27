@@ -185,8 +185,9 @@ libsodium_trace(libsodium_dt_trace
 )
 
 libsodium_library(libsodium_mitigate
-  PASS MitigatePass
+  PASS MitigatePass NoSpillPublic NoSpillLowering
   CFLAGS -O3
+  LLVMFLAGS -clou-nospill -exhaustive-register-search
 )
 
 libsodium_trace(libsodium_mitigate_trace
@@ -203,3 +204,9 @@ libsodium_trace(libsodium_mitigate_trace
 #   PASS MitigatePass
 #   CFLAGS -O3
 # )
+
+libsodium_library(libsodium_fps
+  PASS FunctionLocalStacks
+  CFLAGS -O3 # -mno-red-zone
+  LLVMFLAGS -x86-function-local-stacks # -no-stack-slot-sharing
+)

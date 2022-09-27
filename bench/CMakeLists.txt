@@ -20,3 +20,7 @@ add_benchmark(baseline_lfence_benchmark libsodium_sha256.cc ${install_dir}/lib/l
 ExternalProject_Get_Property(libsodium_baseline_none install_dir)
 add_benchmark(baseline_none_benchmark libsodium_sha256.cc ${install_dir}/lib/libsodium.so ${install_dir}/include)
 add_benchmark(baseline_none_cache libsodium_sha256_main.c ${install_dir}/lib/libsodium.so ${install_dir}/include)
+
+ExternalProject_Get_Property(libsodium_fps install_dir)
+add_benchmark(fps_benchmark libsodium_sha256.cc ${install_dir}/lib/libsodium.so ${install_dir}/include)
+

@@ -333,6 +333,7 @@ namespace clou::impl {
 namespace clou {
   
   size_t countNonDebugInstructions(const llvm::BasicBlock& B);
-  
+
+  void trace(const char *fmt, ...);
 }
 

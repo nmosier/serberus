@@ -83,6 +83,9 @@ namespace clou {
     }
 
     void run() final {
+      if (this->sts.empty()) {
+	return;
+      }
       
       // Reverse graph
       Graph Grev;
@@ -92,9 +95,11 @@ namespace clou {
 	}
       }
 
+#if 0
       if (optimized_min_cut) {
 	simplifyGraph(this->G, Grev);
       }
+#endif
 
       // Name nodes
       std::map<Node, size_t> ids;
@@ -106,14 +111,15 @@ namespace clou {
       }
 
       // Collect sources and transmitters
-      std::set<Node> sources, transmitters;
+      std::map<Node, size_t> sources;
+      std::set<Node> transmitters;
       for (const ST& st : this->sts) {
-	sources.insert(st.s);
+	sources.emplace(st.s, sources.size());
 	transmitters.insert(st.t);
       }      
       
       z3::context ctx;
-      z3::expr empty_set = get_empty_set(ctx, ids.size());
+      z3::expr empty_set = get_empty_set(ctx, sources.size());
       z3::sort set_sort = empty_set.get_sort();
 
       // Variable name generators
@@ -157,17 +163,17 @@ namespace clou {
       }
 
       // Define set-out's
-      for (const auto& [node, id] : ids) {
+      for (const auto& [node, _] : ids) {
 	z3::expr set_out = set_in_var(node);
 	if (sources.contains(node)) {
-	  set_out = set_add(set_out, id);
+	  set_out = set_add(set_out, sources.at(node));
 	}
 	solver.add(set_out == set_out_var(node));
       }
 
       // Assert that transmitters never recieve a set containing their sources
       for (const ST& st : this->sts) {
-	solver.add(!set_member(set_in_var(st.t), ids.at(st.s)));
+	solver.add(!set_member(set_in_var(st.t), sources.at(st.s)));
       }
 
       // Minimize cut weights
@@ -180,6 +186,7 @@ namespace clou {
 					ctx.int_val(0)));
 	}
       }
+
       solver.minimize(z3::sum(cut_weights));
 
       const z3::check_result check_res = solver.check();
@@ -214,7 +221,7 @@ namespace clou {
   template <class Node, class Weight>
   class MinCutSMT_Set final : public MinCutSMT_Base<Node, Weight> {
   private:
-    z3::expr get_empty_set(z3::context& ctx, size_t n) const final {
+    z3::expr get_empty_set(z3::context& ctx, size_t) const final {
       return z3::empty_set(ctx.int_sort());
     }
 

@@ -198,8 +198,20 @@ add_library(AllocaInitPass SHARED
 register_llvm_pass(AllocaInitPass)
 target_link_libraries(AllocaInitPass PRIVATE util NonspeculativeTaint SpeculativeTaint2)
 
+add_library(NoSpillPublic SHARED
+  NoSpillPublic.cc
+)
+register_llvm_pass(NoSpillPublic)
+target_link_libraries(NoSpillPublic PRIVATE util NonspeculativeTaint SpeculativeTaint2 Mitigation)
+
 add_library(MitigatePass SHARED
   Mitigate.cc
 )
 register_llvm_pass(MitigatePass)
 target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaint SpeculativeTaint2 CommandLine AllocaInitPass ${Z3_LIBRARIES} MinCut)
+
+add_library(FunctionLocalStacks SHARED
+  FunctionLocalStacks.cc
+)
+register_llvm_pass(FunctionLocalStacks)
+target_link_libraries(FunctionLocalStacks PRIVATE util)

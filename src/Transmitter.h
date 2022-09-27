@@ -4,6 +4,9 @@
 #include <tuple>
 
 #include <llvm/IR/Instructions.h>
+#include <llvm/IR/IntrinsicInst.h>
+#include <llvm/IR/Intrinsics.h>
+#include <llvm/IR/IntrinsicsX86.h>
 
 #include "util.h"
 
@@ -50,16 +53,55 @@ OutputIt get_transmitter_sensitive_operands(llvm::Instruction *I,
       }
     }
     if (llvm::SwitchInst *SI = llvm::dyn_cast<llvm::SwitchInst>(I)) {
-        *out++ = TransmitterOperand(TransmitterOperand::TRUE, SI->getCondition());
-    }       
+      *out++ = TransmitterOperand(TransmitterOperand::TRUE, SI->getCondition());
+    }
     if (llvm::CallBase *C = llvm::dyn_cast<llvm::CallBase>(I)) {
-      // TODO: Do this on a per-argument basis.
-      // For example, llvm.memcpy does not transmit the pointer arguments, only the size argument.
-      if (!callDoesNotTransmit(C)) {
+      if (auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(C)) {
+	
+	if (!II->isAssumeLikeIntrinsic() && !II->getType()->isVoidTy() && II->arg_size() > 0) {
+	  std::vector<unsigned> none;
+	  std::vector<unsigned> all;
+	  for (unsigned i = 0; i < II->arg_size(); ++i) {
+	    all.push_back(i);
+	  }
+	  std::vector<unsigned> leaked_args;
+	  
+	  switch (II->getIntrinsicID()) {
+	  case llvm::Intrinsic::memset:
+	    leaked_args = all;
+	    break;
+	  case llvm::Intrinsic::memcpy:
+	    leaked_args = all;
+	    break;
+	  case llvm::Intrinsic::vector_reduce_and:
+	  case llvm::Intrinsic::vector_reduce_or:
+	  case llvm::Intrinsic::fshl:
+	  case llvm::Intrinsic::ctpop:
+	  case llvm::Intrinsic::x86_aesni_aeskeygenassist:
+	  case llvm::Intrinsic::x86_aesni_aesenc:
+	  case llvm::Intrinsic::x86_aesni_aesenclast:
+	  case llvm::Intrinsic::bswap:
+	  case llvm::Intrinsic::x86_pclmulqdq:
+	  case llvm::Intrinsic::umin:
+	  case llvm::Intrinsic::umax:
+	    leaked_args = none;
+	    break;
+	  default:
+	    llvm::errs() << "CLOU: warning: unhandled intrinsic: " << llvm::Intrinsic::getBaseName(II->getIntrinsicID()) << "\n";
+	    std::abort();
+	  }
+	  
+	  for (unsigned leaked_arg : leaked_args) {
+	    *out++ = TransmitterOperand(TransmitterOperand::PSEUDO, II->getArgOperand(leaked_arg));
+	  }
+
+	}
+	
+      } else {
         *out++ = TransmitterOperand(TransmitterOperand::TRUE, C->getCalledOperand());
         for (llvm::Value *op : C->args()) {
 	  *out++ = TransmitterOperand(TransmitterOperand::PSEUDO, op);
-        }
+        }	
       }
     }
     if (llvm::ReturnInst *RI = llvm::dyn_cast<llvm::ReturnInst>(I)) {

@@ -1,3 +1,5 @@
+#include <ctime>
+
 #include <fstream>
 #include <map>
 #include <memory>
@@ -20,6 +22,7 @@
 #include <llvm/Analysis/LoopInfo.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/IR/IntrinsicsX86.h>
+#include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 #include "MinCutSMT.h"
 #include "util.h"
@@ -34,18 +37,25 @@
 namespace clou {
   namespace {
 
-					  
-
     constexpr bool StackMitigations = true;
+
+    std::ofstream log_times_os;
+    llvm::cl::opt<std::string> log_times {
+      "clou-times",
+      llvm::cl::desc("Log execution times of Mitigate Pass"),
+      llvm::cl::callback([] (const std::string& s) {
+	log_times_os.open(s, std::ios::app);
+      }),
+    };
 
     using ISet = std::set<llvm::Instruction *>;
     using VSet = std::set<llvm::Value *>;
     using IMap = std::map<llvm::Instruction *, ISet>;
 
     struct Node {
-      llvm::Value *V;
+      llvm::Instruction *V;
       Node() {}
-      Node(llvm::Value *V): V(V) {}
+      Node(llvm::Instruction *V): V(V) {}
       bool operator<(const Node& o) const { return V < o.V; }
       bool operator==(const Node& o) const { return V == o.V; }
       bool operator!=(const Node& o) const { return V != o.V; }
@@ -180,6 +190,8 @@ namespace clou {
       }
     
       bool runOnFunction(llvm::Function &F) override {
+	clock_t t_start = clock();
+	
 	auto& NST = getAnalysis<NonspeculativeTaint>();
 	auto& ST = getAnalysis<SpeculativeTaint>();
 	auto& AIA = getAnalysis<AllocaInitPass>().results;
@@ -319,9 +331,6 @@ namespace clou {
 	      nodes.emplace(&I, nodes.size());
 	    }
 	  }
-	  for (llvm::Argument& A : F.args()) {
-	    nodes.emplace(&A, nodes.size());
-	  }
 
 	  std::map<Node, std::string> special;
 	  for (const Alg::ST& st : A.sts) {
@@ -362,9 +371,10 @@ namespace clou {
 
 	// Mitigations
 	for (const auto& [src, dst] : cut_edges) {
-	  CreateMitigation(llvm::cast<llvm::Instruction>(dst.V), "clou-mitigate-pass");
+	  CreateMitigation(getMitigationPoint(src.V, dst.V), "clou-mitigate-pass");
 	}
 
+#if 0
 	// Mark all public values as nospill
 	for (auto& B : F) {
 	  for (auto& I : B) {
@@ -373,8 +383,26 @@ namespace clou {
 	    }
 	  }
 	}
+#endif
+
+	const clock_t t_stop = clock();
+	trace("time %.3f %s", static_cast<float>(t_stop - t_start) / CLOCKS_PER_SEC, F.getName().str().c_str());
 	
         return true;
+      }
+
+      static bool shouldCutEdge(llvm::Instruction *src, llvm::Instruction *dst) {
+	return llvm::predecessors(dst).size() > 1 || llvm::successors_inst(src).size() > 1;
+      }
+
+      static llvm::Instruction *getMitigationPoint(llvm::Instruction *src, llvm::Instruction *dst) {
+	if (shouldCutEdge(src, dst)) {
+	  assert(src->isTerminator() && dst == &dst->getParent()->front());
+	  llvm::BasicBlock *B = llvm::SplitEdge(src->getParent(), dst->getParent());
+	  return &B->front();
+	} else {
+	  return dst;
+	}
       }
     };
 

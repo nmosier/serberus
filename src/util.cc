@@ -1,8 +1,11 @@
 #include "util.h"
 
+#include <cassert>
+#include <cstdarg>
+#include <cstdio>
+
 #include <set>
 #include <sstream>
-#include <cassert>
 #include <algorithm>
 
 #include <llvm/IR/Instructions.h>
@@ -267,4 +270,13 @@ namespace clou {
     });
   }
 
+  void trace(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    std::fputs("CLOU: ", stderr);
+    std::vfprintf(stderr, fmt, ap);
+    std::fputs("\n", stderr);
+    va_end(ap);
+  }
+  
 }
