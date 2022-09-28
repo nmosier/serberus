@@ -67,48 +67,51 @@ namespace clou {
       // Propagate calls.
       for (llvm::CallBase& CB : util::instructions<llvm::CallBase>(F)) {
 	if (auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(&CB)) {
-	  const auto id = II->getIntrinsicID();
-	  enum class Taint {
-	    Passthrough,
-	    Invalid,
-	  } taint_rule = Taint::Invalid;
+	  if (!II->getType()->isVoidTy() && !II->isAssumeLikeIntrinsic()) {
+	    const auto id = II->getIntrinsicID();
+	    enum class Taint {
+	      Passthrough,
+	      Invalid,
+	    } taint_rule = Taint::Invalid;
 	  
-	  switch (id) {
-	  case llvm::Intrinsic::memset:
-	  case llvm::Intrinsic::memcpy:
-	    taint_rule = Taint::Invalid;
-	    break;
+	    switch (id) {
+	    case llvm::Intrinsic::memset:
+	    case llvm::Intrinsic::memcpy:
+	    case llvm::Intrinsic::x86_sse2_lfence:
+	      taint_rule = Taint::Invalid;
+	      break;
 
-	  case llvm::Intrinsic::vector_reduce_and:
-	  case llvm::Intrinsic::vector_reduce_or:
-	  case llvm::Intrinsic::fshl:
-	  case llvm::Intrinsic::ctpop:
-	  case llvm::Intrinsic::x86_aesni_aeskeygenassist:
-	  case llvm::Intrinsic::x86_aesni_aesenc:
-	  case llvm::Intrinsic::x86_aesni_aesenclast:
-	  case llvm::Intrinsic::bswap:
-	  case llvm::Intrinsic::x86_pclmulqdq:
-	  case llvm::Intrinsic::umin:
-	  case llvm::Intrinsic::umax:
-	    taint_rule = Taint::Passthrough;
-	    break;
+	    case llvm::Intrinsic::vector_reduce_and:
+	    case llvm::Intrinsic::vector_reduce_or:
+	    case llvm::Intrinsic::fshl:
+	    case llvm::Intrinsic::ctpop:
+	    case llvm::Intrinsic::x86_aesni_aeskeygenassist:
+	    case llvm::Intrinsic::x86_aesni_aesenc:
+	    case llvm::Intrinsic::x86_aesni_aesenclast:
+	    case llvm::Intrinsic::bswap:
+	    case llvm::Intrinsic::x86_pclmulqdq:
+	    case llvm::Intrinsic::umin:
+	    case llvm::Intrinsic::umax:
+	    case llvm::Intrinsic::x86_rdrand_32:
+	      taint_rule = Taint::Passthrough;
+	      break;
 
-	  default:
-	    llvm::errs() << "CLOU: unhandled intrinsic: " << *II << "\n";
-	    std::abort();
-	  }
-
-	  switch (taint_rule) {
-	  case Taint::Invalid:
-	    assert(II->getType()->isVoidTy());
-	    break;
-	  case Taint::Passthrough:
-	    if (pub_vals.contains(II)) {
-	      for (llvm::Value *V : II->args()) {
-		pub_vals.insert(V);
-	      }
+	    default:
+	      warn_unhandled_intrinsic(II);
 	    }
-	    break;
+
+	    switch (taint_rule) {
+	    case Taint::Invalid:
+	      assert(II->getType()->isVoidTy());
+	      break;
+	    case Taint::Passthrough:
+	      if (pub_vals.contains(II)) {
+		for (llvm::Value *V : II->args()) {
+		  pub_vals.insert(V);
+		}
+	      }
+	      break;
+	    }
 	  }
 	} else {
 	  // Regular call instruction -- assume it conforms to ClouCC CallingConv.
@@ -125,13 +128,16 @@ namespace clou {
       for (llvm::Instruction& src : llvm::instructions(F)) {
 	if (src.mayReadFromMemory() && pub_vals.contains(&src)) {
 	  for (llvm::Instruction& dst : llvm::instructions(F)) {
-	    if (dst.mayWriteToMemory() && DI.depends(&src, &dst, true)->isConsistent()) {
-	      if (auto *dst_SI = llvm::dyn_cast<llvm::StoreInst>(&dst)) {
-		pub_vals.insert(dst_SI->getValueOperand());
-	      } else if (auto *dst_LI = llvm::dyn_cast<llvm::LoadInst>(&dst)) {
-		pub_vals.insert(dst_LI);
-	      } else {
-		unhandled_instruction(dst);
+	    if (dst.mayWriteToMemory()) {
+	      const auto dep = DI.depends(&src, &dst, true);
+	      if (dep && dep->isConsistent()) {
+		if (auto *dst_SI = llvm::dyn_cast<llvm::StoreInst>(&dst)) {
+		  pub_vals.insert(dst_SI->getValueOperand());
+		} else if (auto *dst_LI = llvm::dyn_cast<llvm::LoadInst>(&dst)) {
+		  pub_vals.insert(dst_LI);
+		} else {
+		  unhandled_instruction(dst);
+		}
 	      }
 	    }
 	  }

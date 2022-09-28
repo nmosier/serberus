@@ -109,11 +109,9 @@ register_llvm_pass(secret_param_analysis)
 add_library(NonspeculativeTaint SHARED
   NonspeculativeTaint.cc
   NonspeculativeTaint.h
-  $<TARGET_OBJECTS:Transmitter>
-  util
 )
 register_llvm_pass(NonspeculativeTaint)
-target_link_libraries(NonspeculativeTaint PUBLIC my_scc_pass Mitigation)
+target_link_libraries(NonspeculativeTaint PRIVATE Mitigation util Transmitter)
 
 add_library(SpectreV1_1 SHARED
   SpectreV1_1.cc

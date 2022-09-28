@@ -68,7 +68,7 @@ OutputIt get_transmitter_sensitive_operands(llvm::Instruction *I,
 	  
 	  switch (II->getIntrinsicID()) {
 	  case llvm::Intrinsic::memset:
-	    leaked_args = all;
+	    leaked_args = {0, 2, 3};
 	    break;
 	  case llvm::Intrinsic::memcpy:
 	    leaked_args = all;

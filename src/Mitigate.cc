@@ -39,13 +39,9 @@ namespace clou {
 
     constexpr bool StackMitigations = true;
 
-    std::ofstream log_times_os;
-    llvm::cl::opt<std::string> log_times {
+    llvm::cl::opt<bool> log_times {
       "clou-times",
       llvm::cl::desc("Log execution times of Mitigate Pass"),
-      llvm::cl::callback([] (const std::string& s) {
-	log_times_os.open(s, std::ios::app);
-      }),
     };
 
     using ISet = std::set<llvm::Instruction *>;
@@ -94,7 +90,21 @@ namespace clou {
 	    case llvm::Intrinsic::x86_aesni_aesenc:
 	    case llvm::Intrinsic::x86_aesni_aeskeygenassist:
 	    case llvm::Intrinsic::x86_aesni_aesenclast:
+	    case llvm::Intrinsic::vector_reduce_and:
+	    case llvm::Intrinsic::vector_reduce_or:
+	    case llvm::Intrinsic::umax:
+	    case llvm::Intrinsic::umin:
+	    case llvm::Intrinsic::ctpop:
+	    case llvm::Intrinsic::bswap:
+	    case llvm::Intrinsic::x86_pclmulqdq:
+	    case llvm::Intrinsic::x86_rdrand_32:
 	      return true;
+
+	    case llvm::Intrinsic::memset:
+	    case llvm::Intrinsic::memcpy:
+	    case llvm::Intrinsic::memmove:
+	      return false;
+
 	    default:
 	      warn_unhandled_intrinsic(II);
 	      return false;
@@ -196,8 +206,6 @@ namespace clou {
 	auto& ST = getAnalysis<SpeculativeTaint>();
 	auto& AIA = getAnalysis<AllocaInitPass>().results;
 
-	llvm::errs() << getPassName() << ": " << F.getName() << "\n";
-	
 	llvm::DominatorTree DT(F);
 	llvm::LoopInfo LI(DT);
 
@@ -386,7 +394,9 @@ namespace clou {
 #endif
 
 	const clock_t t_stop = clock();
-	trace("time %.3f %s", static_cast<float>(t_stop - t_start) / CLOCKS_PER_SEC, F.getName().str().c_str());
+	if (log_times) {
+	  trace("time %.3f %s", static_cast<float>(t_stop - t_start) / CLOCKS_PER_SEC, F.getName().str().c_str());
+	}
 	
         return true;
       }

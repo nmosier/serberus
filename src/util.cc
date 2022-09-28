@@ -249,7 +249,8 @@ std::vector<llvm::Instruction *> predecessors(llvm::Instruction *I) {
 namespace clou::impl {
 
   void warn_unhandled_intrinsic_(llvm::Intrinsic::ID id, const char *file, size_t line) {
-    llvm::errs() << file << ":" << line << ": warning: " << llvm::Intrinsic::getBaseName(id) << "\n";
+    llvm::errs() << file << ":" << line << ": unhandled intrinsic: " << llvm::Intrinsic::getBaseName(id) << "\n";
+    std::abort(); // Abort for now
   }
 
   void warn_unhandled_intrinsic_(const llvm::IntrinsicInst *II, const char *file, size_t line) {
