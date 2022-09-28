@@ -1,6 +1,6 @@
 #include "NonspeculativeTaint.h"
 
-#include <llvm/Analysis/AliasAnalysis.h>
+#include <llvm/Analysis/DependenceAnalysis.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Instructions.h>
@@ -12,236 +12,147 @@
 
 namespace clou {
 
-char NonspeculativeTaint::ID = 0;
+  char NonspeculativeTaint::ID = 0;
 
-NonspeculativeTaint::NonspeculativeTaint(): MySCCPass(ID) {}
+  NonspeculativeTaint::NonspeculativeTaint(): llvm::FunctionPass(ID) {}
 
-void NonspeculativeTaint::getAnalysisUsage(llvm::AnalysisUsage& AU) const {
-    AU.addRequired<llvm::AAResultsWrapperPass>();
+  void NonspeculativeTaint::getAnalysisUsage(llvm::AnalysisUsage& AU) const {
+    AU.addRequired<llvm::DependenceAnalysisWrapperPass>();
     AU.setPreservesAll();
-}
+  }
 
-bool NonspeculativeTaint::runOnSCC(const MySCC& SCC) {
-    std::set<llvm::Function *> Fs;
-    std::transform(SCC.begin(), SCC.end(), std::inserter(Fs, Fs.end()), [] (llvm::CallGraphNode *CGN) {
-        return CGN->getFunction();
-    });
+  bool NonspeculativeTaint::runOnFunction(llvm::Function& F) {
+    pub_vals.clear();
     
-    /* Propogate public values.
-     * This time we can assume a lot more than in the 'secret param analysis'.
-     * We'll first propogate public return values through to arguments.
-     */
-    
-    // 1. Map loads to store sets (not true rfs).
-    std::map<llvm::LoadInst *, std::set<llvm::StoreInst *>> rfs;
-    for_each_func_def(Fs.begin(), Fs.end(), [&] (llvm::Function& F) {
-        llvm::AAResults& AA = getAnalysis<llvm::AAResultsWrapperPass>(F).getAAResults();
-        for_each_inst<llvm::LoadInst>(F, [&] (llvm::LoadInst *LI) {
-            auto& rf = rfs[LI];
-            for_each_inst<llvm::StoreInst>(F, [&] (llvm::StoreInst *SI) {
-                if (AA.alias(LI->getPointerOperand(), SI->getPointerOperand()) == llvm::AliasResult::MustAlias) {
-                    rf.insert(SI);
-                }
-            });
-        });
-    });
-    
-    // 2. Initialize return value influencers
-    for_each_inst<llvm::ReturnInst>(Fs.begin(), Fs.end(), [&] (llvm::ReturnInst *RI) {
-        if (llvm::Value *RV = RI->getReturnValue()) {
-            ret_vals.insert(RV);
-        }
-    });
-    
-    // 3. Propogate return values
-    bool changed;
-    const auto ret_vals_insert = [&] (llvm::Value *V) {
-        changed |= ret_vals.insert(V).second;
-    };
-    do {
-        changed = false;
-        
-        for (llvm::Value *V : ret_vals) {
-            if (llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
-                if (llvm::LoadInst *LI = llvm::dyn_cast<llvm::LoadInst>(I)) {
-                    // propogate back from rf edges
-                    for (llvm::StoreInst *SI : rfs[LI]) {
-                        ret_vals_insert(SI->getValueOperand());
-                    }
-                } else if (llvm::CallBase *CI = llvm::dyn_cast<llvm::CallBase>(I)) {
-                    // propogate to arguments
-                    if (llvm::Function *called_F = CI->getCalledFunction()) {
-                        if (!called_F->isDeclaration()) {
-                            for (llvm::Argument& called_A : called_F->args()) {
-                                if (ret_vals.contains(&called_A)) {
-                                    ret_vals_insert(CI->getArgOperand(called_A.getArgNo()));
-                                }
-                            }
-                        }
-                    }
-                } else if (llvm::isa<llvm::BinaryOperator, llvm::GetElementPtrInst, llvm::PHINode, llvm::SelectInst, llvm::CastInst, llvm::CmpInst>(I)) {
-                    // propogate to input operands
-                    for (llvm::Value *op_V : I->operands()) {
-                        ret_vals_insert(op_V);
-                    }
-                } else if (llvm::isa<llvm::AllocaInst, llvm::BranchInst, llvm::FenceInst, MitigationInst, llvm::StoreInst, llvm::SwitchInst, llvm::UnreachableInst>(I)) {
-                    // ignore
-                } else if (llvm::isa<llvm::ExtractValueInst, llvm::ExtractElementInst, llvm::ShuffleVectorInst, llvm::InsertElementInst>(I)) {
-                    // TODO: ignore for now, but can consider for more precision later on
-                } else {
-		  unhandled_instruction(*I);
-                }
-            }
-        }
-    } while (changed);
-    
-    // 4. Initialize public values with (a) true transmitter operands, (b) call arguments, (c) public annotations, (d) return values.
-    // 4(a) true transmitter operands
-    for_each_inst<llvm::Instruction>(Fs.begin(), Fs.end(), [&] (llvm::Instruction *I) {
-        for (const TransmitterOperand& op : get_transmitter_sensitive_operands(I)) {
-            if (op.kind == TransmitterOperand::TRUE) {
-                pub_vals.insert(op.V);
-            }
-        }
-    });
-    
-    // 4(b) call arguments
-    for_each_inst<llvm::CallBase>(Fs.begin(), Fs.end(), [&] (llvm::CallBase *CI) {
-        for (llvm::Value *arg_V : CI->args()) {
-            pub_vals.insert(arg_V);
-        }
-    });
-    
-    // 4(c) public annotations
-    for_each_inst<llvm::IntrinsicInst>(Fs.begin(), Fs.end(), [&] (llvm::IntrinsicInst *II) {
-        if (II->getIntrinsicID() == llvm::Intrinsic::annotation) {
-            // TODO: double-check how LLVM does this
-            // TODO: extract this into function
-            llvm::Value *V = II->getArgOperand(1);
-            auto *GEP = llvm::cast<llvm::ConcreteOperator<llvm::Operator, llvm::Instruction::GetElementPtr>>(V);
-            llvm::Value *V_ = GEP->getOperand(0);
-            llvm::GlobalVariable *GV = llvm::cast<llvm::GlobalVariable>(V_);
-            const auto str = llvm::cast<llvm::ConstantDataArray>(GV->getInitializer())->getAsCString();
-            if (str == "public") {
-                pub_vals.insert(II->getArgOperand(0));
-            }
-        }
-    });
+    llvm::DependenceInfo& DI = getAnalysis<llvm::DependenceAnalysisWrapperPass>().getDI();
 
-    // 4(d) return values
-    for_each_inst<llvm::ReturnInst>(Fs.begin(), Fs.end(), [&] (llvm::ReturnInst *RI) {
-      if (llvm::Value *RV = RI->getReturnValue()) {
-	pub_vals.insert(RV);
+    // Initialize public values with transmitter operands. We'll handle call results in the main loop.
+    for (llvm::Instruction& I : llvm::instructions(F)) {
+      for (const TransmitterOperand& op : get_transmitter_sensitive_operands(&I, false /* no pseudo-stores */)) {
+	pub_vals.insert(op.V);
       }
-    });
-    
-    // 5. Propogate public values
-    const auto pub_vals_insert = [&] (llvm::Value *V) {
-        changed |= pub_vals.insert(V).second;
-    };
+    }
+
+    // All pointer values are public.
+    for (llvm::Instruction& I : llvm::instructions(F)) {
+      if (I.getType()->isPointerTy()) {
+	pub_vals.insert(&I);
+      }
+    }
+
+    // Add public non-instruction operands (arguments are handled later for simplicity)
+    for (llvm::Instruction& I : llvm::instructions(F)) {
+      for (llvm::Value *op_V : I.operands()) {
+	if (llvm::isa<llvm::Argument, llvm::BasicBlock, llvm::InlineAsm, llvm::Constant>(op_V)) {
+	  pub_vals.insert(op_V);
+	}
+      }
+    }
+
+    VSet pub_vals_bak;
     do {
-        changed = false;
-        
-        // update always-public arguments
-        for_each_inst<llvm::CallBase>(Fs.begin(), Fs.end(), [&] (llvm::CallBase *CI) {
-            for (llvm::Value *arg_V : CI->args()) {
-                pub_vals_insert(arg_V);
-            }
-        });
-        
-        // update always-public arguments, in case it has changed in SCC
-        for_each_inst<llvm::CallBase>(Fs.begin(), Fs.end(), [&] (llvm::CallBase *CI) {
-            if (llvm::Function *called_F = CI->getCalledFunction()) {
-                if (!called_F->isDeclaration()) {
-                    for (llvm::Argument& A : called_F->args()) {
-		      // TODO: pub_vals should *always* contain A. Might need to rewrite this pass to conform to new assumptions.
-                        if (pub_vals.contains(&A)) {
-                            pub_vals_insert(CI->getArgOperand(A.getArgNo()));
-                        }
-                    }
-                }
-            }
-        });
-        
-        for (llvm::Value *V : pub_vals) {
-            if (llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
-                if (llvm::LoadInst *LI = llvm::dyn_cast<llvm::LoadInst>(I)) {
-                    // propogate back from rf edge
-                    for (llvm::StoreInst *SI : rfs[LI]) {
-                        pub_vals_insert(SI->getValueOperand());
-                    }
-                } else if (llvm::CallBase *CI = llvm::dyn_cast<llvm::CallBase>(I)) {
-                    // propogate through to arguments via return value
-                    if (llvm::Function *called_F = CI->getCalledFunction()) {
-                        if (!called_F->isDeclaration()) {
-                            for (llvm::Argument& called_A : called_F->args()) {
-                                if (ret_vals.contains(&called_A)) {
-                                    pub_vals_insert(CI->getArgOperand(called_A.getArgNo()));
-                                }
-                            }
-                        }
-                    }
-                } else if (llvm::isa<llvm::BinaryOperator, llvm::GetElementPtrInst, llvm::PHINode, llvm::SelectInst, llvm::CastInst, llvm::CmpInst, llvm::FreezeInst>(I)) {
-                    // propogate to input operands
-                    for (llvm::Value *op_V : I->operands()) {
-                        pub_vals_insert(op_V);
-                    }
-                } else if (llvm::isa<llvm::AllocaInst, llvm::BranchInst>(I)) {
-                    // ignore
-                } else if (llvm::isa<llvm::ExtractValueInst, llvm::InsertElementInst, llvm::InsertValueInst, llvm::ShuffleVectorInst, llvm::ExtractElementInst>(I)) {
-                    // TODO: ignored, handle later for higher precision
-                } else {
-		  unhandled_instruction(*I);
-                }
-            }
-            
-        }
-        
-    } while (changed);
-    
+      pub_vals_bak = pub_vals;
+
+      // Propagate calls.
+      for (llvm::CallBase& CB : util::instructions<llvm::CallBase>(F)) {
+	if (auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(&CB)) {
+	  const auto id = II->getIntrinsicID();
+	  enum class Taint {
+	    Passthrough,
+	    Invalid,
+	  } taint_rule = Taint::Invalid;
+	  
+	  switch (id) {
+	  case llvm::Intrinsic::memset:
+	  case llvm::Intrinsic::memcpy:
+	    taint_rule = Taint::Invalid;
+	    break;
+
+	  case llvm::Intrinsic::vector_reduce_and:
+	  case llvm::Intrinsic::vector_reduce_or:
+	  case llvm::Intrinsic::fshl:
+	  case llvm::Intrinsic::ctpop:
+	  case llvm::Intrinsic::x86_aesni_aeskeygenassist:
+	  case llvm::Intrinsic::x86_aesni_aesenc:
+	  case llvm::Intrinsic::x86_aesni_aesenclast:
+	  case llvm::Intrinsic::bswap:
+	  case llvm::Intrinsic::x86_pclmulqdq:
+	  case llvm::Intrinsic::umin:
+	  case llvm::Intrinsic::umax:
+	    taint_rule = Taint::Passthrough;
+	    break;
+
+	  default:
+	    llvm::errs() << "CLOU: unhandled intrinsic: " << *II << "\n";
+	    std::abort();
+	  }
+
+	  switch (taint_rule) {
+	  case Taint::Invalid:
+	    assert(II->getType()->isVoidTy());
+	    break;
+	  case Taint::Passthrough:
+	    if (pub_vals.contains(II)) {
+	      for (llvm::Value *V : II->args()) {
+		pub_vals.insert(V);
+	      }
+	    }
+	    break;
+	  }
+	} else {
+	  // Regular call instruction -- assume it conforms to ClouCC CallingConv.
+	  // All arguments are public
+	  for (llvm::Value *V : CB.args()) {
+	    pub_vals.insert(V);
+	  }
+	  // Return value is public
+	  pub_vals.insert(&CB);
+	}
+      }
+
+      // Propagate public load to all memory accesses of load.
+      for (llvm::Instruction& src : llvm::instructions(F)) {
+	if (src.mayReadFromMemory() && pub_vals.contains(&src)) {
+	  for (llvm::Instruction& dst : llvm::instructions(F)) {
+	    if (dst.mayWriteToMemory() && DI.depends(&src, &dst, true)->isConsistent()) {
+	      if (auto *dst_SI = llvm::dyn_cast<llvm::StoreInst>(&dst)) {
+		pub_vals.insert(dst_SI->getValueOperand());
+	      } else if (auto *dst_LI = llvm::dyn_cast<llvm::LoadInst>(&dst)) {
+		pub_vals.insert(dst_LI);
+	      } else {
+		unhandled_instruction(dst);
+	      }
+	    }
+	  }
+	}
+      }
+      
+    } while (pub_vals != pub_vals_bak);
+
+
     return false;
-}
-
-void NonspeculativeTaint::print(llvm::raw_ostream& os, const llvm::Module *M) const {
-    if (M) {
-        for (const llvm::Function& F : *M) {
-            os << F.getName() << ":\n";
-            for (const llvm::Argument& A : F.args()) {
-                if (!pub_vals.contains(const_cast<llvm::Argument *>(&A))) {
-                    os << A << "\n";
-                }
-            }
-            for_each_inst<llvm::Instruction>(F, [&] (const llvm::Instruction *I) {
-                if (!pub_vals.contains(const_cast<llvm::Instruction *>(I))) {
-                    if (!I->getType()->isVoidTy()) {
-                        os << *I << "\n";
-                    }
-                }
-            });
-        }
+  }
+  
+  void NonspeculativeTaint::print(llvm::raw_ostream& os, const llvm::Module *) const {
+    os << "\n";
+    for (const llvm::Value *V : pub_vals) {
+      if (!llvm::isa<llvm::BasicBlock, llvm::Function>(V)) {
+	os << *V << "\n";
+      }
     }
-}
+    os << "\n";
+  }
 
-bool NonspeculativeTaint::secret(llvm::Value *V) const {
-  if (pub_vals.empty()) {
-  llvm::errs() << "WARNING: pub_vals empty\n";
-}
-  if (llvm::Argument *A = llvm::dyn_cast<llvm::Argument>(V)) {
-    return !pub_vals.contains(A);
-  } else if (const llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
-        if (!I->getType()->isVoidTy()) {
-            return !pub_vals.contains(V);
-        }
-    }
-    return false;
-}
+  bool NonspeculativeTaint::secret(llvm::Value *V) const {
+    return pub_vals.contains(V);
+  }
 
-namespace {
+  namespace {
 
-llvm::RegisterPass<NonspeculativeTaint> X {
-  "nonspeculative-taint", "Nonspeculative Taint Pass", true, true
-};
+    llvm::RegisterPass<NonspeculativeTaint> X {
+      "nonspeculative-taint", "Nonspeculative Taint Pass", true, true
+    };
 
-}
+  }
 
 }

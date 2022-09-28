@@ -8,28 +8,23 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 
-#include "my_scc_pass.h"
-
 namespace clou {
 
-class NonspeculativeTaint final: public MySCCPass {
-public:
+  class NonspeculativeTaint final: public llvm::FunctionPass {
+  public:
     static char ID;
     NonspeculativeTaint();
     
-private:
-    using ValueSet = std::set<llvm::Value *>;
-    ValueSet ret_vals;
-    ValueSet pub_vals;
+  private:
+    using VSet = std::set<llvm::Value *>;
+    VSet pub_vals;
     
-    virtual void getAnalysisUsage(llvm::AnalysisUsage& AU) const override;
+    void getAnalysisUsage(llvm::AnalysisUsage& AU) const override;
+    bool runOnFunction(llvm::Function& F) override;
+    void print(llvm::raw_ostream& os, const llvm::Module *M) const override;
     
-    virtual bool runOnSCC(const MySCC& SCC) override;
-    
-    virtual void print(llvm::raw_ostream& os, const llvm::Module *M) const override;
-    
-public:
+  public:
     bool secret(llvm::Value *V) const;
-};
+  };
 
 }
