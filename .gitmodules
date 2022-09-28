@@ -1,3 +1,6 @@
 [submodule "extern/google-benchmark"]
 	path = extern/google-benchmark
 	url = https://github.com/google/benchmark.git
+[submodule "extern/z3"]
+	path = extern/z3
+	url = https://github.com/Z3Prover/z3.git
