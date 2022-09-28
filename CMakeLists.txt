@@ -20,6 +20,7 @@ if(DEFINED Z3_DIR)
   # TODO: Figure out why LLVM'ds F
   find_library(Z3_LIBRARIES PATHS ${Z3_DIR}/bin ${Z3_DIR}/lib REQUIRED NAMES z3)
   set(Z3_INCLUDE_DIR ${Z3_DIR}/include)
+  set(Z3_INCLUDE_DIRS ${Z3_INCLUDE_DIR})
 else()
   find_package(Z3 REQUIRED)
 endif()
