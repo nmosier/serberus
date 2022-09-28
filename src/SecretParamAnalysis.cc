@@ -23,9 +23,11 @@
 #include <memory>
 #include <forward_list>
 
-#include "transmitter.h"
+#include "Transmitter.h"
 #include "my_scc_pass.h"
+#include "Mitigation.h"
 
+namespace clou {
 namespace {
 
 struct SecretParamAnalysis final: public MySCCPass {
@@ -282,4 +284,5 @@ llvm::RegisterPass<SecretParamAnalysis> X {
     "secret-param-analysis", "Secret Parameter Analysis Pass"
 };
 
+}
 }

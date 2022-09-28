@@ -34,22 +34,6 @@ function(libsodium_bc NAME OUTPUT)
   )
 endfunction()
 
-libsodium_correctness_test(libsodium_correctness_noop)
-
-foreach(PASS IN ITEMS ZeroFillCalls SpeculativeTaint)
-  libsodium_correctness_test(libsodium_correctness_${PASS}
-    PASS ${PASS}
-  )
-endforeach()
-libsodium_correctness_test(libsodium_correctness_SpectreV1
-  PASS SpectreV1_1
-)
-
-# libsodium_library(libsodium_profile_SpectreV11
-#   PASS SpectreV1_1 BreakPass
-# )
-
-
 # Profiling Tests
 function(libsodium_profile NAME)
   set(multi_value_args DEPENDS PASS CFLAGS)
@@ -123,10 +107,6 @@ function(libsodium_trace NAME)
   
 endfunction()
 
-libsodium_profile(libsodium_profile_SpectreV11
-  PASS SpectreV1_1
-)
-
 libsodium_library(libsodium_baseline_none
   CFLAGS -O3
 )
@@ -147,40 +127,6 @@ libsodium_bc(libsodium_bc_O1 libsodium.O1.bc
 )
 
 libsodium_bc(libsodium_bc_O3 libsodium.O3.bc
-  CFLAGS -O3
-)
-
-libsodium_bc(libsodium_cloucc_bc libsodium_cloucc.bc
-  PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
-  CFLAGS -O3
-  LLVMFLAGS -clou-nospill -clou-nospill-max=8 -exhaustive-register-search
-  CONFIGURE_OPTIONS --disable-shared
-)
-
-libsodium_library(libsodium_cloucc
-  # PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
-  # PASS SecureOOBPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
-  PASS SpeculativeTaint NoSpillLowering
-  CFLAGS -O3
-  # CPPFLAGS -Xclang -load -Xclang $<TARGET_FILE:Log> -mllvm -clou-log-ll
-  LLVMFLAGS -clou-nospill -clou-nospill-max=8 -exhaustive-register-search
-)
-
-libsodium_trace(libsodium_cloucc_trace
-  # PASS LoopIndexPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
-  # PASS SecureOOBPass SpectreBCBSSecretPass SpeculativeTaint NoSpillLowering
-  PASS SpeculativeTaint NoSpillLowering
-  CFLAGS -O3
-  LLVMFLAGS -clou-nospill -clou-nospill-max=8 -exhaustive-register-search
-)
-
-libsodium_library(libsodium_dt
-  PASS MitigateDT
-  CFLAGS -O3
-)
-
-libsodium_trace(libsodium_dt_trace
-  PASS MitigateDT
   CFLAGS -O3
 )
 

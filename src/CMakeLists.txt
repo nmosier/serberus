@@ -18,7 +18,7 @@ include_directories(SYSTEM ${LLVM_INCLUDE_DIRS} ${Libprofiler_INCLUDE_DIRS} ${Bo
 link_directories(${Libprofiler_LIBRARY_DIRS})
 link_libraries(${Libprofiler_LIBRARIES})
 
-add_library(my_scc_pass STATIC
+add_library(my_scc_pass SHARED
   my_scc_pass.cc
   my_scc_pass.h
 )
@@ -68,36 +68,6 @@ add_library(Transmitter OBJECT
   Transmitter.h
   )
 
-add_library(SpeculativeTaint SHARED
-  SpeculativeTaint.cc
-  $<TARGET_OBJECTS:Transmitter>
-  util
-)
-register_llvm_pass(SpeculativeTaint)
-target_link_libraries(SpeculativeTaint PRIVATE CommandLine Mitigation Log)
-
-add_library(count_spectre_v1_1 SHARED
-  count_spectre_v1_1.cc
-  util
-  )
-register_llvm_pass(count_spectre_v1_1)
-
-add_library(mitigate SHARED
-  mitigate.cc
-  util
-  )
-register_llvm_pass(mitigate)
-
-add_executable(min_cut_driver
-  min-cut-driver.cc
-  )
-
-add_library(print_dom_loop SHARED
-  print_dom_loop.cc
-  util
-  )
-register_llvm_pass(print_dom_loop)
-
 add_library(secret_param_analysis SHARED
   SecretParamAnalysis.cc
   util
@@ -113,39 +83,12 @@ add_library(NonspeculativeTaint SHARED
 register_llvm_pass(NonspeculativeTaint)
 target_link_libraries(NonspeculativeTaint PRIVATE Mitigation util Transmitter)
 
-add_library(SpectreV1_1 SHARED
-  SpectreV1_1.cc
-  util
-  NonspeculativeTaint
-  $<TARGET_OBJECTS:Transmitter>
-  my_scc_pass
-  )
-register_llvm_pass(SpectreV1_1)
-
 add_library(ZeroFillCalls SHARED
   ZeroFillCalls.cc
   $<TARGET_OBJECTS:InstructionPass>
   util
 )
 register_llvm_pass(ZeroFillCalls)
-
-add_library(BreakPass SHARED
-  BreakPass.cc
-  util
-)
-
-add_library(LoopIndexPass SHARED
-  LoopIndexPass.cc
-  util
-  metadata
-)
-register_llvm_pass(LoopIndexPass)
-
-add_library(SpectreBCBSSecretPass SHARED
-  SpectreBCBSSecretPass.cc
-)
-register_llvm_pass(SpectreBCBSSecretPass)
-target_link_libraries(SpectreBCBSSecretPass PRIVATE NonspeculativeTaint util metadata CommandLine)
 
 add_library(TracePass SHARED
   TracePass.cc
@@ -164,23 +107,6 @@ add_library(BaselinePass SHARED
 )
 register_llvm_pass(BaselinePass)
 target_link_libraries(BaselinePass PRIVATE Mitigation util)
-
-add_library(SecureOOBPass SHARED
-  SecureOOBPass.cc
-)
-register_llvm_pass(SecureOOBPass)
-target_link_libraries(SecureOOBPass PRIVATE Transmitter Mitigation util Log)
-  
-add_library(PrintRegions SHARED
-  PrintRegions.cc
-)
-register_llvm_pass(PrintRegions)
-
-add_library(MitigateDT SHARED
-  MitigateDT.cc
-)
-register_llvm_pass(MitigateDT)
-target_link_libraries(MitigateDT util Mitigation Transmitter CommandLine)
 
 add_library(SpeculativeTaint2 SHARED
   SpeculativeTaint2.h
