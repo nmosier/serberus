@@ -1,6 +1,12 @@
 #include "NonspeculativeTaint.h"
 
 #include <llvm/Analysis/DependenceAnalysis.h>
+#include <llvm/Analysis/LoopInfo.h>
+#include <llvm/Analysis/AliasAnalysis.h>
+#include <llvm/Analysis/ScalarEvolution.h>
+#include <llvm/Analysis/TargetLibraryInfo.h>
+#include <llvm/Analysis/AssumptionCache.h>
+#include <llvm/IR/Dominators.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Instructions.h>
@@ -17,14 +23,19 @@ namespace clou {
   NonspeculativeTaint::NonspeculativeTaint(): llvm::FunctionPass(ID) {}
 
   void NonspeculativeTaint::getAnalysisUsage(llvm::AnalysisUsage& AU) const {
-    AU.addRequired<llvm::DependenceAnalysisWrapperPass>();
+    AU.addRequired<llvm::ScalarEvolutionWrapperPass>();
+    AU.addRequired<llvm::AAResultsWrapperPass>();
+    // AU.addRequired<llvm::DependenceAnalysisWrapperPass>();
     AU.setPreservesAll();
   }
 
   bool NonspeculativeTaint::runOnFunction(llvm::Function& F) {
     pub_vals.clear();
-    
-    llvm::DependenceInfo& DI = getAnalysis<llvm::DependenceAnalysisWrapperPass>().getDI();
+    llvm::AAResults& AA = getAnalysis<llvm::AAResultsWrapperPass>().getAAResults();
+    llvm::ScalarEvolution& SE = getAnalysis<llvm::ScalarEvolutionWrapperPass>().getSE();
+    llvm::DominatorTree DT(F);
+    llvm::LoopInfo LI(DT);
+    llvm::DependenceInfo DI(&F, &AA, &SE, &LI);
 
     // Initialize public values with transmitter operands. We'll handle call results in the main loop.
     for (llvm::Instruction& I : llvm::instructions(F)) {
@@ -152,6 +163,8 @@ namespace clou {
     llvm::RegisterPass<NonspeculativeTaint> X {
       "nonspeculative-taint", "Nonspeculative Taint Pass", true, true
     };
+
+    util::RegisterClangPass<NonspeculativeTaint> Y;
 
   }
 
