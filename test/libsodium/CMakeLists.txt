@@ -153,6 +153,6 @@ libsodium_trace(libsodium_mitigate_trace
 
 libsodium_library(libsodium_fps
   PASS FunctionLocalStacks
-  CFLAGS -O3 # -mno-red-zone
-  LLVMFLAGS -x86-function-local-stacks # -no-stack-slot-sharing
+  CFLAGS -O3 -mno-red-zone
+  LLVMFLAGS -x86-function-local-stacks -no-stack-slot-sharing
 )

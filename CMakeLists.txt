@@ -11,9 +11,9 @@ find_package(LLVM REQUIRED CONFIG)
 find_package(PkgConfig REQUIRED)
 # pkg_check_modules(Libprofiler libprofiler)
 pkg_check_modules(Libunwind REQUIRED libunwind-generic)
-pkg_check_modules(GoogleBenchmark REQUIRED benchmark)
+# pkg_check_modules(GoogleBenchmark REQUIRED benchmark)
 
-message("GoogleBenchmark @ ${GoogleBenchmark_LIBRARY_DIRS}")
+# message("GoogleBenchmark @ ${GoogleBenchmark_LIBRARY_DIRS}")
 # pkg_check_modules(Capstone REQUIRED capstone)
 
 if(DEFINED Z3_DIR)
@@ -50,6 +50,7 @@ get_filename_component(LLVM_DIR ${LLVM_DIR} ABSOLUTE ${CMAKE_BINARY_DIR})
 
 message("Z3_INCLUDE_DIR=${Z3_INCLUDE_DIR}")
 
+add_subdirectory(extern)
 add_subdirectory(src)
 add_subdirectory(runtime)
 add_subdirectory(tools)
