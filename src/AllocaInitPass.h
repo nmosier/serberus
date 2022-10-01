@@ -30,8 +30,8 @@ namespace clou {
       ISet loads;
     };
 
-    std::map<llvm::AllocaInst *, Result> results;
-    
+    using Results = std::map<llvm::AllocaInst *, Result>;
+    Results results;
     
   private:
     void getAccessSets(llvm::Function& F, llvm::AliasAnalysis& AA);

@@ -388,7 +388,7 @@ namespace clou {
     llvm::iterator_range<inst_iterator<InstType>> instructions(llvm::Function& F) {
       return llvm::iterator_range(inst_begin<InstType>(F), inst_end<InstType>(F));
     }
-    
+
   }
 }
 

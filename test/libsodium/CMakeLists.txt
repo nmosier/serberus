@@ -108,12 +108,12 @@ function(libsodium_trace NAME)
 endfunction()
 
 libsodium_library(libsodium_baseline_none
-  CFLAGS -O3
+  CFLAGS -O3 -fno-stack-protector
 )
 
 libsodium_library(libsodium_baseline_lfence
-  PASS BaselinePass
-  CFLAGS -O3
+  PASS # BaselinePass # For now, don't include this.
+  CFLAGS -O3 -fno-stack-protector
   LLVMFLAGS -x86-speculative-load-hardening -x86-slh-lfence -x86-slh-fence-call-and-ret
 )
 
@@ -122,37 +122,22 @@ libsodium_library(libsodium_baseline_slh
   LLVMFLAGS -x86-speculative-load-hardening
 )
 
-libsodium_bc(libsodium_bc_O1 libsodium.O1.bc
-  CFLAGS -O1
-)
-
-libsodium_bc(libsodium_bc_O3 libsodium.O3.bc
-  CFLAGS -O3
-)
-
-libsodium_library(libsodium_mitigate
-  PASS MitigatePass NoSpillPublic NoSpillLowering
-  CFLAGS -O3
-  LLVMFLAGS -clou-nospill -exhaustive-register-search
-)
-
-libsodium_trace(libsodium_mitigate_trace
-  PASS MitigatePass
-  CFLAGS -O3
-)
-
-# libsodium_library(libsodium_mitigate2
-#   PASS MitigatePass
-#   CFLAGS -O3
+# libsodium_bc(libsodium_bc_O1 libsodium.O1.bc
+#   CFLAGS -O1
 # )
 # 
-# libsodium_trace(libsodium_mitigate2_trace
-#   PASS MitigatePass
+# libsodium_bc(libsodium_bc_O3 libsodium.O3.bc
 #   CFLAGS -O3
 # )
 
-libsodium_library(libsodium_fps
-  PASS FunctionLocalStacks
-  CFLAGS -O3 -mno-red-zone
-  LLVMFLAGS -x86-function-local-stacks -no-stack-slot-sharing
+libsodium_library(libsodium_cloucc_lfence
+  PASS MitigatePass NoSpillPublic NoSpillLowering Attributes
+  CFLAGS -O3 -fno-stack-protector
+  LLVMFLAGS -clou-nospill -exhaustive-register-search -clou-stack-mitigation=lfence
+)
+
+libsodium_library(libsodium_cloucc_fps
+  PASS CommandLine MitigatePass FunctionLocalStacks Attributes
+  CFLAGS -O3 -fno-stack-protector
+  LLVMFLAGS -x86-function-local-stacks -no-stack-slot-sharing -clou-stack-mitigation=fps
 )

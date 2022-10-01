@@ -23,6 +23,7 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/IR/IntrinsicsX86.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
+#include <llvm/Clou/Clou.h>
 
 #include "MinCutSMT.h"
 #include "util.h"
@@ -36,8 +37,6 @@
 
 namespace clou {
   namespace {
-
-    constexpr bool StackMitigations = true;
 
     llvm::cl::opt<bool> log_times {
       "clou-times",
@@ -76,7 +75,9 @@ namespace clou {
       void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
 	AU.addRequired<NonspeculativeTaint>();
 	AU.addRequired<SpeculativeTaint>();
-	AU.addRequired<AllocaInitPass>();
+	if (stack_mitigation_mode == StackMitigationMode::Lfence) {
+	  AU.addRequired<AllocaInitPass>();
+	}
       }
 
       static bool ignoreCall(const llvm::CallBase *C) {
@@ -204,8 +205,11 @@ namespace clou {
 	
 	auto& NST = getAnalysis<NonspeculativeTaint>();
 	auto& ST = getAnalysis<SpeculativeTaint>();
-	auto& AIA = getAnalysis<AllocaInitPass>().results;
-
+	AllocaInitPass::Results *AIA;
+	if (stack_mitigation_mode == StackMitigationMode::Lfence) {
+	  AIA = &getAnalysis<AllocaInitPass>().results;
+	}
+	
 	llvm::DominatorTree DT(F);
 	llvm::LoopInfo LI(DT);
 
@@ -251,41 +255,41 @@ namespace clou {
 	  }
 	}
 
-#if 1
-	// EXPERIMENTAL: Create ST-pairs for {entry, return}.
-	for (auto& B : F) {
-	  for (auto& I : B) {
-	    if (llvm::isa<llvm::ReturnInst>(&I)) {
-	      A.add_st({.s = &F.getEntryBlock().front(), .t = &I});
-	    }
-	  }
-	}
-
-	// EXPERIMENTAL: Create ST-pairs for {arg-def, arg-use}
-	std::vector<std::pair<llvm::Argument *, bool>> args_regs;
-	for (auto& [arg, isreg] : args_regs) {
-	  if (!isreg) {
-	    for (llvm::Use& use : arg->uses()) {
-	      llvm::Instruction *user = llvm::cast<llvm::Instruction>(use.getUser());
-	      if (auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(user)) {
-		if (II->isAssumeLikeIntrinsic() || llvm::isa<llvm::DbgInfoIntrinsic>(II)) {
-		  continue;
-		}
+	if (stack_mitigation_mode == StackMitigationMode::Lfence) {
+	  // EXPERIMENTAL: Create ST-pairs for {entry, return}.
+	  for (auto& B : F) {
+	    for (auto& I : B) {
+	      if (llvm::isa<llvm::ReturnInst>(&I)) {
+		A.add_st({.s = &F.getEntryBlock().front(), .t = &I});
 	      }
-	      A.add_st({.s = &F.getEntryBlock().front(), .t = user});
 	    }
 	  }
-	}
 
-	// SUPER EXPERIMENTAL: Create ST-pairs for {alloca-first-init, alloca-first-use}
-	for (const auto& [alloca, result] : AIA) {
-	  for (auto *store : result.stores) {
-	    for (auto *load : result.loads) {
-	      A.add_st({.s = store, .t = load});
+	  // EXPERIMENTAL: Create ST-pairs for {arg-def, arg-use}
+	  std::vector<std::pair<llvm::Argument *, bool>> args_regs;
+	  for (auto& [arg, isreg] : args_regs) {
+	    if (!isreg) {
+	      for (llvm::Use& use : arg->uses()) {
+		llvm::Instruction *user = llvm::cast<llvm::Instruction>(use.getUser());
+		if (auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(user)) {
+		  if (II->isAssumeLikeIntrinsic() || llvm::isa<llvm::DbgInfoIntrinsic>(II)) {
+		    continue;
+		  }
+		}
+		A.add_st({.s = &F.getEntryBlock().front(), .t = user});
+	      }
+	    }
+	  }
+
+	  // SUPER EXPERIMENTAL: Create ST-pairs for {alloca-first-init, alloca-first-use}
+	  for (const auto& [alloca, result] : *AIA) {
+	    for (auto *store : result.stores) {
+	      for (auto *load : result.loads) {
+		A.add_st({.s = store, .t = load});
+	      }
 	    }
 	  }
 	}
-#endif
 	
 	// Add CFG to graph
 	for (auto& B : F) {
@@ -313,18 +317,6 @@ namespace clou {
 	A.run();
 	auto& cut_edges = A.cut_edges;	
 
-#if 0
-	if (verbose) {
-	  for (const auto& st : sts) {
-	    llvm::errs() << "\nSources:\n";
-	    for (const auto& s : st.s) {
-	      llvm::errs() << s << "\n";
-	    }
-	    llvm::errs() << "Transmitter: " << st.t << "\n";
-	  }
-	}
-#endif
-	
 	// Output DOT graph, color cut edges
 	if (!emit_dot.getValue().empty()) {
 	  std::stringstream path;
@@ -356,14 +348,14 @@ namespace clou {
 
 	  // Add ST-pairs as dotted gray edges
 	  for (const auto& st : A.sts) {
-	    f << "node" << nodes.at(st.s) << " -> node" << nodes.at(st.t) << " [style=\"dashed\", color=\"gray\"]\n";
+	    f << "node" << nodes.at(st.s) << " -> node" << nodes.at(st.t) << " [style=\"dashed\", color=\"blue\", penwidth=3]\n";
 	  }
 	  
             
 	  for (const auto& [u, usucc] : G) {
 	    for (const auto& [v, weight] : usucc) {
 	      if (weight > 0) {
-		f << "node" << nodes.at(u) << " -> " << "node" << nodes.at(v) << " [label=\"" << weight << "\"";
+		f << "node" << nodes.at(u) << " -> " << "node" << nodes.at(v) << " [label=\"" << weight << "\", penwidth=3";
 		if (std::find(cut_edges.begin(),
 			      cut_edges.end(),
 			      Alg::Edge({.src = u, .dst = v})) != cut_edges.end()) {

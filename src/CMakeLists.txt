@@ -1,3 +1,5 @@
+include(RegisterLLVMPass)
+
 add_compile_options(-fno-rtti -Wall -Wextra)
 
 link_libraries(${Z3_LIBRARIES})
@@ -6,13 +8,6 @@ add_link_options(-pthread)
 include_directories(${Z3_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 
 message("LLVM_INCLUDE_DIRS=${LLVM_INCLUDE_DIRS}")
-function(register_llvm_pass TARGET)
-  target_include_directories(${TARGET} SYSTEM BEFORE PUBLIC ${LLVM_INCLUDE_DIRS})
-  target_compile_definitions(${TARGET} PRIVATE ${LLVM_DEFINITIONS})
-  if(APPLE)
-    target_link_options(${TARGET} PRIVATE -undefined dynamic_lookup)
-  endif()
-endfunction()
 
 include_directories(SYSTEM ${LLVM_INCLUDE_DIRS} ${Libprofiler_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
 link_directories(${Libprofiler_LIBRARY_DIRS})
@@ -56,6 +51,7 @@ add_library(util STATIC
   util.h
   metadata # TODO: shouldn't depend on this
 )
+target_include_directories(util INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_library(InstructionPass OBJECT
   InstructionPass.cc
@@ -139,3 +135,11 @@ add_library(FunctionLocalStacks SHARED
 )
 register_llvm_pass(FunctionLocalStacks)
 target_link_libraries(FunctionLocalStacks PRIVATE util)
+
+add_library(Attributes SHARED
+  Attributes.cc
+)
+register_llvm_pass(Attributes PRIVATE util)
+
+
+add_subdirectory(check)

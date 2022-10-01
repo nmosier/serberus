@@ -1,0 +1,7 @@
+function(register_llvm_pass TARGET)
+  target_include_directories(${TARGET} SYSTEM BEFORE PUBLIC ${LLVM_INCLUDE_DIRS})
+  target_compile_definitions(${TARGET} PRIVATE ${LLVM_DEFINITIONS})
+  if(APPLE)
+    target_link_options(${TARGET} PRIVATE -undefined dynamic_lookup)
+  endif()
+endfunction()

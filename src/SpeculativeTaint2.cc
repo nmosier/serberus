@@ -43,7 +43,7 @@ namespace clou {
 	      taints[LI].insert(LI);
 	    }
 	  } else {
-	    // check if it must overlap with a public store
+	    // check if it may overlap with a secret store
 	    for (const auto& [SI, origins] : mem) {
 	      if (AA.alias(SI->getPointerOperand(), LI->getPointerOperand()) != llvm::AliasResult::NoAlias) {
 		taints[LI].insert(origins.begin(), origins.end());
@@ -88,6 +88,8 @@ namespace clou {
 	      warn_unhandled_intrinsic(II);
 	    }
 	  }
+
+	  continue;
 	}
 
 	if (llvm::isa<llvm::CallBase>(&I)) {
@@ -128,8 +130,10 @@ namespace clou {
   void SpeculativeTaint::print(llvm::raw_ostream& os, const llvm::Module *) const {
     // For now, just print short summary.
     os << "Tainted instructions:\n";
-    for (const auto& [I, _] : taints) {
-      os << *I << "\n";
+    for (const auto& [I, sources] : taints) {
+      if (!sources.empty()) {
+	os << *I << "\n";
+      }
     }
   }
 

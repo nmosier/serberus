@@ -18,7 +18,5 @@ namespace clou {
       }),
       llvm::cl::init(false),
     };
-
   }
-
 }
