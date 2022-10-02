@@ -11,6 +11,7 @@
 #include <llvm/Analysis/AliasAnalysis.h>
 #include <llvm/Support/WithColor.h>
 #include <llvm/IR/DataLayout.h>
+#include <llvm/Analysis/PostDominators.h>
 
 #include "util.h"
 
@@ -55,12 +56,36 @@ namespace clou {
 	  }
 	  return false;
 	}
+	if (llvm::isa<llvm::CallBase>(I)) {
+	  // TODO: Might want to do inter-procedural analysis to see which functions *must* initialize their arguments.
+	  return false;
+	}
 	unhandled_instruction(*I);
+      }
+
+      static bool isConstantRead(const llvm::AllocaInst& AI, const llvm::Instruction *I, llvm::AliasAnalysis& AA, llvm::DataLayout& DL) {
+	llvm::LocationSize locsize = DL.getTypeStoreSize(AI.getAllocatedType()).getFixedSize();
+	const auto modref = AA.getModRefInfo(I, &AI, locsize);
+	if (modref == llvm::ModRefInfo::Ref || modref == llvm::ModRefInfo::ModRef) {
+	  if (const auto *LI = llvm::dyn_cast<llvm::LoadInst>(I)) {
+	    return !has_incoming_addr(LI->getPointerOperand());
+	  }
+	  if (const auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(I)) {
+	    return true;
+	  }
+	  if (const auto *C = llvm::dyn_cast<llvm::CallInst>(I)) {
+	    return false;
+	  }
+	  unhandled_instruction(*I);
+	} else {
+	  return false;
+	}
       }
 
       bool runOnFunction(llvm::Function& F) override {
 	llvm::AliasAnalysis& AA = getAnalysis<llvm::AAResultsWrapperPass>().getAAResults();
 	llvm::DataLayout DataLayout(F.getParent());
+	llvm::PostDominatorTree PDT (F);
 
 	for (llvm::AllocaInst& AI : util::instructions<llvm::AllocaInst>(F)) {
 	  // Try to find use before def.
@@ -71,34 +96,38 @@ namespace clou {
 	    llvm::Instruction *I = todo.front();
 	    todo.pop();
 	    if (seen.insert(I).second) {
-	      llvm::LocationSize locsize = DataLayout.getTypeStoreSize(AI.getAllocatedType()).getFixedSize();
-	      const auto modref = AA.getModRefInfo(I, &AI, locsize);
-	      if (modref == llvm::ModRefInfo::Ref || modref == llvm::ModRefInfo::ModRef) {
+	      if (isConstantRead(AI, I, AA, DataLayout) && !PDT.dominates(I, &AI)) {
 		const auto *dbg = getAllocaDebug(AI);
 		if (dbg == nullptr) {
 		  llvm::errs() << *AI.getParent() << "\n";
 		}
-		std::string prefix;
 		llvm::raw_ostream& os = llvm::errs();
 		{
-		  llvm::raw_string_ostream os(prefix);
-		  llvm::DebugLoc DL;
+		  std::string prefix;
+		  {
+		    llvm::raw_string_ostream os(prefix);
+		    llvm::DebugLoc DL;
+		    if (dbg) {
+		      DL = dbg->getDebugLoc();
+		    }
+		    if (DL) {
+		      DL.print(os);
+		    } else {
+		      os << "?:?:?";
+		    }
+		  }
+		  llvm::WithColor::error(os, prefix);
+		  os << "stack allocation may not be defined before use along all control-flow paths";
 		  if (dbg) {
-		    DL = dbg->getDebugLoc();
+		    os << " for variable '" << dbg->getVariable()->getName() << "'";
 		  }
-		  if (DL) {
-		    DL.print(os);
-		  } else {
-		    os << "?:?:?";
-		  }
+		  os << "\n";
 		}
-		llvm::WithColor::error(os, prefix);
-		os << "stack allocation may not be defined before use along all control-flow paths";
-		if (dbg) {
-		  os << " for variable '" << dbg->getVariable()->getName() << "'";
+		if (const auto& DL = I->getDebugLoc()) {
+		  llvm::WithColor::note(os) << "use: ";
+		  DL.print(os);
+		  os << "\n";
 		}
-		os << "\n";
-		llvm::WithColor::note() << "function: " << F << "\n";
 	      }
 	      
 	      // Check if current instruction is an initialization

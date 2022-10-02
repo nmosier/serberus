@@ -9,10 +9,14 @@
 #include <llvm/Analysis/AliasAnalysis.h>
 #include <llvm/Analysis/DependenceAnalysis.h>
 #include <llvm/IR/Dominators.h>
+#include <llvm/IR/DataLayout.h>
+#include <llvm/Analysis/MemoryLocation.h>
+#include <llvm/ADT/STLExtras.h>
 
 #include "util.h"
 #include "NonspeculativeTaint.h"
 #include "SpeculativeTaint2.h"
+#include "Frontier.h"
 
 namespace clou {
 
@@ -27,64 +31,6 @@ namespace clou {
     AU.setPreservesAll();
   }
 
-  void AllocaInitPass::getAccessSets(llvm::Function& F, llvm::AliasAnalysis& AA) {
-    for (llvm::BasicBlock& B : F) {
-      for (llvm::Instruction& I : B) {
-	if (llvm::CallBase *CB = llvm::dyn_cast<llvm::CallBase>(&I)) {
-	  if (CB->mayReadOrWriteMemory()) {
-	    for (auto& [AI, result] : results) {
-	      if (CB->mayReadFromMemory()) {
-		result.loads.insert(CB);
-	      }
-	      if (CB->mayWriteToMemory()) {
-		result.stores.insert(CB);
-	      }
-	    }
-	  }
-	} else if (llvm::isa<llvm::LoadInst, llvm::StoreInst>(&I)) {
-	  for (auto& [AI, result] : results) {
-	    if (AA.alias(AI, llvm::getLoadStorePointerOperand(&I)) != llvm::AliasResult::NoAlias) {
-	      if (llvm::isa<llvm::LoadInst>(&I)) {
-		result.loads.insert(&I);
-	      }
-	      if (llvm::isa<llvm::StoreInst>(&I)) {
-		result.stores.insert(&I);
-	      }
-	    }
-	  }
-	} else {
-	  if (I.mayReadOrWriteMemory()) {
-	    unhandled_value(I);
-	  }
-	}
-      }
-    }
-  }
-
-  AllocaInitPass::ISet AllocaInitPass::pruneAccesses(llvm::Function& F, NonspeculativeTaint& NST, SpeculativeTaint& ST,
-						     const ISet& in) {
-    ISet out;
-
-    std::set<llvm::Instruction *> seen;
-    std::queue<llvm::Instruction *> todo;
-    todo.push(&F.getEntryBlock().front());
-
-    while (!todo.empty()) {
-      llvm::Instruction *I = todo.front();
-      todo.pop();
-      if (seen.insert(I).second) {
-	if (in.contains(I) && !NST.secret(I) && !ST.secret(I)) {
-	  out.insert(I);
-	} else {
-	  for (llvm::Instruction *succ : llvm::successors_inst(I)) {
-	    todo.push(succ);
-	  }
-	}
-      }
-    }
-
-    return out;
-  }
 
   bool AllocaInitPass::runOnFunction(llvm::Function& F) {
     results.clear();
@@ -92,39 +38,84 @@ namespace clou {
     auto& AA = getAnalysis<llvm::AAResultsWrapperPass>().getAAResults();
     auto& NST = getAnalysis<NonspeculativeTaint>();
     auto& ST = getAnalysis<SpeculativeTaint>();
-    
-    /* Really, just need to collect the set of instructions that may alias.
-     * Then we can prune using dominator tree.
-     */
 
-    /* Dataflow Analysis
-     * Track the candidate set of first initializations of each alloca.
-     * Also need to analyze the set of pointers that may point to each alloca.
-     *
-     * 1. Analyze set of pointers that may point to each alloca.
-     */
+    llvm::DataLayout DL(F.getParent());
 
-    // Get complete set of possible dependencies
-    
-    // Populate map with alloca's
-    for (auto& B : F) {
-      for (auto& I : B) {
-	if (auto *AI = llvm::dyn_cast<llvm::AllocaInst>(&I)) {
-	  results.emplace(AI, Result());
+      // Iterate over all reads
+    for (llvm::LoadInst& LI : util::instructions<llvm::LoadInst>(F)) {
+      llvm::errs() << "here\n";
+      if (NST.secret(&LI) || ST.secret(&LI)) {
+	continue;
+      }
+
+      
+      ISet must_alias_frontier;
+      // Try to find frontier set of must-alias stores
+      const bool ok = forward_frontier(&LI, [&] (llvm::Instruction *I) {
+	if (auto *SI = llvm::dyn_cast<llvm::StoreInst>(I)) {
+	  if (AA.isMustAlias(&LI, SI)) {
+	    return true;
+	  }
+	}
+	return false;
+      }, must_alias_frontier);
+
+      if (ok) {
+	for (llvm::AllocaInst& AI : util::instructions<llvm::AllocaInst>(F)) {
+	  if (!AA.isNoAlias(&AI, LI.getPointerOperand())) {
+	    auto& result = results[&AI];
+	    result.loads.insert(&LI);
+	    llvm::copy(must_alias_frontier, std::inserter(result.stores, result.stores.end()));
+	  }
+	}
+      } else {
+	// Fallback: see if there's one 'may alias' write on the reverse frontier.
+	ISet may_alias_frontier;
+	const bool ok = reverse_frontier(&LI, [&] (llvm::Instruction *I) {
+	  const auto mri = AA.getModRefInfo(I, LI.getPointerOperand(),
+					    llvm::LocationSize::precise(DL.getTypeStoreSize(LI.getType())));
+	  return mri == llvm::ModRefInfo::Mod || mri == llvm::ModRefInfo::ModRef;
+	}, may_alias_frontier);
+	assert(!may_alias_frontier.empty());
+	if (ok && may_alias_frontier.size() == 1) {
+	  for (llvm::AllocaInst& AI : util::instructions<llvm::AllocaInst>(F)) {
+	    if (!AA.isNoAlias(&AI, LI.getPointerOperand())) {
+	      auto& result = results[&AI];
+	      result.loads.insert(&LI);
+	      llvm::copy(may_alias_frontier, std::inserter(result.stores, result.stores.end()));
+	    }
+	  }
+	} else {
+	  // Just use front of current basic block. Might be able to improve on this in the future.
+	  // TODO: Optimize this.
+	  for (llvm::AllocaInst& AI : util::instructions<llvm::AllocaInst>(F)) {
+	    if (!AA.isNoAlias(&AI, LI.getPointerOperand())) {
+	      auto& result = results[&AI];
+	      result.loads.insert(&LI);
+	      llvm::copy(llvm::predecessors(&LI), std::inserter(result.stores, result.stores.end()));
+	    }
+	  }
 	}
       }
     }
-    
-    // Get full load and store sets for alloca's
-    getAccessSets(F, AA);
-    
-    // Prune load and store sets
-    for (auto& [_, result] : results) {
-      result.loads = pruneAccesses(F, NST, ST, result.loads);
-      result.stores = pruneAccesses(F, NST, ST, result.stores);
-    }
 
     return false;
+  }
+
+
+  void AllocaInitPass::print(llvm::raw_ostream& os, const llvm::Module *) const {
+    for (const auto& [AI, result] : results) {
+      os << "Allocation: " << *AI << "\n";
+      os << "Stores:\n";
+      for (auto *store : result.stores) {
+	os << "  " << *store << "\n";
+      }
+      os << "Loads:\n";
+      for (auto *load : result.loads) {
+	os << "  " << *load << "\n";
+      }
+      os << "\n";
+    }
   }
 
   static llvm::RegisterPass<AllocaInitPass> X {"clou-alloca-init", "Clou's Alloca Init Pass", true, true};

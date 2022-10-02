@@ -151,7 +151,7 @@ namespace clou {
   }
   
   void NonspeculativeTaint::print(llvm::raw_ostream& os, const llvm::Module *) const {
-    os << "\n";
+    os << "Nonspeculatively Public Values:\n";
     for (const llvm::Value *V : pub_vals) {
       if (!llvm::isa<llvm::BasicBlock, llvm::Function>(V)) {
 	os << *V << "\n";
@@ -161,7 +161,7 @@ namespace clou {
   }
 
   bool NonspeculativeTaint::secret(llvm::Value *V) const {
-    return pub_vals.contains(V);
+    return !pub_vals.contains(V);
   }
 
   namespace {

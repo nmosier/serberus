@@ -24,6 +24,7 @@ namespace clou {
 
     void getAnalysisUsage(llvm::AnalysisUsage& AU) const override;
     bool runOnFunction(llvm::Function& F) override;
+    void print(llvm::raw_ostream& os, const llvm::Module *) const override;
 
     struct Result {
       ISet stores;
@@ -34,8 +35,6 @@ namespace clou {
     Results results;
     
   private:
-    void getAccessSets(llvm::Function& F, llvm::AliasAnalysis& AA);
-    static ISet pruneAccesses(llvm::Function& F, NonspeculativeTaint& NST, SpeculativeTaint& ST, const ISet& in);
   };
   
 }

@@ -92,6 +92,13 @@ add_library(TracePass SHARED
 register_llvm_pass(TracePass)
 target_link_libraries(TracePass PRIVATE util)
 
+add_library(Frontier SHARED
+  Frontier.cc
+  Frontier.h
+)
+# target_link_libraries(Frontier
+
+  
 add_library(NoSpillLowering SHARED
   NoSpillLowering.cc
 )
@@ -116,7 +123,7 @@ add_library(AllocaInitPass SHARED
   AllocaInitPass.cc
 )
 register_llvm_pass(AllocaInitPass)
-target_link_libraries(AllocaInitPass PRIVATE util NonspeculativeTaint SpeculativeTaint2)
+target_link_libraries(AllocaInitPass PRIVATE util NonspeculativeTaint SpeculativeTaint2 Frontier)
 
 add_library(NoSpillPublic SHARED
   NoSpillPublic.cc
