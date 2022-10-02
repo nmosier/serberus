@@ -279,5 +279,28 @@ namespace clou {
     std::fputs("\n", stderr);
     va_end(ap);
   }
+
+  namespace util {
+    namespace impl {
+      bool nonvoid_inst_predicate::operator()(const llvm::Instruction& I) const {
+	return !I.getType()->isVoidTy();
+      }
+
+      nonvoid_inst_iterator make_nonvoid_inst_iterator(llvm::inst_iterator it, llvm::inst_iterator end) {
+	return nonvoid_inst_iterator(it, end, nonvoid_inst_predicate());
+      }
+    }
+  
+    nonvoid_inst_iterator nonvoid_inst_begin(llvm::Function& F) {
+      return impl::make_nonvoid_inst_iterator(llvm::inst_begin(F), llvm::inst_end(F));
+    }
+  
+    nonvoid_inst_iterator nonvoid_inst_end(llvm::Function& F) {
+      return impl::make_nonvoid_inst_iterator(llvm::inst_end(F), llvm::inst_end(F));
+    }
+    llvm::iterator_range<nonvoid_inst_iterator> nonvoid_instructions(llvm::Function& F) {
+      return llvm::iterator_range<nonvoid_inst_iterator>(nonvoid_inst_begin(F), nonvoid_inst_end(F));
+    }
+  }
   
 }

@@ -18,10 +18,13 @@ namespace clou {
   private:
     using VSet = std::set<llvm::Value *>;
     VSet pub_vals;
+    llvm::Function *F;
     
     void getAnalysisUsage(llvm::AnalysisUsage& AU) const override;
     bool runOnFunction(llvm::Function& F) override;
     void print(llvm::raw_ostream& os, const llvm::Module *M) const override;
+
+    void addAllOperands(llvm::User *U);
     
   public:
     bool secret(llvm::Value *V) const;

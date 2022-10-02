@@ -15,6 +15,7 @@
 #include "util.h"
 #include "Transmitter.h"
 #include "Mitigation.h"
+#include "CommandLine.h"
 
 namespace clou {
 
@@ -31,6 +32,8 @@ namespace clou {
 
   bool NonspeculativeTaint::runOnFunction(llvm::Function& F) {
     pub_vals.clear();
+    this->F = &F;
+    
     llvm::AAResults& AA = getAnalysis<llvm::AAResultsWrapperPass>().getAAResults();
     llvm::ScalarEvolution& SE = getAnalysis<llvm::ScalarEvolutionWrapperPass>().getSE();
     llvm::DominatorTree DT(F);
@@ -143,11 +146,33 @@ namespace clou {
 	  }
 	}
       }
+
+      // Normal untaint propagation
+      for (llvm::Instruction& I : util::nonvoid_instructions(F)) {
+	if (auto *GEP = llvm::dyn_cast<llvm::GetElementPtrInst>(&I)) {
+	  addAllOperands(GEP);
+	} else if (llvm::isa<llvm::CmpInst, llvm::CastInst, llvm::BinaryOperator, llvm::SelectInst, llvm::PHINode>(&I)) {
+	  if (pub_vals.contains(&I)) {
+	    addAllOperands(&I);
+	  }
+	} else if (llvm::isa<llvm::CallBase, llvm::LoadInst, llvm::AllocaInst>(&I)) {
+	  // ignore: already handled
+	} else if (llvm::isa<llvm::InsertElementInst, llvm::ShuffleVectorInst, llvm::ExtractElementInst>(&I)) {
+	  // ignore: make more precise later
+	} else {
+	  unhandled_instruction(I);
+	}
+      }
       
     } while (pub_vals != pub_vals_bak);
 
-
     return false;
+  }
+
+  void NonspeculativeTaint::addAllOperands(llvm::User *U) {
+    for (llvm::Value *op : U->operands()) {
+      pub_vals.insert(op);
+    }
   }
   
   void NonspeculativeTaint::print(llvm::raw_ostream& os, const llvm::Module *) const {
@@ -158,6 +183,16 @@ namespace clou {
       }
     }
     os << "\n";
+
+    if (enable_tests()) {
+      for (auto& I : llvm::instructions(*F)) {
+	if (!I.getType()->isVoidTy()) {
+	  tests() << (secret(&I) ? "sec" : "pub") << " ";
+	  I.printAsOperand(tests(), false);
+	  tests() << "\n";
+	}
+      }
+    }
   }
 
   bool NonspeculativeTaint::secret(llvm::Value *V) const {

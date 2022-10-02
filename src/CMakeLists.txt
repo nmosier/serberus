@@ -77,7 +77,7 @@ add_library(NonspeculativeTaint SHARED
   NonspeculativeTaint.h
 )
 register_llvm_pass(NonspeculativeTaint)
-target_link_libraries(NonspeculativeTaint PRIVATE Mitigation util Transmitter)
+target_link_libraries(NonspeculativeTaint PRIVATE Mitigation util Transmitter CommandLine)
 
 add_library(ZeroFillCalls SHARED
   ZeroFillCalls.cc

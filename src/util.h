@@ -1,5 +1,13 @@
 #pragma once
 
+#include <ostream>
+#include <set>
+#include <sstream>
+#include <string>
+#include <initializer_list>
+#include <vector>
+#include <cstdlib>
+
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/Dominators.h>
 #include <llvm/Analysis/LoopInfo.h>
@@ -13,13 +21,6 @@
 #include <llvm/ADT/iterator_range.h>
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/ADT/iterator.h>
-
-#include <ostream>
-#include <set>
-#include <sstream>
-#include <string>
-#include <initializer_list>
-#include <vector>
 
 namespace clou {
 
@@ -168,7 +169,7 @@ namespace clou {
 #define unhandled_value(V)						\
   do {									\
     llvm::errs() << __FILE__ << ":" << __LINE__ << ": unhandled value: " << (V) << "\n"; \
-    std::abort();							\
+    std::_Exit(EXIT_FAILURE);						\
   } while (false)
 
 #define unhandled_instruction(I) unhandled_value(I)
@@ -388,6 +389,22 @@ namespace clou {
     llvm::iterator_range<inst_iterator<InstType>> instructions(llvm::Function& F) {
       return llvm::iterator_range(inst_begin<InstType>(F), inst_end<InstType>(F));
     }
+
+    namespace impl {
+      struct nonvoid_inst_predicate {
+	bool operator()(const llvm::Instruction& I) const;
+      };
+    }
+
+    using nonvoid_inst_iterator = llvm::filter_iterator<llvm::inst_iterator, impl::nonvoid_inst_predicate>;
+
+    namespace impl {
+      nonvoid_inst_iterator make_nonvoid_inst_iterator(llvm::inst_iterator it, llvm::inst_iterator end);
+    }
+
+    nonvoid_inst_iterator nonvoid_inst_begin(llvm::Function& F);
+    nonvoid_inst_iterator nonvoid_inst_end(llvm::Function& F);
+    llvm::iterator_range<nonvoid_inst_iterator> nonvoid_instructions(llvm::Function& F);
 
   }
 }

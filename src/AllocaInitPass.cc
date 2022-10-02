@@ -43,10 +43,11 @@ namespace clou {
 
       // Iterate over all reads
     for (llvm::LoadInst& LI : util::instructions<llvm::LoadInst>(F)) {
-      llvm::errs() << "here\n";
       if (NST.secret(&LI) || ST.secret(&LI)) {
 	continue;
       }
+
+      llvm::errs() << "here\n";
 
       
       ISet must_alias_frontier;
