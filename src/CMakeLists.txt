@@ -69,14 +69,6 @@ add_library(Transmitter OBJECT
 )
 target_link_libraries(Transmitter INTERFACE util)
 
-add_library(secret_param_analysis SHARED
-  SecretParamAnalysis.cc
-  util
-  Transmitter
-  my_scc_pass
-  )
-register_llvm_pass(secret_param_analysis)
-
 add_library(NonspeculativeTaint SHARED
   NonspeculativeTaint.cc
   NonspeculativeTaint.h

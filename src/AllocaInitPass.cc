@@ -75,7 +75,7 @@ namespace clou {
 	const bool ok = reverse_frontier(&LI, [&] (llvm::Instruction *I) {
 	  const auto mri = AA.getModRefInfo(I, LI.getPointerOperand(),
 					    llvm::LocationSize::precise(DL.getTypeStoreSize(LI.getType())));
-	  return mri == llvm::ModRefInfo::Mod || mri == llvm::ModRefInfo::ModRef;
+	  return llvm::isModSet(mri);
 	}, may_alias_frontier);
 	assert(!may_alias_frontier.empty());
 	if (ok && may_alias_frontier.size() == 1) {
