@@ -120,13 +120,13 @@ add_library(AllocaInitPass SHARED
   AllocaInitPass.cc
 )
 register_llvm_pass(AllocaInitPass)
-target_link_libraries(AllocaInitPass PRIVATE util NonspeculativeTaint SpeculativeTaint2 Frontier)
+target_link_libraries(AllocaInitPass PRIVATE util NonspeculativeLeakAnalysis SpeculativeTaint2 Frontier)
 
 add_library(NoSpillPublic SHARED
   NoSpillPublic.cc
 )
 register_llvm_pass(NoSpillPublic)
-target_link_libraries(NoSpillPublic PRIVATE util NonspeculativeTaint SpeculativeTaint2 Mitigation)
+target_link_libraries(NoSpillPublic PRIVATE util NonspeculativeLeakAnalysis SpeculativeTaint2 Mitigation)
 
 add_library(MitigatePass SHARED
   Mitigate.cc

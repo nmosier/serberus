@@ -14,7 +14,7 @@
 #include <llvm/ADT/STLExtras.h>
 
 #include "util.h"
-#include "NonspeculativeTaint.h"
+#include "analysis/NonspeculativeLeakAnalysis.h"
 #include "SpeculativeTaint2.h"
 #include "Frontier.h"
 
@@ -26,7 +26,7 @@ namespace clou {
 
   void AllocaInitPass::getAnalysisUsage(llvm::AnalysisUsage& AU) const {
     AU.addRequired<llvm::AAResultsWrapperPass>();
-    AU.addRequired<NonspeculativeTaint>();
+    AU.addRequired<NonspeculativeLeakAnalysis>();
     AU.addRequired<SpeculativeTaint>();
     AU.setPreservesAll();
   }
@@ -36,14 +36,14 @@ namespace clou {
     results.clear();
     
     auto& AA = getAnalysis<llvm::AAResultsWrapperPass>().getAAResults();
-    auto& NST = getAnalysis<NonspeculativeTaint>();
+    auto& LA = getAnalysis<NonspeculativeLeakAnalysis>();
     auto& ST = getAnalysis<SpeculativeTaint>();
 
     llvm::DataLayout DL(F.getParent());
 
       // Iterate over all reads
     for (llvm::LoadInst& LI : util::instructions<llvm::LoadInst>(F)) {
-      if (NST.secret(&LI) || ST.secret(&LI)) {
+      if (!LA.mayLeak(&LI) || ST.secret(&LI)) {
 	continue;
       }
 

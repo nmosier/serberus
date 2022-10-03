@@ -83,6 +83,8 @@ namespace clou {
 		if (isModSet(mri)) {
 		  if (auto *SI = llvm::dyn_cast<llvm::StoreInst>(&store)) {
 		    leaks.insert(SI->getValueOperand());
+		  } else if (llvm::isa<llvm::CallBase>(&store)) {
+		    // ignore
 		  } else {
 		    unhandled_instruction(store);
 		  }
@@ -90,7 +92,7 @@ namespace clou {
 	      }
 	    }
 
-	  } else if (llvm::isa<llvm::CmpInst, llvm::GetElementPtrInst, llvm::BinaryOperator>(I)) {
+	  } else if (llvm::isa<llvm::CmpInst, llvm::GetElementPtrInst, llvm::BinaryOperator, llvm::PHINode, llvm::CastInst, llvm::SelectInst, llvm::ExtractValueInst, llvm::ExtractElementInst, llvm::InsertElementInst, llvm::ShuffleVectorInst>(I)) {
 
 	    // Leaks all input operands
 	    for (llvm::Value *op : I->operands()) {
