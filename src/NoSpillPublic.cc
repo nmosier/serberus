@@ -8,7 +8,7 @@
 #include <llvm/IR/Value.h>
 
 #include "clou/analysis/LeakAnalysis.h"
-#include "clou/SpeculativeTaint2.h"
+#include "clou/analysis/SpeculativeTaintAnalysis.h"
 #include "clou/Transmitter.h"
 #include "clou/Mitigation.h"
 #include "clou/util.h"

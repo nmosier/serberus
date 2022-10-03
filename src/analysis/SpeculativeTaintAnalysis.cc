@@ -1,4 +1,4 @@
-#include "clou/SpeculativeTaint2.h"
+#include "clou/analysis/SpeculativeTaintAnalysis.h"
 
 #include <map>
 #include <set>

@@ -11,3 +11,10 @@ add_library(NonspeculativeTaintAnalysis SHARED
 )
 register_llvm_pass(NonspeculativeTaintAnalysis)
 target_link_libraries(NonspeculativeTaintAnalysis PRIVATE Mitigation util Transmitter CommandLine)
+
+add_library(SpeculativeTaintAnalysis SHARED
+  SpeculativeTaintAnalysis.cc
+  ../include/clou/analysis/SpeculativeTaintAnalysis.h
+)
+register_llvm_pass(SpeculativeTaintAnalysis)
+target_link_libraries(SpeculativeTaintAnalysis PRIVATE util Mitigation)

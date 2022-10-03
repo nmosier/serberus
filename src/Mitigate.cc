@@ -31,8 +31,8 @@
 #include "clou/CommandLine.h"
 #include "clou/Mitigation.h"
 #include "clou/Log.h"
-#include "clou/SpeculativeTaint2.h"
 #include "clou/analysis/NonspeculativeTaintAnalysis.h"
+#include "clou/analysis/SpeculativeTaintAnalysis.h"
 #include "clou/AllocaInitPass.h"
 
 namespace clou {

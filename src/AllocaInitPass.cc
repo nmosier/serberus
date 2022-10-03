@@ -15,7 +15,7 @@
 
 #include "clou/util.h"
 #include "clou/analysis/LeakAnalysis.h"
-#include "clou/SpeculativeTaint2.h"
+#include "clou/analysis/SpeculativeTaintAnalysis.h"
 #include "clou/Frontier.h"
 
 namespace clou {
