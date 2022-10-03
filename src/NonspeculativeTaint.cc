@@ -24,9 +24,7 @@ namespace clou {
   NonspeculativeTaint::NonspeculativeTaint(): llvm::FunctionPass(ID) {}
 
   void NonspeculativeTaint::getAnalysisUsage(llvm::AnalysisUsage& AU) const {
-    AU.addRequired<llvm::ScalarEvolutionWrapperPass>();
     AU.addRequired<llvm::AAResultsWrapperPass>();
-    // AU.addRequired<llvm::DependenceAnalysisWrapperPass>();
     AU.setPreservesAll();
   }
 
@@ -35,10 +33,6 @@ namespace clou {
     this->F = &F;
     
     llvm::AAResults& AA = getAnalysis<llvm::AAResultsWrapperPass>().getAAResults();
-    llvm::ScalarEvolution& SE = getAnalysis<llvm::ScalarEvolutionWrapperPass>().getSE();
-    llvm::DominatorTree DT(F);
-    llvm::LoopInfo LI(DT);
-    llvm::DependenceInfo DI(&F, &AA, &SE, &LI);
 
     // Initialize public values with transmitter operands. We'll handle call results in the main loop.
     for (llvm::Instruction& I : llvm::instructions(F)) {
@@ -128,12 +122,11 @@ namespace clou {
       }
 
       // Propagate public load to all memory accesses of load.
-      for (llvm::Instruction& src : llvm::instructions(F)) {
-	if (src.mayReadFromMemory() && pub_vals.contains(&src)) {
-	  for (llvm::Instruction& dst : llvm::instructions(F)) {
-	    if (dst.mayWriteToMemory()) {
-	      const auto dep = DI.depends(&src, &dst, true);
-	      if (dep && dep->isConsistent()) {
+      for (llvm::LoadInst& src : util::instructions<llvm::LoadInst>(F)) {
+	if (pub_vals.contains(&src)) {
+	  for (auto& dst : llvm::instructions(F)) {
+	    if (llvm::isa<llvm::LoadInst, llvm::StoreInst>(&dst)) {
+	      if (AA.isMustAlias(src.getPointerOperand(), llvm::getPointerOperand(&dst))) {
 		if (auto *dst_SI = llvm::dyn_cast<llvm::StoreInst>(&dst)) {
 		  pub_vals.insert(dst_SI->getValueOperand());
 		} else if (auto *dst_LI = llvm::dyn_cast<llvm::LoadInst>(&dst)) {
@@ -157,7 +150,7 @@ namespace clou {
 	  }
 	} else if (llvm::isa<llvm::CallBase, llvm::LoadInst, llvm::AllocaInst>(&I)) {
 	  // ignore: already handled
-	} else if (llvm::isa<llvm::InsertElementInst, llvm::ShuffleVectorInst, llvm::ExtractElementInst>(&I)) {
+	} else if (llvm::isa<llvm::InsertElementInst, llvm::ShuffleVectorInst, llvm::ExtractElementInst, llvm::ExtractValueInst>(&I)) {
 	  // ignore: make more precise later
 	} else {
 	  unhandled_instruction(I);
