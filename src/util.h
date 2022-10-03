@@ -166,9 +166,14 @@ namespace clou {
   unsigned instruction_loop_nest_depth(llvm::Instruction *I, const llvm::LoopInfo& LI);
   unsigned instruction_dominator_depth(llvm::Instruction *I, const llvm::DominatorTree& DT);
 
+  namespace impl {
+    inline const llvm::Value& get_value_ref(const llvm::Value& V) { return V; }
+    inline const llvm::Value& get_value_ref(const llvm::Value *V) { return *V; }
+  }
+
 #define unhandled_value(V)						\
   do {									\
-    llvm::errs() << __FILE__ << ":" << __LINE__ << ": unhandled value: " << (V) << "\n"; \
+    llvm::errs() << __FILE__ << ":" << __LINE__ << ": unhandled value: " << ::clou::impl::get_value_ref(V) << "\n"; \
     std::_Exit(EXIT_FAILURE);						\
   } while (false)
 
@@ -405,6 +410,28 @@ namespace clou {
     nonvoid_inst_iterator nonvoid_inst_begin(llvm::Function& F);
     nonvoid_inst_iterator nonvoid_inst_end(llvm::Function& F);
     llvm::iterator_range<nonvoid_inst_iterator> nonvoid_instructions(llvm::Function& F);
+
+#if 0
+    namespace impl {
+      template <class DerivedT>
+      struct isa_filter_pred {
+	template <class BaseT>
+	bool operator()(const BaseT& base) const {
+	  return operator()(&base);
+	}
+	template <class BaseT>
+	bool operator()(const BaseT *base) const {
+	  return llvm::isa<DerivedT>(base);
+	}
+      };
+
+      template <class WrappedIteratorT, class BaseT, class DerivedT>
+      using isa_filter_iterator = llvm::filter_iterator<WrappedIteratorT, impl::isa_filter_pred<BaseT, DerivedT>, BaseT>;
+    }
+
+    template <class ItTy, class BaseT, class DerivedT>
+    using isa_mapped_iterator = llvm::mapped_iterator<isa_filter_iterator<ItTy, BaseT, DerivedT>, impl::isa_map_func<BaseT, DerivedT>, DerivedT>;
+#endif
 
   }
 }

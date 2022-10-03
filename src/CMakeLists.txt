@@ -5,13 +5,17 @@ add_compile_options(-fno-rtti -Wall -Wextra)
 link_libraries(${Z3_LIBRARIES})
 link_directories(${Z3_LIBRARY_DIRS})
 add_link_options(-pthread)
-include_directories(${Z3_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+include_directories(SYSTEM ${Z3_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 
 message("LLVM_INCLUDE_DIRS=${LLVM_INCLUDE_DIRS}")
 
 include_directories(SYSTEM ${LLVM_INCLUDE_DIRS} ${Libprofiler_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
 link_directories(${Libprofiler_LIBRARY_DIRS})
 link_libraries(${Libprofiler_LIBRARIES})
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+
+add_subdirectory(analysis)
 
 add_library(my_scc_pass SHARED
   my_scc_pass.cc
@@ -62,7 +66,8 @@ register_llvm_pass(InstructionPass)
 add_library(Transmitter OBJECT
   Transmitter.cc
   Transmitter.h
-  )
+)
+target_link_libraries(Transmitter INTERFACE util)
 
 add_library(secret_param_analysis SHARED
   SecretParamAnalysis.cc
