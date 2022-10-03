@@ -15,13 +15,9 @@ link_libraries(${Libprofiler_LIBRARIES})
 
 add_subdirectory(analysis)
 
-add_library(my_scc_pass SHARED
-  my_scc_pass.cc
-)
-
-add_library(metadata SHARED
-  metadata.cc
-  include/clou/metadata.h
+add_library(Metadata SHARED
+  Metadata.cc
+  include/clou/Metadata.h
 )
 
 add_library(MinCut SHARED
@@ -37,7 +33,7 @@ add_library(Mitigation SHARED
   Mitigation.cc
   include/clou/Mitigation.h
 )
-target_link_libraries(Mitigation PRIVATE metadata)
+target_link_libraries(Mitigation PRIVATE Metadata)
 
 add_library(CommandLine SHARED
   CommandLine.cc
@@ -53,7 +49,7 @@ add_library(util STATIC
   util.cc
   include/clou/util.h
 )
-target_link_libraries(util PRIVATE metadata)
+target_link_libraries(util PRIVATE Metadata)
 
 add_library(InstructionPass OBJECT
   InstructionPass.cc
@@ -98,7 +94,7 @@ add_library(NoSpillLowering SHARED
   NoSpillLowering.cc
 )
 register_llvm_pass(NoSpillLowering)
-target_link_libraries(NoSpillLowering PRIVATE util metadata)
+target_link_libraries(NoSpillLowering PRIVATE util Metadata)
 
 add_library(BaselinePass SHARED
   BaselinePass.cc

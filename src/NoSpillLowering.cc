@@ -6,7 +6,7 @@
 #include <llvm/IR/InlineAsm.h>
 
 #include "clou/util.h"
-#include "clou/metadata.h"
+#include "clou/Metadata.h"
 
 namespace clou {
   namespace {

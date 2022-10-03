@@ -5,7 +5,7 @@
 #include <llvm/IR/IntrinsicsX86.h>
 #include <llvm/IR/Instructions.h>
 
-#include "clou/metadata.h"
+#include "clou/Metadata.h"
 
 namespace clou {
 

@@ -13,7 +13,7 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Use.h>
 
-#include "clou/metadata.h"
+#include "clou/Metadata.h"
 
 namespace clou {
 
