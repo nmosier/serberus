@@ -1,5 +1,3 @@
-#include "clou/NonspeculativeTaint.h"
-
 #ifdef NDEBUG
 # undef NDEBUG
 #endif
@@ -13,6 +11,8 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/InstIterator.h>
+
+#include "clou/analysis/NonspeculativeTaintAnalysis.h"
 
 namespace clou {
   namespace {

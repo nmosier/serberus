@@ -1,6 +1,6 @@
 add_library(NonspeculativeTaintTest SHARED NonspeculativeTaintTest.cc)
 register_llvm_pass(NonspeculativeTaintTest)
-target_link_libraries(NonspeculativeTaintTest PRIVATE NonspeculativeTaint)
+target_link_libraries(NonspeculativeTaintTest PRIVATE NonspeculativeTaintAnalysis)
 target_include_directories(NonspeculativeTaintTest PRIVATE ${LLVM_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/src)
 target_compile_options(NonspeculativeTaintTest PRIVATE -fno-rtti)
 
@@ -14,8 +14,8 @@ add_test(NAME nonspeculative_taint_xorbuf_check
 )
 
 add_custom_command(OUTPUT xorbuf.out
-  COMMAND ${LLVM_BINARY_DIR}/bin/opt --enable-new-pm=0 --load=$<TARGET_FILE:NonspeculativeTaint> --nonspeculative-taint --clou-test=xorbuf.out --analyze xorbuf.ll
-  DEPENDS xorbuf.ll ${LLVM_BINARY_DIR}/bin/opt NonspeculativeTaint
+  COMMAND ${LLVM_BINARY_DIR}/bin/opt --enable-new-pm=0 --load=$<TARGET_FILE:NonspeculativeTaintAnalysis> --clou-nonspeculative-taint-analysis --clou-test=xorbuf.out --analyze xorbuf.ll
+  DEPENDS xorbuf.ll ${LLVM_BINARY_DIR}/bin/opt NonspeculativeTaintAnalysis
 )
 
 add_custom_target(nonspeculative_taint_xorbuf ALL

@@ -32,7 +32,7 @@
 #include "clou/Mitigation.h"
 #include "clou/Log.h"
 #include "clou/SpeculativeTaint2.h"
-#include "clou/NonspeculativeTaint.h"
+#include "clou/analysis/NonspeculativeTaintAnalysis.h"
 #include "clou/AllocaInitPass.h"
 
 namespace clou {

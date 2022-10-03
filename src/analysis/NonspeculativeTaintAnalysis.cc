@@ -1,4 +1,4 @@
-#include "clou/NonspeculativeTaint.h"
+#include "clou/analysis/NonspeculativeTaintAnalysis.h"
 
 #include <llvm/Analysis/DependenceAnalysis.h>
 #include <llvm/Analysis/LoopInfo.h>
@@ -194,10 +194,7 @@ namespace clou {
 
   namespace {
 
-    llvm::RegisterPass<NonspeculativeTaint> X {
-      "nonspeculative-taint", "Nonspeculative Taint Pass", true, true
-    };
-
+    llvm::RegisterPass<NonspeculativeTaint> X {"clou-nonspeculative-taint-analysis", "Clou's Nonspeculative Taint Analysis"};
     util::RegisterClangPass<NonspeculativeTaint> Y;
 
   }

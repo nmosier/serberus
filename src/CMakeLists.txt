@@ -63,13 +63,6 @@ add_library(Transmitter OBJECT
 )
 target_link_libraries(Transmitter INTERFACE util)
 
-add_library(NonspeculativeTaint SHARED
-  NonspeculativeTaint.cc
-  include/clou/NonspeculativeTaint.h
-)
-register_llvm_pass(NonspeculativeTaint)
-target_link_libraries(NonspeculativeTaint PRIVATE Mitigation util Transmitter CommandLine)
-
 add_library(ZeroFillCalls SHARED
   ZeroFillCalls.cc
   $<TARGET_OBJECTS:InstructionPass>
@@ -126,7 +119,7 @@ add_library(MitigatePass SHARED
   Mitigate.cc
 )
 register_llvm_pass(MitigatePass)
-target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaint SpeculativeTaint2 CommandLine AllocaInitPass ${Z3_LIBRARIES} MinCut)
+target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaintAnalysis SpeculativeTaint2 CommandLine AllocaInitPass ${Z3_LIBRARIES} MinCut)
 
 add_library(FunctionLocalStacks SHARED
   FunctionLocalStacks.cc
