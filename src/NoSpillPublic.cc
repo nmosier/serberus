@@ -7,11 +7,11 @@
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/Value.h>
 
-#include "analysis/NonspeculativeLeakAnalysis.h"
-#include "SpeculativeTaint2.h"
-#include "Transmitter.h"
-#include "Mitigation.h"
-#include "util.h"
+#include "clou/analysis/LeakAnalysis.h"
+#include "clou/SpeculativeTaint2.h"
+#include "clou/Transmitter.h"
+#include "clou/Mitigation.h"
+#include "clou/util.h"
 
 namespace clou {
   using ISet = std::set<llvm::Instruction *>;
@@ -25,15 +25,15 @@ namespace clou {
       NoSpillPublic(): llvm::FunctionPass(ID) {}
 
       void getAnalysisUsage(llvm::AnalysisUsage& AU) const override {
-	AU.addRequired<NonspeculativeLeakAnalysis>();
+	AU.addRequired<LeakAnalysis>();
 	AU.addRequired<SpeculativeTaint>();
-	AU.addPreserved<NonspeculativeLeakAnalysis>();
+	AU.addPreserved<LeakAnalysis>();
 	AU.addPreserved<SpeculativeTaint>();
 	AU.setPreservesCFG();
       }
 
       bool runOnFunction(llvm::Function& F) override {
-	auto& LA = getAnalysis<NonspeculativeLeakAnalysis>();
+	auto& LA = getAnalysis<LeakAnalysis>();
 	auto& ST = getAnalysis<SpeculativeTaint>();
 
 	bool changed = false;

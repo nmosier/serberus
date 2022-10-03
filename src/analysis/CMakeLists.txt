@@ -1,6 +1,6 @@
-add_library(NonspeculativeLeakAnalysis SHARED
-  NonspeculativeLeakAnalysis.cc
-  NonspeculativeLeakAnalysis.h
+add_library(LeakAnalysis SHARED
+  LeakAnalysis.cc
+  ../include/clou/analysis/LeakAnalysis.h
 )
-register_llvm_pass(NonspeculativeLeakAnalysis)
-target_link_libraries(NonspeculativeLeakAnalysis PRIVATE Transmitter CommandLine)
+register_llvm_pass(LeakAnalysis)
+target_link_libraries(LeakAnalysis PRIVATE Transmitter CommandLine)

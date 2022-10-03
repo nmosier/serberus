@@ -13,8 +13,8 @@
 #include <sstream>
 #include <string>
 
-#include "InstructionPass.h"
-#include "util.h"
+#include "clou/InstructionPass.h"
+#include "clou/util.h"
 
 namespace clou {
 

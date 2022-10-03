@@ -1,6 +1,6 @@
 #include <llvm/ADT/SCCIterator.h>
 
-#include "my_scc_pass.h"
+#include "clou/my_scc_pass.h"
 
 MySCCPass::MySCCPass(char& ID): llvm::ModulePass(ID) {}
 

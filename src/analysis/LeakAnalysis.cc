@@ -1,4 +1,4 @@
-#include "NonspeculativeLeakAnalysis.h"
+#include "clou/analysis/LeakAnalysis.h"
 
 #include <llvm/Analysis/AliasAnalysis.h>
 #include <llvm/IR/IntrinsicInst.h>
@@ -6,24 +6,24 @@
 #include <llvm/IR/IntrinsicsX86.h>
 #include <llvm/IR/DataLayout.h>
 
-#include "Transmitter.h"
-#include "CommandLine.h"
+#include "clou/Transmitter.h"
+#include "clou/CommandLine.h"
 
 namespace clou {
 
-  char NonspeculativeLeakAnalysis::ID = 0;
-  NonspeculativeLeakAnalysis::NonspeculativeLeakAnalysis(): llvm::FunctionPass(ID) {}
+  char LeakAnalysis::ID = 0;
+  LeakAnalysis::LeakAnalysis(): llvm::FunctionPass(ID) {}
 
-  bool NonspeculativeLeakAnalysis::mayLeak(const llvm::Value *V) const {
+  bool LeakAnalysis::mayLeak(const llvm::Value *V) const {
     return leaks.contains(const_cast<llvm::Value *>(V));
   }
   
-  void NonspeculativeLeakAnalysis::getAnalysisUsage(llvm::AnalysisUsage& AU) const {
+  void LeakAnalysis::getAnalysisUsage(llvm::AnalysisUsage& AU) const {
     AU.addRequired<llvm::AAResultsWrapperPass>();
     AU.setPreservesAll();
   }
 
-  bool NonspeculativeLeakAnalysis::runOnFunction(llvm::Function& F) {
+  bool LeakAnalysis::runOnFunction(llvm::Function& F) {
     this->F = &F;
     leaks.clear();
     
@@ -112,7 +112,7 @@ namespace clou {
     return false;
   }
   
-  void NonspeculativeLeakAnalysis::print(llvm::raw_ostream& os, const llvm::Module *) const {
+  void LeakAnalysis::print(llvm::raw_ostream& os, const llvm::Module *) const {
     os << "Nonspeculatively Leaked Values:\n";
     for (const llvm::Value *leak : leaks) {
       if (llvm::isa<llvm::Instruction>(leak)) {
@@ -141,7 +141,7 @@ namespace clou {
   }
 
   namespace {
-    llvm::RegisterPass<NonspeculativeLeakAnalysis> X {"clou-nonspeculative-leak", "ClouCC's Nonspeculative Leak Analysis"};
+    llvm::RegisterPass<LeakAnalysis> X {"clou-leak-analysis", "ClouCC's Leak Analysis"};
   }
 
 }

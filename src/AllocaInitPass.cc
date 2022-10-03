@@ -1,4 +1,4 @@
-#include "AllocaInitPass.h"
+#include "clou/AllocaInitPass.h"
 
 #include <map>
 #include <set>
@@ -13,10 +13,10 @@
 #include <llvm/Analysis/MemoryLocation.h>
 #include <llvm/ADT/STLExtras.h>
 
-#include "util.h"
-#include "analysis/NonspeculativeLeakAnalysis.h"
-#include "SpeculativeTaint2.h"
-#include "Frontier.h"
+#include "clou/util.h"
+#include "clou/analysis/LeakAnalysis.h"
+#include "clou/SpeculativeTaint2.h"
+#include "clou/Frontier.h"
 
 namespace clou {
 
@@ -26,7 +26,7 @@ namespace clou {
 
   void AllocaInitPass::getAnalysisUsage(llvm::AnalysisUsage& AU) const {
     AU.addRequired<llvm::AAResultsWrapperPass>();
-    AU.addRequired<NonspeculativeLeakAnalysis>();
+    AU.addRequired<LeakAnalysis>();
     AU.addRequired<SpeculativeTaint>();
     AU.setPreservesAll();
   }
@@ -36,7 +36,7 @@ namespace clou {
     results.clear();
     
     auto& AA = getAnalysis<llvm::AAResultsWrapperPass>().getAAResults();
-    auto& LA = getAnalysis<NonspeculativeLeakAnalysis>();
+    auto& LA = getAnalysis<LeakAnalysis>();
     auto& ST = getAnalysis<SpeculativeTaint>();
 
     llvm::DataLayout DL(F.getParent());

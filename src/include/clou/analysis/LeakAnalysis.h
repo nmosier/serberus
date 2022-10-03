@@ -7,10 +7,10 @@
 
 namespace clou {
 
-  class NonspeculativeLeakAnalysis final : public llvm::FunctionPass {
+  class LeakAnalysis final : public llvm::FunctionPass {
   public:
     static char ID;
-    NonspeculativeLeakAnalysis();
+    LeakAnalysis();
 
   private:
     using VSet = std::set<llvm::Value *>;

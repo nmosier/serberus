@@ -1,8 +1,8 @@
-#include "Frontier.h"
+#include "clou/Frontier.h"
 
 #include <algorithm>
 
-#include "util.h"
+#include "clou/util.h"
 
 namespace clou {
 

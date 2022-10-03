@@ -5,8 +5,8 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/InlineAsm.h>
 
-#include "util.h"
-#include "metadata.h"
+#include "clou/util.h"
+#include "clou/metadata.h"
 
 namespace clou {
   namespace {

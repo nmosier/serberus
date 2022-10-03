@@ -25,15 +25,15 @@
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 #include <llvm/Clou/Clou.h>
 
-#include "MinCutSMT.h"
-#include "util.h"
-#include "Transmitter.h"
-#include "CommandLine.h"
-#include "Mitigation.h"
-#include "Log.h"
-#include "SpeculativeTaint2.h"
-#include "NonspeculativeTaint.h"
-#include "AllocaInitPass.h"
+#include "clou/MinCutSMT.h"
+#include "clou/util.h"
+#include "clou/Transmitter.h"
+#include "clou/CommandLine.h"
+#include "clou/Mitigation.h"
+#include "clou/Log.h"
+#include "clou/SpeculativeTaint2.h"
+#include "clou/NonspeculativeTaint.h"
+#include "clou/AllocaInitPass.h"
 
 namespace clou {
   namespace {

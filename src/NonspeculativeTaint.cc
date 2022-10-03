@@ -1,4 +1,4 @@
-#include "NonspeculativeTaint.h"
+#include "clou/NonspeculativeTaint.h"
 
 #include <llvm/Analysis/DependenceAnalysis.h>
 #include <llvm/Analysis/LoopInfo.h>
@@ -12,10 +12,10 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Operator.h>
 
-#include "util.h"
-#include "Transmitter.h"
-#include "Mitigation.h"
-#include "CommandLine.h"
+#include "clou/util.h"
+#include "clou/Transmitter.h"
+#include "clou/Mitigation.h"
+#include "clou/CommandLine.h"
 
 namespace clou {
 

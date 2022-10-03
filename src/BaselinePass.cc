@@ -3,8 +3,8 @@
 #include <llvm/IR/Use.h>
 #include <llvm/IR/User.h>
 
-#include "util.h"
-#include "Mitigation.h"
+#include "clou/util.h"
+#include "clou/Mitigation.h"
 
 namespace clou {
   namespace {

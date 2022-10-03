@@ -1,10 +1,10 @@
-#include "Transmitter.h"
+#include "clou/Transmitter.h"
 
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/Support/raw_ostream.h>
 
-#include "Mitigation.h"
+#include "clou/Mitigation.h"
 
 namespace clou {
 

@@ -1,4 +1,4 @@
-#include "util.h"
+#include "clou/util.h"
 
 #include <cassert>
 #include <cstdarg>
@@ -13,7 +13,7 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Use.h>
 
-#include "metadata.h"
+#include "clou/metadata.h"
 
 namespace clou {
 

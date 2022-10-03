@@ -1,11 +1,11 @@
-#include "Mitigation.h"
+#include "clou/Mitigation.h"
 
 #include <cassert>
 
 #include <llvm/IR/IntrinsicsX86.h>
 #include <llvm/IR/Instructions.h>
 
-#include "metadata.h"
+#include "clou/metadata.h"
 
 namespace clou {
 

@@ -13,7 +13,7 @@
 #include <llvm/IR/DataLayout.h>
 #include <llvm/Analysis/PostDominators.h>
 
-#include "util.h"
+#include "clou/util.h"
 
 namespace clou {
   namespace {

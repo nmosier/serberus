@@ -1,11 +1,11 @@
 include(RegisterLLVMPass)
 
+include_directories(include)
+
 add_compile_options(-fno-rtti -Wall -Wextra)
 
-link_libraries(${Z3_LIBRARIES})
-link_directories(${Z3_LIBRARY_DIRS})
 add_link_options(-pthread)
-include_directories(SYSTEM ${Z3_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 
 message("LLVM_INCLUDE_DIRS=${LLVM_INCLUDE_DIRS}")
 
@@ -13,65 +13,63 @@ include_directories(SYSTEM ${LLVM_INCLUDE_DIRS} ${Libprofiler_INCLUDE_DIRS} ${Bo
 link_directories(${Libprofiler_LIBRARY_DIRS})
 link_libraries(${Libprofiler_LIBRARIES})
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-
 add_subdirectory(analysis)
 
 add_library(my_scc_pass SHARED
   my_scc_pass.cc
-  my_scc_pass.h
 )
 
 add_library(metadata SHARED
   metadata.cc
-  metadata.h
+  include/clou/metadata.h
 )
 
 add_library(MinCut SHARED
-  MinCutBase.h
   MinCutBase.cc
-  MinCutSMT.h
+  include/clou/MinCutBase.h
+  include/clou/MinCutSMT.h
 )
+target_link_libraries(MinCut INTERFACE ${Z3_LIBRARIES})
+target_link_directories(MinCut INTERFACE ${Z3_LIBRARY_DIRS})
+target_include_directories(MinCut INTERFACE ${Z3_INCLUDE_DIRS})
 
 add_library(Mitigation SHARED
   Mitigation.cc
-  Mitigation.h
+  include/clou/Mitigation.h
 )
 target_link_libraries(Mitigation PRIVATE metadata)
 
 add_library(CommandLine SHARED
   CommandLine.cc
-  CommandLine.h
 )
 register_llvm_pass(CommandLine)
 
 add_library(Log SHARED
   Log.cc
-  Log.h
+  include/clou/Log.h
 )
 
 add_library(util STATIC
   util.cc
-  util.h
-  metadata # TODO: shouldn't depend on this
+  include/clou/util.h
 )
-target_include_directories(util INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(util PRIVATE metadata)
 
 add_library(InstructionPass OBJECT
   InstructionPass.cc
-  InstructionPass.h
+  include/clou/InstructionPass.h
 )
 register_llvm_pass(InstructionPass)
 
 add_library(Transmitter OBJECT
   Transmitter.cc
-  Transmitter.h
+  include/clou/Transmitter.h
 )
 target_link_libraries(Transmitter INTERFACE util)
 
 add_library(NonspeculativeTaint SHARED
   NonspeculativeTaint.cc
-  NonspeculativeTaint.h
+  include/clou/NonspeculativeTaint.h
 )
 register_llvm_pass(NonspeculativeTaint)
 target_link_libraries(NonspeculativeTaint PRIVATE Mitigation util Transmitter CommandLine)
@@ -91,7 +89,7 @@ target_link_libraries(TracePass PRIVATE util)
 
 add_library(Frontier SHARED
   Frontier.cc
-  Frontier.h
+  include/clou/Frontier.h
 )
 # target_link_libraries(Frontier
 
@@ -109,24 +107,24 @@ register_llvm_pass(BaselinePass)
 target_link_libraries(BaselinePass PRIVATE Mitigation util)
 
 add_library(SpeculativeTaint2 SHARED
-  SpeculativeTaint2.h
   SpeculativeTaint2.cc
+  include/clou/SpeculativeTaint2.h
 )
 register_llvm_pass(SpeculativeTaint2)
 target_link_libraries(SpeculativeTaint2 PRIVATE util Mitigation)
 
 add_library(AllocaInitPass SHARED
-  AllocaInitPass.h
   AllocaInitPass.cc
+  include/clou/AllocaInitPass.h
 )
 register_llvm_pass(AllocaInitPass)
-target_link_libraries(AllocaInitPass PRIVATE util NonspeculativeLeakAnalysis SpeculativeTaint2 Frontier)
+target_link_libraries(AllocaInitPass PRIVATE util LeakAnalysis SpeculativeTaint2 Frontier)
 
 add_library(NoSpillPublic SHARED
   NoSpillPublic.cc
 )
 register_llvm_pass(NoSpillPublic)
-target_link_libraries(NoSpillPublic PRIVATE util NonspeculativeLeakAnalysis SpeculativeTaint2 Mitigation)
+target_link_libraries(NoSpillPublic PRIVATE util LeakAnalysis SpeculativeTaint2 Mitigation)
 
 add_library(MitigatePass SHARED
   Mitigate.cc

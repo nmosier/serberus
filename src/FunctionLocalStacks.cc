@@ -14,7 +14,7 @@
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/IntrinsicInst.h>
 
-#include "util.h"
+#include "clou/util.h"
 
 using namespace llvm;
 

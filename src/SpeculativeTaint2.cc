@@ -1,4 +1,4 @@
-#include "SpeculativeTaint2.h"
+#include "clou/SpeculativeTaint2.h"
 
 #include <map>
 #include <set>
@@ -9,8 +9,8 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/IntrinsicsX86.h>
 
-#include "util.h"
-#include "Mitigation.h"
+#include "clou/util.h"
+#include "clou/Mitigation.h"
 
 namespace clou {
 
