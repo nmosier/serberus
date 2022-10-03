@@ -33,7 +33,7 @@
 #include "clou/Log.h"
 #include "clou/analysis/NonspeculativeTaintAnalysis.h"
 #include "clou/analysis/SpeculativeTaintAnalysis.h"
-#include "clou/AllocaInitPass.h"
+#include "clou/analysis/StackInitAnalysis.h"
 
 namespace clou {
   namespace {
@@ -76,7 +76,7 @@ namespace clou {
 	AU.addRequired<NonspeculativeTaint>();
 	AU.addRequired<SpeculativeTaint>();
 	if (stack_mitigation_mode == StackMitigationMode::Lfence) {
-	  AU.addRequired<AllocaInitPass>();
+	  AU.addRequired<StackInitAnalysis>();
 	}
       }
 
@@ -205,9 +205,9 @@ namespace clou {
 	
 	auto& NST = getAnalysis<NonspeculativeTaint>();
 	auto& ST = getAnalysis<SpeculativeTaint>();
-	AllocaInitPass::Results *AIA;
+	StackInitAnalysis::Results *AIA;
 	if (stack_mitigation_mode == StackMitigationMode::Lfence) {
-	  AIA = &getAnalysis<AllocaInitPass>().results;
+	  AIA = &getAnalysis<StackInitAnalysis>().results;
 	}
 	
 	llvm::DominatorTree DT(F);

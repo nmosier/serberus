@@ -1,4 +1,4 @@
-#include "clou/AllocaInitPass.h"
+#include "clou/analysis/StackInitAnalysis.h"
 
 #include <map>
 #include <set>
@@ -20,11 +20,11 @@
 
 namespace clou {
 
-  char AllocaInitPass::ID = 0;
+  char StackInitAnalysis::ID = 0;
 
-  AllocaInitPass::AllocaInitPass(): llvm::FunctionPass(ID) {}
+  StackInitAnalysis::StackInitAnalysis(): llvm::FunctionPass(ID) {}
 
-  void AllocaInitPass::getAnalysisUsage(llvm::AnalysisUsage& AU) const {
+  void StackInitAnalysis::getAnalysisUsage(llvm::AnalysisUsage& AU) const {
     AU.addRequired<llvm::AAResultsWrapperPass>();
     AU.addRequired<LeakAnalysis>();
     AU.addRequired<SpeculativeTaint>();
@@ -32,7 +32,7 @@ namespace clou {
   }
 
 
-  bool AllocaInitPass::runOnFunction(llvm::Function& F) {
+  bool StackInitAnalysis::runOnFunction(llvm::Function& F) {
     results.clear();
     
     auto& AA = getAnalysis<llvm::AAResultsWrapperPass>().getAAResults();
@@ -104,7 +104,7 @@ namespace clou {
   }
 
 
-  void AllocaInitPass::print(llvm::raw_ostream& os, const llvm::Module *) const {
+  void StackInitAnalysis::print(llvm::raw_ostream& os, const llvm::Module *) const {
     for (const auto& [AI, result] : results) {
       os << "Allocation: " << *AI << "\n";
       os << "Stores:\n";
@@ -119,6 +119,6 @@ namespace clou {
     }
   }
 
-  static llvm::RegisterPass<AllocaInitPass> X {"clou-alloca-init", "Clou's Alloca Init Pass", true, true};
+  static llvm::RegisterPass<StackInitAnalysis> X {"clou-alloca-init", "Clou's Alloca Init Pass", true, true};
   
 }

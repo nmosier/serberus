@@ -95,13 +95,6 @@ add_library(BaselinePass SHARED
 register_llvm_pass(BaselinePass)
 target_link_libraries(BaselinePass PRIVATE Mitigation util)
 
-add_library(AllocaInitPass SHARED
-  AllocaInitPass.cc
-  include/clou/AllocaInitPass.h
-)
-register_llvm_pass(AllocaInitPass)
-target_link_libraries(AllocaInitPass PRIVATE util LeakAnalysis SpeculativeTaintAnalysis Frontier)
-
 add_library(NoSpillPublic SHARED
   NoSpillPublic.cc
 )
@@ -112,7 +105,7 @@ add_library(MitigatePass SHARED
   Mitigate.cc
 )
 register_llvm_pass(MitigatePass)
-target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaintAnalysis SpeculativeTaintAnalysis CommandLine AllocaInitPass ${Z3_LIBRARIES} MinCut)
+target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaintAnalysis SpeculativeTaintAnalysis CommandLine StackInitAnalysis ${Z3_LIBRARIES} MinCut)
 
 add_library(FunctionLocalStacks SHARED
   FunctionLocalStacks.cc
