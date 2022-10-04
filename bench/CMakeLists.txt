@@ -20,3 +20,6 @@ add_benchmark(baseline_lfence_benchmark libsodium_sha256.cc ${install_dir}/lib/l
 
 ExternalProject_Get_Property(libsodium_baseline_none install_dir)
 add_benchmark(baseline_none_benchmark libsodium_sha256.cc ${install_dir}/lib/libsodium.so ${install_dir}/include)
+
+ExternalProject_Get_Property(libsodium_ncsrs install_dir)
+add_benchmark(ncsrs_benchmark libsodium_sha256.cc ${install_dir}/lib/libsodium.so ${install_dir}/include)

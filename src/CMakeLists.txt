@@ -118,5 +118,10 @@ add_library(Attributes SHARED
 )
 register_llvm_pass(Attributes PRIVATE util)
 
+add_library(NoCalleeSavedRegistersPass SHARED
+  NoCalleeSavedRegistersPass.cc
+)
+register_llvm_pass(NoCalleeSavedRegistersPass)
+target_link_libraries(NoCalleeSavedRegistersPass PRIVATE util)
 
 add_subdirectory(check)

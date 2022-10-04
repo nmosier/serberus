@@ -137,7 +137,13 @@ libsodium_library(libsodium_cloucc_lfence
 )
 
 libsodium_library(libsodium_cloucc_fps
-  PASS CommandLine MitigatePass FunctionLocalStacks Attributes
+  PASS MitigatePass FunctionLocalStacks Attributes
   CFLAGS -O3 -fno-stack-protector
   LLVMFLAGS -x86-function-local-stacks -no-stack-slot-sharing -clou-stack-mitigation=fps
+)
+
+libsodium_library(libsodium_ncsrs
+  PASS NoCalleeSavedRegistersPass FunctionLocalStacks
+  CFLAGS -O3 -fno-stack-protector
+  CONFIGURE_OPTIONS --disable-shared
 )
