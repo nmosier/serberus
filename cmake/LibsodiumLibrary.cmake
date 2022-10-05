@@ -31,7 +31,7 @@ function(libsodium_library NAME)
   ExternalProject_Add(${NAME}
     # URL https://download.libsodium.org/libsodium/releases/libsodium-1.0.18.tar.gz
     SOURCE_DIR ${LIBSODIUM_DIR}
-    CONFIGURE_COMMAND ${LIBSODIUM_DIR}/configure --quiet --prefix=${CMAKE_CURRENT_BINARY_DIR}/${NAME}-prefix CC=${LLVM_BINARY_DIR}/bin/clang "CPPFLAGS=${LIBSODIUM_CPPFLAGS}" "CFLAGS=${LIBSODIUM_CFLAGS}" "LDFLAGS=${LIBSODIUM_LDFLAGS}" ${LIBSODIUM_CONFIGURE_OPTIONS}
+    CONFIGURE_COMMAND ${LIBSODIUM_DIR}/configure --quiet "--prefix=${CMAKE_CURRENT_BINARY_DIR}/${NAME}-prefix" "CC=${LLVM_BINARY_DIR}/bin/clang" "LD=${LLVM_BINARY_DIR}/bin/ld.lld" "CPPFLAGS=${LIBSODIUM_CPPFLAGS}" "CFLAGS=${LIBSODIUM_CFLAGS}" "LDFLAGS=${LIBSODIUM_LDFLAGS}" ${LIBSODIUM_CONFIGURE_OPTIONS}
     BUILD_COMMAND ${MAKE_EXE} -j64 2>&1 | tee ${NAME}.build.log && ${MAKE_EXE} -j64 check  # TESTS_ENVIRONMENT="true" # Don't actually run any tests; just want to build the runners.
     # BUILD_ALWAYS ON
     INSTALL_COMMAND ${MAKE_EXE} --quiet install
