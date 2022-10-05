@@ -75,7 +75,9 @@ namespace clou {
       void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
 	AU.addRequired<NonspeculativeTaint>();
 	AU.addRequired<SpeculativeTaint>();
-	if (stack_mitigation_mode == StackMitigationMode::Lfence) {
+	if (stack_mitigation_mode == StackMitigationMode::Lfence && false) {
+	  llvm::errs() << "AAGH!\n";
+	  abort();
 	  AU.addRequired<StackInitAnalysis>();
 	}
       }
@@ -95,10 +97,18 @@ namespace clou {
 	    case llvm::Intrinsic::vector_reduce_or:
 	    case llvm::Intrinsic::umax:
 	    case llvm::Intrinsic::umin:
+	    case llvm::Intrinsic::smax:
+	    case llvm::Intrinsic::smin:
 	    case llvm::Intrinsic::ctpop:
 	    case llvm::Intrinsic::bswap:
 	    case llvm::Intrinsic::x86_pclmulqdq:
 	    case llvm::Intrinsic::x86_rdrand_32:
+	    case llvm::Intrinsic::vastart:
+	    case llvm::Intrinsic::vaend:
+	    case llvm::Intrinsic::vector_reduce_add:
+	    case llvm::Intrinsic::abs:
+	    case llvm::Intrinsic::umul_with_overflow:
+	    case llvm::Intrinsic::bitreverse:
 	      return true;
 
 	    case llvm::Intrinsic::memset:
@@ -206,7 +216,7 @@ namespace clou {
 	auto& NST = getAnalysis<NonspeculativeTaint>();
 	auto& ST = getAnalysis<SpeculativeTaint>();
 	StackInitAnalysis::Results *AIA;
-	if (stack_mitigation_mode == StackMitigationMode::Lfence) {
+	if (stack_mitigation_mode == StackMitigationMode::Lfence && false) {
 	  AIA = &getAnalysis<StackInitAnalysis>().results;
 	}
 	
@@ -255,7 +265,7 @@ namespace clou {
 	  }
 	}
 
-	if (stack_mitigation_mode == StackMitigationMode::Lfence) {
+	if (stack_mitigation_mode == StackMitigationMode::Lfence && false) {
 	  // EXPERIMENTAL: Create ST-pairs for {entry, return}.
 	  for (auto& B : F) {
 	    for (auto& I : B) {

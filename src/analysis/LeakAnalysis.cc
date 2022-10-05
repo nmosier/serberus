@@ -1,5 +1,7 @@
 #include "clou/analysis/LeakAnalysis.h"
 
+#include <cassert>
+
 #include <llvm/Analysis/AliasAnalysis.h>
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Intrinsics.h>
@@ -48,6 +50,7 @@ namespace clou {
 	    if (llvm::IntrinsicInst *II = llvm::dyn_cast<llvm::IntrinsicInst>(CB)) {
 	      switch (II->getIntrinsicID()) {
 	      case llvm::Intrinsic::vector_reduce_and:
+	      case llvm::Intrinsic::vector_reduce_add:		
 	      case llvm::Intrinsic::vector_reduce_or:
 	      case llvm::Intrinsic::fshl:
 	      case llvm::Intrinsic::ctpop:
@@ -73,18 +76,32 @@ namespace clou {
 		leaks.insert(arg); 
 	      }
 	    }
-	    
-	  } else if (llvm::LoadInst *load = llvm::dyn_cast<llvm::LoadInst>(I)) {
 
+	  } else if (llvm::isa<llvm::LoadInst, llvm::AtomicRMWInst>(I)) {
+	    llvm::Instruction *load = I;
+
+	    if (llvm::isa<llvm::LoadInst>(load)) {
+	      // nothing extra to do
+	    } else if (auto *load_RMW = llvm::dyn_cast<llvm::AtomicRMWInst>(load)) {
+	      // operand is definitely leaked
+	      leaks.insert(load_RMW->getValOperand());
+	    } else {
+	      unhandled_instruction(*load);
+	    }
+	    
 	    // Find all potentially overlapping stores.
 	    for (llvm::Instruction& store : llvm::instructions(F)) {
 	      if (store.mayWriteToMemory()) {
-		const auto mri = AA.getModRefInfo(&store, load->getPointerOperand(), llvm::LocationSize::beforeOrAfterPointer());
+		const auto mri = AA.getModRefInfo(&store, util::getPointerOperand(load), llvm::LocationSize::beforeOrAfterPointer());
 		if (isModSet(mri)) {
 		  if (auto *SI = llvm::dyn_cast<llvm::StoreInst>(&store)) {
 		    leaks.insert(SI->getValueOperand());
-		  } else if (llvm::isa<llvm::CallBase>(&store)) {
+		  } else if (auto *RMW = llvm::dyn_cast<llvm::AtomicRMWInst>(&store)) {
+		    leaks.insert(RMW->getValOperand());
+		  } else if (llvm::isa<llvm::CallBase, llvm::FenceInst>(&store)) {
 		    // ignore
+		  } else if ([[maybe_unused]] auto *LI = llvm::dyn_cast<llvm::LoadInst>(&store)) {
+		    assert(LI->isAtomic());
 		  } else {
 		    unhandled_instruction(store);
 		  }
@@ -92,7 +109,7 @@ namespace clou {
 	      }
 	    }
 
-	  } else if (llvm::isa<llvm::CmpInst, llvm::GetElementPtrInst, llvm::BinaryOperator, llvm::PHINode, llvm::CastInst, llvm::SelectInst, llvm::ExtractValueInst, llvm::ExtractElementInst, llvm::InsertElementInst, llvm::ShuffleVectorInst>(I)) {
+	  } else if (llvm::isa<llvm::CmpInst, llvm::GetElementPtrInst, llvm::BinaryOperator, llvm::PHINode, llvm::CastInst, llvm::SelectInst, llvm::ExtractValueInst, llvm::ExtractElementInst, llvm::InsertElementInst, llvm::ShuffleVectorInst, llvm::FreezeInst>(I)) {
 
 	    // Leaks all input operands
 	    for (llvm::Value *op : I->operands()) {

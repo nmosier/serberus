@@ -73,6 +73,7 @@ OutputIt get_transmitter_sensitive_operands(llvm::Instruction *I,
 	  case llvm::Intrinsic::memcpy:
 	    leaked_args = all;
 	    break;
+	  case llvm::Intrinsic::vector_reduce_add:
 	  case llvm::Intrinsic::vector_reduce_and:
 	  case llvm::Intrinsic::vector_reduce_or:
 	  case llvm::Intrinsic::fshl:
@@ -84,11 +85,15 @@ OutputIt get_transmitter_sensitive_operands(llvm::Instruction *I,
 	  case llvm::Intrinsic::x86_pclmulqdq:
 	  case llvm::Intrinsic::umin:
 	  case llvm::Intrinsic::umax:
+	  case llvm::Intrinsic::smax:
+	  case llvm::Intrinsic::smin:
+	  case llvm::Intrinsic::abs:
+	  case llvm::Intrinsic::umul_with_overflow:
+	  case llvm::Intrinsic::bitreverse:
 	    leaked_args = none;
 	    break;
 	  default:
-	    llvm::errs() << "CLOU: warning: unhandled intrinsic: " << llvm::Intrinsic::getBaseName(II->getIntrinsicID()) << "\n";
-	    std::abort();
+	    warn_unhandled_intrinsic(II);
 	  }
 	  
 	  for (unsigned leaked_arg : leaked_args) {

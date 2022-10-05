@@ -34,6 +34,11 @@ if(NOT DEFINED LIBSODIUM_DIR)
 endif()
 get_filename_component(LIBSODIUM_DIR ${LIBSODIUM_DIR} ABSOLUTE BASE_DIR ${CMAKE_BINARY_DIR})
 
+if(NOT DEFINED OPENSSL_DIR)
+  message(FATAL_ERROR "OPENSSL_DIR is not defined. Please define it.")
+endif()
+get_filename_component(OPENSSL_DIR ${OPENSSL_DIR} ABSOLUTE BASE_DIR ${CMAKE_BINARY_DIR})
+
 add_compile_options(-Wall -Wextra -pedantic)
 
 # For testing infrastructure

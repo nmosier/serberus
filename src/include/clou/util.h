@@ -411,27 +411,8 @@ namespace clou {
     nonvoid_inst_iterator nonvoid_inst_end(llvm::Function& F);
     llvm::iterator_range<nonvoid_inst_iterator> nonvoid_instructions(llvm::Function& F);
 
-#if 0
-    namespace impl {
-      template <class DerivedT>
-      struct isa_filter_pred {
-	template <class BaseT>
-	bool operator()(const BaseT& base) const {
-	  return operator()(&base);
-	}
-	template <class BaseT>
-	bool operator()(const BaseT *base) const {
-	  return llvm::isa<DerivedT>(base);
-	}
-      };
-
-      template <class WrappedIteratorT, class BaseT, class DerivedT>
-      using isa_filter_iterator = llvm::filter_iterator<WrappedIteratorT, impl::isa_filter_pred<BaseT, DerivedT>, BaseT>;
-    }
-
-    template <class ItTy, class BaseT, class DerivedT>
-    using isa_mapped_iterator = llvm::mapped_iterator<isa_filter_iterator<ItTy, BaseT, DerivedT>, impl::isa_map_func<BaseT, DerivedT>, DerivedT>;
-#endif
+    llvm::Value *getPointerOperand(llvm::Instruction *I);
+    llvm::SmallVector<llvm::Value *, 3> getAccessOperands(llvm::Instruction *I);
 
   }
 }

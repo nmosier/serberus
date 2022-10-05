@@ -250,7 +250,7 @@ namespace clou::impl {
 
   void warn_unhandled_intrinsic_(llvm::Intrinsic::ID id, const char *file, size_t line) {
     llvm::errs() << file << ":" << line << ": unhandled intrinsic: " << llvm::Intrinsic::getBaseName(id) << "\n";
-    std::abort(); // Abort for now
+    std::_Exit(EXIT_FAILURE);
   }
 
   void warn_unhandled_intrinsic_(const llvm::IntrinsicInst *II, const char *file, size_t line) {
@@ -301,6 +301,35 @@ namespace clou {
     llvm::iterator_range<nonvoid_inst_iterator> nonvoid_instructions(llvm::Function& F) {
       return llvm::iterator_range<nonvoid_inst_iterator>(nonvoid_inst_begin(F), nonvoid_inst_end(F));
     }
+
+    llvm::Value *getPointerOperand(llvm::Instruction *I) {
+      if (auto *SI = llvm::dyn_cast<llvm::StoreInst>(I)) {
+	return SI->getPointerOperand();
+      } else if (auto *LI = llvm::dyn_cast<llvm::LoadInst>(I)) {
+	return LI->getPointerOperand();
+      } else if (auto *RMW = llvm::dyn_cast<llvm::AtomicRMWInst>(I)) {
+	return RMW->getPointerOperand();
+      } else if (auto *XCHG = llvm::dyn_cast<llvm::AtomicCmpXchgInst>(I)) {
+	return XCHG->getPointerOperand();
+      } else {
+	return nullptr;
+      }
+    }
+
+    llvm::SmallVector<llvm::Value *, 3> getAccessOperands(llvm::Instruction *I) {
+      if (auto *SI = llvm::dyn_cast<llvm::StoreInst>(I)) {
+	return {SI->getValueOperand()};
+      } else if (auto *LI = llvm::dyn_cast<llvm::LoadInst>(I)) {
+	return {LI};
+      } else if (auto *RMW = llvm::dyn_cast<llvm::AtomicRMWInst>(I)) {
+	return {RMW->getValOperand(), RMW};
+      } else if (auto *XCHG = llvm::dyn_cast<llvm::AtomicCmpXchgInst>(I)) {
+	return {XCHG->getCompareOperand(), XCHG->getNewValOperand(), XCHG};
+      } else {
+	return {};
+      }
+    }    
+
   }
   
 }

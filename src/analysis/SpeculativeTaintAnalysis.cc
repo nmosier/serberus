@@ -64,6 +64,7 @@ namespace clou {
 	if (llvm::IntrinsicInst *II = llvm::dyn_cast<llvm::IntrinsicInst>(&I)) {
 	  if (!II->getType()->isVoidTy() && !II->isAssumeLikeIntrinsic()) {
 	    switch (II->getIntrinsicID()) {
+	    case llvm::Intrinsic::vector_reduce_add:
 	    case llvm::Intrinsic::vector_reduce_and:
 	    case llvm::Intrinsic::vector_reduce_or:
 	    case llvm::Intrinsic::fshl:
@@ -76,6 +77,11 @@ namespace clou {
 	    case llvm::Intrinsic::bswap:
 	    case llvm::Intrinsic::x86_pclmulqdq:
 	    case llvm::Intrinsic::x86_rdrand_32:
+	    case llvm::Intrinsic::smax:
+	    case llvm::Intrinsic::smin:
+	    case llvm::Intrinsic::abs:
+	    case llvm::Intrinsic::umul_with_overflow:
+	    case llvm::Intrinsic::bitreverse:
 	      // Passthrough
 	      for (llvm::Value *arg_V : II->args()) {
 		if (llvm::Instruction *arg_I = llvm::dyn_cast<llvm::Instruction>(arg_V)) {

@@ -145,7 +145,7 @@ libsodium_library(libsodium_cloucc_fps
 )
 
 libsodium_library(libsodium_ncsrs
-  PASS FunctionLocalStacks NoCalleeSavedRegistersPass
+  PASS FunctionLocalStacks
   CFLAGS -O3 -fno-stack-protector
   LLVMFLAGS -x86-function-local-stacks
 )

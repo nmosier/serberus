@@ -79,6 +79,7 @@ namespace clou {
 	      break;
 
 	    case llvm::Intrinsic::vector_reduce_and:
+	    case llvm::Intrinsic::vector_reduce_add:	      
 	    case llvm::Intrinsic::vector_reduce_or:
 	    case llvm::Intrinsic::fshl:
 	    case llvm::Intrinsic::ctpop:
@@ -89,7 +90,12 @@ namespace clou {
 	    case llvm::Intrinsic::x86_pclmulqdq:
 	    case llvm::Intrinsic::umin:
 	    case llvm::Intrinsic::umax:
+	    case llvm::Intrinsic::smin:
+	    case llvm::Intrinsic::smax:
+	    case llvm::Intrinsic::abs:	      
 	    case llvm::Intrinsic::x86_rdrand_32:
+	    case llvm::Intrinsic::umul_with_overflow:
+	    case llvm::Intrinsic::bitreverse:
 	      taint_rule = Taint::Passthrough;
 	      break;
 
@@ -121,34 +127,38 @@ namespace clou {
 	}
       }
 
-      // Propagate public load to all memory accesses of load.
-      for (llvm::LoadInst& src : util::instructions<llvm::LoadInst>(F)) {
-	if (pub_vals.contains(&src)) {
-	  for (auto& dst : llvm::instructions(F)) {
-	    if (llvm::isa<llvm::LoadInst, llvm::StoreInst>(&dst)) {
-	      if (AA.isMustAlias(src.getPointerOperand(), llvm::getPointerOperand(&dst))) {
-		if (auto *dst_SI = llvm::dyn_cast<llvm::StoreInst>(&dst)) {
-		  pub_vals.insert(dst_SI->getValueOperand());
-		} else if (auto *dst_LI = llvm::dyn_cast<llvm::LoadInst>(&dst)) {
-		  pub_vals.insert(dst_LI);
-		} else {
-		  unhandled_instruction(dst);
-		}
+      // Propagate taint through all memory access instructions.
+      for (llvm::Instruction& src : llvm::instructions(F)) {
+	llvm::Value *src_ptr = util::getPointerOperand(&src);
+	const auto src_vals = util::getAccessOperands(&src);
+	const auto src_vals_tainted = llvm::any_of(src_vals, [&] (llvm::Value *access) {
+	  return pub_vals.contains(access);
+	});
+	if (src_ptr && src_vals_tainted) {
+	  llvm::copy(src_vals, std::inserter(pub_vals, pub_vals.end())); // all source values are tainted
+	  for (llvm::Instruction& dst : llvm::instructions(F)) {
+	    if (llvm::Value *dst_ptr = util::getPointerOperand(&dst)) {
+	      if (AA.isMustAlias(src_ptr, dst_ptr)) {
+		llvm::copy(util::getAccessOperands(&dst), std::inserter(pub_vals, pub_vals.end()));
 	      }
 	    }
 	  }
 	}
       }
 
-      // Normal untaint propagation
       for (llvm::Instruction& I : util::nonvoid_instructions(F)) {
 	if (auto *GEP = llvm::dyn_cast<llvm::GetElementPtrInst>(&I)) {
 	  addAllOperands(GEP);
-	} else if (llvm::isa<llvm::CmpInst, llvm::CastInst, llvm::BinaryOperator, llvm::SelectInst, llvm::PHINode>(&I)) {
+	} else if (llvm::isa<llvm::CmpInst, llvm::CastInst, llvm::BinaryOperator, llvm::SelectInst, llvm::PHINode, llvm::FreezeInst>(&I)) {
 	  if (pub_vals.contains(&I)) {
 	    addAllOperands(&I);
 	  }
-	} else if (llvm::isa<llvm::CallBase, llvm::LoadInst, llvm::AllocaInst>(&I)) {
+	} else if (auto *UI = llvm::dyn_cast<llvm::UnaryOperator>(&I)) {
+	  assert(UI->getOpcode() == llvm::UnaryOperator::UnaryOps::FNeg);
+	  if (pub_vals.contains(&I)) {
+	    addAllOperands(&I);
+	  }
+	} else if (llvm::isa<llvm::CallBase, llvm::LoadInst, llvm::AllocaInst, llvm::AtomicRMWInst, llvm::AtomicCmpXchgInst>(&I)) {
 	  // ignore: already handled
 	} else if (llvm::isa<llvm::InsertElementInst, llvm::ShuffleVectorInst, llvm::ExtractElementInst, llvm::ExtractValueInst>(&I)) {
 	  // ignore: make more precise later
