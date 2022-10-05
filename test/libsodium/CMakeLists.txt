@@ -113,12 +113,14 @@ libsodium_library(libsodium_baseline_none
 
 libsodium_library(libsodium_baseline_lfence
   PASS # BaselinePass # For now, don't include this.
-  CFLAGS -O3 -fno-stack-protector
+  CFLAGS -O3 -fno-stack-protector -mretpoline
+  LDFLAGS -Wl,-z,retpolineplt
   LLVMFLAGS -x86-speculative-load-hardening -x86-slh-lfence -x86-slh-fence-call-and-ret
 )
 
 libsodium_library(libsodium_baseline_slh
-  CFLAGS -O3 -mretpoline
+  CFLAGS -O3 -fno-stack-protector -mretpoline
+  LDFLAGS -Wl,-z,retpolineplt
   LLVMFLAGS -x86-speculative-load-hardening
 )
 
@@ -137,13 +139,14 @@ libsodium_library(libsodium_cloucc_lfence
 )
 
 libsodium_library(libsodium_cloucc_fps
-  PASS MitigatePass FunctionLocalStacks Attributes
+  PASS MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   CFLAGS -O3 -fno-stack-protector
   LLVMFLAGS -x86-function-local-stacks -no-stack-slot-sharing -clou-stack-mitigation=fps
 )
 
 libsodium_library(libsodium_ncsrs
-  PASS NoCalleeSavedRegistersPass FunctionLocalStacks
+  PASS FunctionLocalStacks NoCalleeSavedRegistersPass
   CFLAGS -O3 -fno-stack-protector
-  CONFIGURE_OPTIONS --disable-shared
+  LLVMFLAGS -x86-function-local-stacks
 )
+

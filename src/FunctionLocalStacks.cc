@@ -539,25 +539,31 @@ namespace {
       assert(F.getParent()->getNamedAlias(wrapperName(F).str()) != nullptr);
     }
 
+    void replaceUsesForUser(llvm::Function *oldF, llvm::Function *newF, llvm::User *U) {
+      if (auto *C = llvm::dyn_cast<llvm::CallInst>(U)) {
+	if (C->getFunction() != newF) {
+	  C->replaceUsesOfWith(oldF, newF);
+	}
+      } else if (llvm::isa<llvm::Function>(U)) {
+	// ignore
+      } else if (auto *G = llvm::dyn_cast<llvm::GlobalVariable>(U)) {
+	if (G->hasInitializer()) {
+	  replaceUsesForUser(oldF, newF, G->getInitializer());
+	}
+      } else if (auto *I = llvm::dyn_cast<llvm::Instruction>(U)) {
+	I->replaceUsesOfWith(oldF, newF);
+      } else if (auto *C = llvm::dyn_cast<llvm::Constant>(U)) {
+	C->handleOperandChange(oldF, newF);
+      } else {
+	unhandled_value(*U);
+      }
+    }
+
     void replaceUses(Function *oldF, Function *newF) {
       assert(newF->size() == 1);
-
       for (User *U : oldF->users()) {
-	if (CallInst *C = dyn_cast<CallInst>(U)) {
-	  if (C->getFunction() == newF) {
-	    continue;
-	  }
-	}
-	
-	if (Constant *C = dyn_cast<Constant>(U)) {
-	  C->handleOperandChange(oldF, newF);
-	  continue;
-	}
-	
-	U->replaceUsesOfWith(oldF, newF);
+	replaceUsesForUser(oldF, newF, U);
       }
-      
-      // oldF->replaceUsesOutsideBlock(newF, &newF->getEntryBlock());
     }
 		       
   };
