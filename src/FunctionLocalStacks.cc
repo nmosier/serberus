@@ -24,7 +24,7 @@ constexpr const char *sep = "_"; // TODO: get rid of
 
 namespace {
 
-  constexpr uint64_t stack_size = 0x20000; // TODO: make these command-line parameters
+  constexpr uint64_t stack_size = 0x8000; // TODO: make these command-line parameters
   const Align max_align (256); // TODO: make command-line parameter
 
   struct FunctionLocalStacks final: public ModulePass {
