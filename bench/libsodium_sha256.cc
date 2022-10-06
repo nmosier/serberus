@@ -2,7 +2,7 @@
 
 #include <sodium.h>
 
-#define CLOBBER_REGS() asm volatile ("" ::: "rbx", "rbp", "r12", "r13", "r14", "r15")
+#define CLOBBER_REGS() asm volatile ("" ::: "r12", "r13", "r14", "r15")
 
 // TODO: Could inline this.
 void sha256(const unsigned char *in, size_t in_len) {
