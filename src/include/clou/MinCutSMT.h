@@ -2,14 +2,19 @@
 
 #include <map>
 #include <vector>
+#include <cstdlib>
 
 #include <z3++.h>
 
 #include <llvm/ADT/StringRef.h>
+#include <llvm/Support/WithColor.h>
 
 #include "MinCutBase.h"
+#include "util.h"
 
 namespace clou {
+
+  constexpr bool mincut_optimize_collapse = true;
 
   template <class Node, class Weight>
   class MinCutSMT_Base : public MinCutBase<Node, Weight> {
@@ -95,32 +100,47 @@ namespace clou {
 	}
       }
 
-#if 0
-      if (optimized_min_cut) {
-	simplifyGraph(this->G, Grev);
-      }
-#endif
-
       // Name nodes
-      std::map<Node, size_t> ids;
+      std::map<Node, std::size_t> ids;
+      const auto add_id = [&] (const auto& node) {
+	ids.emplace(node, ids.size());
+      };
       for (const auto& [src, dsts] : this->G) {
-	ids.emplace(src, ids.size());
-	for (const auto& [dst, _] : dsts) {
-	  ids.emplace(dst, ids.size());
-	}
+	add_id(src);
+	for (const auto& [dst, _] : dsts)
+	  add_id(dst);
       }
 
       // Collect sources and transmitters
       std::map<Node, size_t> sources;
+      assign_taint_ids(std::inserter(sources, sources.end()));
+      std::set<size_t> source_ids;
+      for (const auto& [_, source_id] : sources)
+	source_ids.insert(source_id);
       std::set<Node> transmitters;
       for (const ST& st : this->sts) {
-	sources.emplace(st.s, sources.size());
 	transmitters.insert(st.t);
-      }      
+      }
+
+      // for debugging
+#if 0
+      {
+	llvm::errs() << "node mapping:\n";
+	for (const auto& [node, id] : ids) {
+	  llvm::errs() << "  " << node << " --> " << id << "\n";
+	}
+	llvm::errs() << "source index mapping:\n";
+	for (const auto& [source, id] : sources) {
+	  llvm::errs() << "  " << source << " --> " << id << "\n";
+	}
+      }
+#endif
       
       z3::context ctx;
-      z3::expr empty_set = get_empty_set(ctx, sources.size());
+      z3::expr empty_set = get_empty_set(ctx, source_ids.size());
       z3::sort set_sort = empty_set.get_sort();
+
+      std::cerr << "empty_set = " << empty_set << "\n";
 
       // Variable name generators
       const auto node_name = [&ids] (const Node& node, llvm::StringRef suffix) -> std::string {
@@ -196,7 +216,13 @@ namespace clou {
 
       case z3::unsat:
       case z3::unknown:
-	std::abort();
+#if 0
+	for (const z3::expr& e : solver.assertions()) {
+	  std::cerr << e.simplify() << "\n";
+	}
+#endif
+	llvm::WithColor(llvm::errs(), llvm::HighlightColor::Error) << "internal error: Z3 solver query returned " << util::make_string_std(check_res) << "\n";
+	std::_Exit(EXIT_FAILURE);
       }
 
       z3::model model = solver.get_model();
@@ -216,6 +242,53 @@ namespace clou {
     virtual z3::expr set_union(const z3::expr& a, const z3::expr& b) const = 0;
     virtual z3::expr set_add(const z3::expr& set, size_t i) const = 0;
     virtual z3::expr set_member(const z3::expr& set, size_t i) const = 0;
+
+  private:
+    template <class OutputIt>
+    OutputIt assign_taint_ids_collapse(OutputIt out) {
+      std::map<Node, std::set<Node>> s_ts, t_ss;
+      for (const auto& st : this->sts) {
+	s_ts[st.s].insert(st.t);
+	t_ss[st.t].insert(st.s);
+      }
+
+      std::map<std::set<Node>, std::set<Node>> ts_to_ss, ss_to_ts;
+      for (const auto& [s, ts] : s_ts)
+	ts_to_ss[ts].insert(s);
+      for (const auto& [t, ss] : t_ss)
+	ss_to_ts[ss].insert(t);
+
+      std::set<std::set<Node>> gsrcs, gsinks;
+      for (const auto& [_, ss] : ts_to_ss)
+	gsrcs.insert(ss);
+      for (const auto& [_, ts] : ss_to_ts)
+	gsinks.insert(ts);
+
+      for (unsigned i = 0; const auto& gsrc : gsrcs) {
+	for (const auto& src : gsrc)
+	  *out++ = std::make_pair(src, i);
+	++i;
+      }
+
+      // TODO: add validation?
+      return out;
+    }
+    
+    template <class OutputIt>
+    OutputIt assign_taint_ids(OutputIt out) {
+      if (mincut_optimize_collapse) {
+	return assign_taint_ids_collapse(out);
+      } else {
+	std::set<Node> sources;
+	for (const auto& st : this->sts)
+	  sources.insert(st.s);
+	for (unsigned i = 0; const auto& source : sources) {
+	  *out++ = std::make_pair(source, i);
+	  ++i;
+	}
+	return out;
+      }
+    }
   };
 
   template <class Node, class Weight>

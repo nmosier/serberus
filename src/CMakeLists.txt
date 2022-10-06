@@ -20,12 +20,19 @@ add_library(Metadata SHARED
   include/clou/Metadata.h
 )
 
+add_library(util SHARED
+  util.cc
+  include/clou/util.h
+)
+target_link_libraries(util PRIVATE Metadata)
+
 add_library(MinCut SHARED
   MinCutBase.cc
   include/clou/MinCutBase.h
   include/clou/MinCutSMT.h
 )
 target_link_libraries(MinCut INTERFACE ${Z3_LIBRARIES})
+target_link_libraries(MinCut PUBLIC util)
 target_link_directories(MinCut INTERFACE ${Z3_LIBRARY_DIRS})
 target_include_directories(MinCut INTERFACE ${Z3_INCLUDE_DIRS})
 
@@ -45,11 +52,6 @@ add_library(Log SHARED
   include/clou/Log.h
 )
 
-add_library(util STATIC
-  util.cc
-  include/clou/util.h
-)
-target_link_libraries(util PRIVATE Metadata)
 
 add_library(InstructionPass OBJECT
   InstructionPass.cc

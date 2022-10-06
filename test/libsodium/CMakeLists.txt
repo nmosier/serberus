@@ -142,6 +142,7 @@ libsodium_library(libsodium_cloucc_fps
   PASS MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   CFLAGS -O3 -fno-stack-protector
   LLVMFLAGS -x86-function-local-stacks -no-stack-slot-sharing -clou-stack-mitigation=fps
+  CLOUFLAGS -clou-log=${CMAKE_CURRENT_BINARY_DIR}/logs
 )
 
 libsodium_library(libsodium_ncsrs

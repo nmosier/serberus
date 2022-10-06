@@ -414,6 +414,28 @@ namespace clou {
     llvm::Value *getPointerOperand(llvm::Instruction *I);
     llvm::SmallVector<llvm::Value *, 3> getAccessOperands(llvm::Instruction *I);
 
+    namespace impl {
+      template <class Stream, class... Ts>
+      void make_string(Stream& os, const Ts&... args) {
+	((os << args), ...);
+      }
+    }
+
+    template <class... Ts>
+    std::string make_string_std(const Ts&... args) {
+      std::stringstream ss;
+      impl::make_string(ss, args...);
+      return ss.str();
+    }
+
+    template <class... Ts>
+    std::string make_string_llvm(const Ts&... args) {
+      std::string s;
+      llvm::raw_string_ostream os(s);
+      impl::make_string(os, args...);
+      return s;
+    }
+    
   }
 }
 

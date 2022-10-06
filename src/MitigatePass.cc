@@ -7,6 +7,7 @@
 #include <sstream>
 #include <vector>
 #include <variant>
+#include <iomanip>
 
 #include <llvm/Analysis/AliasAnalysis.h>
 #include <llvm/Analysis/CallGraph.h>
@@ -34,6 +35,51 @@
 #include "clou/analysis/NonspeculativeTaintAnalysis.h"
 #include "clou/analysis/SpeculativeTaintAnalysis.h"
 #include "clou/analysis/StackInitAnalysis.h"
+
+using VSet = std::set<llvm::Value *>;
+using VSetSet = std::set<VSet>;
+using VMap = std::map<llvm::Value *, VSet>;
+
+#if 0
+namespace llvm {
+  llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const llvm::Value *V) {
+    const std::string s = V->getNameOrAsOperand();
+    if (s == "<badref>") {
+      os << *V;
+    } else {
+      os << s;
+    }
+    return os;
+  }
+  
+llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const VSet& Vs) {
+  os << "{";
+  for (auto it = Vs.begin(); it != Vs.end(); ++it) {
+    if (it != Vs.begin())
+      os << ", ";
+    os << *it;
+  }
+  os << "}";
+  return os;
+}
+
+llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const VSetSet& VSS) {
+  os << "{\n";
+  for (const auto& VS : VSS)
+    os << "  " << VS << "\n";
+  os << "}";
+  return os;
+}
+
+llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const VMap& VM) {
+  os << "{\n";
+  for (const auto& [V, VS] : VM) {
+    os << "  " << V << " --> " << VS << "\n";
+  }
+  os << "}";
+}
+}
+#endif
 
 namespace clou {
   namespace {
@@ -109,6 +155,9 @@ namespace clou {
 	    case llvm::Intrinsic::abs:
 	    case llvm::Intrinsic::umul_with_overflow:
 	    case llvm::Intrinsic::bitreverse:
+	    case llvm::Intrinsic::cttz:
+	    case llvm::Intrinsic::usub_sat:
+	    case llvm::Intrinsic::fmuladd:
 	      return true;
 
 	    case llvm::Intrinsic::memset:
@@ -324,59 +373,93 @@ namespace clou {
 	}
 
 	// Run algorithm to obtain min-cut
+	const clock_t solve_start = clock();
 	A.run();
-	auto& cut_edges = A.cut_edges;	
+	const clock_t solve_stop = clock();
+	const float solve_duration = (static_cast<float>(solve_stop) - static_cast<float>(solve_start)) / CLOCKS_PER_SEC;
+	auto& cut_edges = A.cut_edges;
 
 	// Output DOT graph, color cut edges
-	if (!emit_dot.getValue().empty()) {
-	  std::stringstream path;
-	  path << emit_dot.getValue() << "/" << F.getName().str() << ".dot";
-	  std::ofstream f(path.str());
-	  f << "digraph {\n";
+	if (ClouLog) {
+	  // emit dot
+	  {
+	    std::stringstream path;
+	    path << ClouLogDir << "/" << F.getName().str() << ".dot";
+	    std::ofstream f(path.str());
+	    f << "digraph {\n";
 
-	  // collect stores + sinks
-	  std::map<Node, std::size_t> nodes;
-	  for (llvm::BasicBlock& B : F) {
-	    for (llvm::Instruction& I : B) {
-	      nodes.emplace(&I, nodes.size());
-	    }
-	  }
-
-	  std::map<Node, std::string> special;
-	  for (const Alg::ST& st : A.sts) {
-	    special[st.t] = "blue"; // TODO: used to be green, but sometimes nodes are both sources and sinks.
-	    special[st.s] = "blue";
-	  }
-	    
-	  for (const auto& [node, i] : nodes) {
-	    f << "node" << i << " [label=\"" << node << "\"";
-	    if (special.contains(node)) {
-	      f << ", style=filled, fontcolor=white, fillcolor=" << special[node] << "";
-	    }
-	    f << "];\n";
-	  }
-
-	  // Add ST-pairs as dotted gray edges
-	  for (const auto& st : A.sts) {
-	    f << "node" << nodes.at(st.s) << " -> node" << nodes.at(st.t) << " [style=\"dashed\", color=\"blue\", penwidth=3]\n";
-	  }
-	  
-            
-	  for (const auto& [u, usucc] : G) {
-	    for (const auto& [v, weight] : usucc) {
-	      if (weight > 0) {
-		f << "node" << nodes.at(u) << " -> " << "node" << nodes.at(v) << " [label=\"" << weight << "\", penwidth=3";
-		if (std::find(cut_edges.begin(),
-			      cut_edges.end(),
-			      Alg::Edge({.src = u, .dst = v})) != cut_edges.end()) {
-		  f << ", color=\"red\"";
-		}
-		f << "];\n";
+	    // collect stores + sinks
+	    std::map<Node, std::size_t> nodes;
+	    for (llvm::BasicBlock& B : F) {
+	      for (llvm::Instruction& I : B) {
+		nodes.emplace(&I, nodes.size());
 	      }
 	    }
-	  }
+
+	    std::map<Node, std::string> special;
+	    for (const Alg::ST& st : A.sts) {
+	      special[st.t] = "blue"; // TODO: used to be green, but sometimes nodes are both sources and sinks.
+	      special[st.s] = "blue";
+	    }
+	    
+	    for (const auto& [node, i] : nodes) {
+	      f << "node" << i << " [label=\"" << node << "\"";
+	      if (special.contains(node)) {
+		f << ", style=filled, fontcolor=white, fillcolor=" << special[node] << "";
+	      }
+	      f << "];\n";
+	    }
+
+	    // Add ST-pairs as dotted gray edges
+	    for (const auto& st : A.sts) {
+	      f << "node" << nodes.at(st.s) << " -> node" << nodes.at(st.t) << " [style=\"dashed\", color=\"blue\", penwidth=3]\n";
+	    }
+	  
             
-	  f << "}\n";	    
+	    for (const auto& [u, usucc] : G) {
+	      for (const auto& [v, weight] : usucc) {
+		if (weight > 0) {
+		  f << "node" << nodes.at(u) << " -> " << "node" << nodes.at(v) << " [label=\"" << weight << "\", penwidth=3";
+		  if (std::find(cut_edges.begin(),
+				cut_edges.end(),
+				Alg::Edge({.src = u, .dst = v})) != cut_edges.end()) {
+		    f << ", color=\"red\"";
+		  }
+		  f << "];\n";
+		}
+	      }
+	    }
+            
+	    f << "}\n";
+	  }
+
+	  // emit stats
+	  {
+	    std::stringstream ss;
+	    ss << ClouLogDir << "/" << F.getName().str() << ".txt";
+	    std::ofstream ofs(ss.str());
+	    llvm::raw_os_ostream os(ofs);
+	    os << "function_name: " << F.getName() << "\n";
+	    ofs << "solution_time: " << std::setprecision(3) << solve_duration << "s\n";
+	    ofs << "num_sts: " << A.sts.size() << "\n";
+	    VSet sources, sinks;
+	    for (const auto& st : A.sts) {
+	      sources.insert(st.s.V);
+	      sinks.insert(st.t.V);
+	    }
+	    ofs << "num_distinct_sources: " << sources.size() << "\n";
+	    ofs << "num_distinct_sinks: " << sinks.size() << "\n";
+
+	    /* Potential optimization:
+	     * Try to reduce to product whereever possible.
+	     */
+	    {
+	      VSetSet gsources, gsinks;
+	      collapseOptimization(A.sts, gsources, gsinks);
+	      ofs << "num_source_groups: " << sources.size() << " " << gsources.size() << "\n";
+	      ofs << "num_sink_groups: " << sinks.size() << " " << gsinks.size() << "\n";
+	    }
+	  }
 	}
 
 	// Mitigations
@@ -414,6 +497,67 @@ namespace clou {
 	  return &B->front();
 	} else {
 	  return dst;
+	}
+      }
+
+      template <class STs>
+      static void collapseOptimization(const STs& sts, VSetSet& src_out, VSetSet& sink_out) {
+	VSet src_in, sink_in;
+	for (const auto& st : sts) {
+	  src_in.insert(st.s.V);
+	  sink_in.insert(st.t.V);
+	}
+  
+	VMap s_ts, t_ss;
+	for (const auto& st : sts) {
+	  s_ts[st.s.V].insert(st.t.V);
+	  t_ss[st.t.V].insert(st.s.V);
+	}
+
+	// Flip maps
+	std::map<std::set<llvm::Value *>, std::set<llvm::Value *>> ts_to_ss, ss_to_ts;
+	for (const auto& [s, ts] : s_ts) {
+	  ts_to_ss[ts].insert(s);
+	}
+	for (const auto& [t, ss] : t_ss) {
+	  ss_to_ts[ss].insert(t);
+	}
+
+	// Copy out sets
+	for (const auto& [_, ss] : ts_to_ss) {
+	  src_out.insert(ss);
+	}
+	for (const auto& [_, ts] : ss_to_ts) {
+	  sink_out.insert(ts);
+	}
+
+	// Validate results
+	{
+	  VSet src_out_flat, sink_out_flat;
+	  for (const auto& gsrc : src_out) {
+	    src_out_flat.insert(gsrc.begin(), gsrc.end());
+	  }
+	  for (const auto& gsink : sink_out) {
+	    sink_out_flat.insert(gsink.begin(), gsink.end());
+	  }
+#if 0
+	  if (src_out_flat != src_in || sink_out_flat != sink_in) {
+	    auto& os = llvm::errs();
+	    os << "sts:\n";
+	    for (const auto& st : sts) {
+	      os << "  (" << st.s.V << ", " << st.t.V << ")\n";
+	    }
+	    os << "src_in: " << src_in << "\n";
+	    os << "sink_in: " << sink_in << "\n";
+	    os << "s_ts: " << s_ts << "\n";
+	    os << "t_ss: " << t_ss << "\n";
+	    os << "src_out: " << src_out << "\n";
+	    os << "sink_out: " << sink_out << "\n";
+	    
+	  }
+#endif	  
+	  assert(src_out_flat == src_in);
+	  assert(sink_out_flat == sink_in);
 	}
       }
     };
