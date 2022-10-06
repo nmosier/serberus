@@ -1,0 +1,46 @@
+#!${Python3_EXECUTABLE}
+
+import argparse
+import sys
+import os
+import tempfile
+import json
+
+parser = argparse.ArgumentParser()
+parser.add_argument('tests')
+parser.add_argument('outdir')
+
+args = parser.parse_args()
+
+with open(args.tests) as f:
+    tests = json.load(f)
+
+baseline = None
+partials = []
+fulls = []
+
+os.makedirs(args.outdir, exist_ok = True)
+
+for test in tests:
+    outpath = '{}/{}.json'.format(args.outdir, test['name'])
+    os.system('{} --benchmark_out={} --benchmark_out_format=json'.format(test['path'], outpath))
+    with open(outpath) as f:
+        j = json.load(f)
+    record = {'name': test['name'], 'bytes': [], 'time': []}
+    for d in j['benchmarks']:
+        record['bytes'].append(int(d['name'].split('/')[-1]))
+        record['time'].append(d['cpu_time'])
+    k = test['type']
+    if k == 'baseline':
+        baseline = record
+    elif k == 'partial':
+        partials.append(record)
+    elif k == 'full':
+        fulls.append(record)
+    else:
+        assert False
+
+
+print('baseline:', baseline)
+print('partials:', partials)
+print('fulls:', fulls)

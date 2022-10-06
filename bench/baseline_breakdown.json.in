@@ -1,0 +1,37 @@
+[
+    {
+	"name": "baseline_none",
+	"path": "$<TARGET_FILE:baseline_none_benchmark>",
+	"type": "baseline"
+    },
+    {
+	"name": "baseline_lfence",
+	"path": "$<TARGET_FILE:baseline_lfence_benchmark>",
+	"type": "partial"
+    },
+    {
+	"name": "baseline_slh",
+	"path": "$<TARGET_FILE:baseline_slh_benchmark>",
+	"type": "partial"
+    },
+    {
+	"name": "baseline_retpoline",
+	"path": "$<TARGET_FILE:baseline_retpoline_benchmark>",
+	"type": "partial"
+    },
+    {
+	"name": "baseline_ssbd",
+	"path": "$<TARGET_FILE:baseline_ssbd_benchmark>",
+	"type": "partial"
+    },
+    {
+	"name": "baseline_lfence+retpoline+ssbd",
+	"path": "$<TARGET_FILE:baseline_lfence+retpoline+ssbd_benchmark>",
+	"type": "full"
+    },
+    {
+	"name": "baseline_slh+retpoline+ssbd",
+	"path": "$<TARGET_FILE:baseline_slh+retpoline+ssbd_benchmark>",
+	"type": "full"
+    }
+]
