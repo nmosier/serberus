@@ -12,6 +12,7 @@ find_package(PkgConfig REQUIRED)
 # pkg_check_modules(Libprofiler libprofiler)
 pkg_check_modules(Libunwind REQUIRED libunwind-generic)
 # pkg_check_modules(GoogleBenchmark REQUIRED benchmark)
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 # message("GoogleBenchmark @ ${GoogleBenchmark_LIBRARY_DIRS}")
 # pkg_check_modules(Capstone REQUIRED capstone)

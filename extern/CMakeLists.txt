@@ -1,9 +1,11 @@
 include(FetchContent)
 set(BENCHMARK_ENABLE_TESTING OFF)
+set(CMAKE_BUILD_TYPE Release)
 FetchContent_Declare(
   google-benchmark
   GIT_REPOSITORY https://github.com/google/benchmark.git
-  GIT_TAG v1.7.0
+  GIT_TAG main
+  # CMAKE_ARGS -DCMAKE_BUILD_TYPE=Release
 )
 FetchContent_MakeAvailable(google-benchmark)
 
@@ -14,7 +16,7 @@ include(ExternalProject)
 ExternalProject_Add(
   z3
   GIT_REPOSITORY https://github.com/Z3Prover/z3.git
-  GIT_TAG z3-4.11.2
+  GIT_BRANCH main
 )
 ExternalProject_Get_Property(z3 install_dir)
 set(Z3_LIBRARIES z3)

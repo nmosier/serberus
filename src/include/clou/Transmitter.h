@@ -104,9 +104,18 @@ namespace clou {
       if (llvm::Value *RV = RI->getReturnValue()) {
 	*out++ = TransmitterOperand(TransmitterOperand::PSEUDO, RV);
       }
-    } else if (llvm::isa<llvm::CmpInst, llvm::CastInst, llvm::PHINode, llvm::AllocaInst, llvm::BinaryOperator,
+    } else if (auto *BO = llvm::dyn_cast<llvm::BinaryOperator>(I)) {
+      switch (BO->getOpcode()) {
+      case llvm::BinaryOperator::BinaryOps::UDiv:
+      case llvm::BinaryOperator::BinaryOps::SDiv:
+	for (llvm::Value *op : BO->operands())
+	  *out++ = TransmitterOperand(TransmitterOperand::TRUE, op);
+	break;
+      default: break;
+      }
+    } else if (llvm::isa<llvm::CmpInst, llvm::CastInst, llvm::PHINode, llvm::AllocaInst,
 	       llvm::GetElementPtrInst, llvm::ShuffleVectorInst, llvm::InsertElementInst, llvm::SelectInst,
-	       llvm::ExtractElementInst, llvm::ExtractValueInst>(I)) {
+	       llvm::ExtractElementInst, llvm::ExtractValueInst, llvm::FreezeInst, llvm::UnaryOperator>(I)) {
       // no leaked operands
     } else {
       unhandled_instruction(*I);

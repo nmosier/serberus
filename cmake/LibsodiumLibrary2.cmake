@@ -41,6 +41,7 @@ function(libsodium_library NAME)
     COMMAND touch ${STAMP_DIR}/configure.stamp
     COMMENT "Configuring libsodium library ${NAME}"
     WORKING_DIRECTORY ${BUILD_DIR}
+    DEPENDS ${LIBSODIUM_DEPENDS}
   )
 
   # clean step

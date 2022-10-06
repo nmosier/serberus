@@ -1,5 +1,7 @@
 include(LibsodiumLibrary2)
 
+make_directory(logs)
+
 function(libsodium_benchmark_library NAME)
   libsodium_library(${NAME}
     CFLAGS -O3 -fno-stack-protector
@@ -26,7 +28,8 @@ set(baseline_retpoline_args
   LDFLAGS -Wl,-z,retpolineplt
 )
 set(baseline_ssbd_args
-  # TODO
+  LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:libssbd> -L$<TARGET_FILE_DIR:libssbd> -l$<TARGET_FILE_BASE_NAME:libssbd>
+  DEPENDS libssbd
 )
 
 # Component Mitigations

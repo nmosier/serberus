@@ -1,7 +1,8 @@
 set(MERGE_COUNTS_PY ${CMAKE_SOURCE_DIR}/scripts/merge_counts.py)
 set(SYMBOLIZE_SH ${CMAKE_SOURCE_DIR}/scripts/srclocs2.sh)
 
-function(libsodium_library NAME)
+function(libsodium_library NAME_)
+  set(NAME ${NAME_}_tmp)
   set(multi_value_args DEPENDS PASS CPPFLAGS CFLAGS LDFLAGS LLVMFLAGS CLOUFLAGS CONFIGURE_OPTIONS)
   cmake_parse_arguments(LIBSODIUM "" "" "${multi_value_args}" ${ARGN})
 
@@ -43,5 +44,8 @@ function(libsodium_library NAME)
     WORKING_DIRECTORY ${BINARY_DIR}
   )
   ExternalProject_Add_StepDependencies(${NAME} clean ${LIBSODIUM_DEPENDS}) # TODO: Merge this into Add_Step above?
+
+  add_
   
 endfunction()
+

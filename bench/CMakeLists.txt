@@ -1,5 +1,11 @@
 add_link_options(-fPIE -fPIC -pthread)
 
+configure_file(breakdown.py.in breakdown.py)
+file(GENERATE
+  OUTPUT baseline_breakdown.json
+  INPUT baseline_breakdown.json.in
+)
+
 function(add_benchmark NAME SRC LIB INC)
   message(LIB=${LIB})
   add_executable(${NAME} ${SRC})
@@ -8,7 +14,7 @@ function(add_benchmark NAME SRC LIB INC)
     COMMAND ${NAME} --benchmark_out=${NAME}.json --benchmark_out_format=json
     DEPENDS ${NAME}
   )
-  add_custom_target(${NAME}_json ALL
+  add_custom_target(${NAME}_json
     DEPENDS ${NAME}.json
   )
 endfunction()
@@ -19,6 +25,8 @@ set(libsodium_benchmark_libraries
   libsodium_baseline_slh
   libsodium_baseline_retpoline
   libsodium_baseline_ssbd
+  libsodium_baseline_lfence+retpoline+ssbd
+  libsodium_baseline_slh+retpoline+ssbd
   libsodium_cloucc
 )
 

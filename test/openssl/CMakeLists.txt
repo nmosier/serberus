@@ -1,4 +1,6 @@
-include(OpensslLibrary)
+include(OpensslLibrary2)
+
+make_directory(logs)
 
 openssl_library(openssl_baseline_none
   CFLAGS -O3 -fno-stack-protector
