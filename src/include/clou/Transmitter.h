@@ -36,24 +36,17 @@ namespace clou {
 
   bool callDoesNotTransmit(const llvm::CallBase *C);
 
-template <class OutputIt>
-OutputIt get_transmitter_sensitive_operands(llvm::Instruction *I, OutputIt out) {
-    if (llvm::isa<llvm::LoadInst, llvm::StoreInst>(I)) {
-        *out++ = TransmitterOperand(TransmitterOperand::TRUE, llvm::getPointerOperand(I));
-    }
-    if (llvm::StoreInst *SI = llvm::dyn_cast<llvm::StoreInst>(I)) {
-    }
-    if (llvm::BranchInst *BI = llvm::dyn_cast<llvm::BranchInst>(I)) {
-      if (BI->isConditional()) {
-	*out++ = TransmitterOperand(TransmitterOperand::TRUE, BI->getCondition());
-      }
-    }
-    if (llvm::SwitchInst *SI = llvm::dyn_cast<llvm::SwitchInst>(I)) {
-      *out++ = TransmitterOperand(TransmitterOperand::TRUE, SI->getCondition());
-    }
-    if (llvm::CallBase *C = llvm::dyn_cast<llvm::CallBase>(I)) {
+  template <class OutputIt>
+  OutputIt get_transmitter_sensitive_operands(llvm::Instruction *I, OutputIt out) {
+    if (I->getNumOperands() == 0) {
+      // ignore
+    } else if (llvm::isa<llvm::LoadInst, llvm::StoreInst, llvm::AtomicCmpXchgInst, llvm::AtomicRMWInst>(I)) {
+      *out++ = TransmitterOperand(TransmitterOperand::TRUE, util::getPointerOperand(I));
+    } else if (llvm::isa<llvm::BranchInst, llvm::SwitchInst>(I)) {
+      if (llvm::Value *cond = util::getConditionOperand(I))
+	*out++ = TransmitterOperand(TransmitterOperand::TRUE, cond);
+    } else if (llvm::CallBase *C = llvm::dyn_cast<llvm::CallBase>(I)) {
       if (auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(C)) {
-	
 	if (!II->isAssumeLikeIntrinsic() && !II->getType()->isVoidTy() && II->arg_size() > 0) {
 	  std::vector<unsigned> none;
 	  std::vector<unsigned> all;
@@ -102,19 +95,25 @@ OutputIt get_transmitter_sensitive_operands(llvm::Instruction *I, OutputIt out) 
 	}
 	
       } else {
-        *out++ = TransmitterOperand(TransmitterOperand::TRUE, C->getCalledOperand());
-        for (llvm::Value *op : C->args()) {
+	*out++ = TransmitterOperand(TransmitterOperand::TRUE, C->getCalledOperand());
+	for (llvm::Value *op : C->args()) {
 	  *out++ = TransmitterOperand(TransmitterOperand::PSEUDO, op);
-        }	
+	}	
       }
+    } else if (llvm::ReturnInst *RI = llvm::dyn_cast<llvm::ReturnInst>(I)) {
+      if (llvm::Value *RV = RI->getReturnValue()) {
+	*out++ = TransmitterOperand(TransmitterOperand::PSEUDO, RV);
+      }
+    } else if (llvm::isa<llvm::CmpInst, llvm::CastInst, llvm::PHINode, llvm::AllocaInst, llvm::BinaryOperator,
+	       llvm::GetElementPtrInst, llvm::ShuffleVectorInst, llvm::InsertElementInst, llvm::SelectInst,
+	       llvm::ExtractElementInst, llvm::ExtractValueInst>(I)) {
+      // no leaked operands
+    } else {
+      unhandled_instruction(*I);
     }
-    if (llvm::ReturnInst *RI = llvm::dyn_cast<llvm::ReturnInst>(I)) {
-        if (llvm::Value *RV = RI->getReturnValue()) {
-            *out++ = TransmitterOperand(TransmitterOperand::PSEUDO, RV);
-        }
-    }
+    
     return out;
-}
+  }
 
   std::set<TransmitterOperand> get_transmitter_sensitive_operands(llvm::Instruction *I);
 

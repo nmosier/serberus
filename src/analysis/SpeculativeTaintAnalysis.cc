@@ -2,6 +2,7 @@
 
 #include <map>
 #include <set>
+#include <cassert>
 
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Dominators.h>
@@ -129,6 +130,7 @@ namespace clou {
   }
 
   bool SpeculativeTaint::secret(llvm::Value *V) {
+    assert(V != nullptr);
     if (auto *I = llvm::dyn_cast<llvm::Instruction>(V)) {
       return taints.contains(I);
     } else {

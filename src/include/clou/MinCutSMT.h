@@ -140,8 +140,6 @@ namespace clou {
       z3::expr empty_set = get_empty_set(ctx, source_ids.size());
       z3::sort set_sort = empty_set.get_sort();
 
-      std::cerr << "empty_set = " << empty_set << "\n";
-
       // Variable name generators
       const auto node_name = [&ids] (const Node& node, llvm::StringRef suffix) -> std::string {
 	std::stringstream ss;

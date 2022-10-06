@@ -328,7 +328,18 @@ namespace clou {
       } else {
 	return {};
       }
-    }    
+    }
+
+    llvm::Value *getConditionOperand(llvm::Instruction *I) {
+      if (auto *BI = llvm::dyn_cast<llvm::BranchInst>(I)) {
+	if (BI->isConditional()) {
+	  return BI->getCondition();
+	}
+      } else if (auto *SI = llvm::dyn_cast<llvm::SwitchInst>(I)) {
+	return SI->getCondition();
+      }
+      return nullptr;
+    }
 
   }
   

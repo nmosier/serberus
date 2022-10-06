@@ -413,6 +413,7 @@ namespace clou {
 
     llvm::Value *getPointerOperand(llvm::Instruction *I);
     llvm::SmallVector<llvm::Value *, 3> getAccessOperands(llvm::Instruction *I);
+    llvm::Value *getConditionOperand(llvm::Instruction *I);
 
     namespace impl {
       template <class Stream, class... Ts>
