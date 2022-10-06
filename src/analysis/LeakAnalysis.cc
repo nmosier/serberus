@@ -34,7 +34,7 @@ namespace clou {
     
     // Add all true transmitter operands.
     for (llvm::Instruction& I : llvm::instructions(F)) {
-      for (const TransmitterOperand& op : get_transmitter_sensitive_operands(&I, false)) {
+      for (const TransmitterOperand& op : get_transmitter_sensitive_operands(&I)) {
 	leaks.insert(op.V);
       }
     }

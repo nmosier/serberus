@@ -36,7 +36,7 @@ namespace clou {
 
     // Initialize public values with transmitter operands. We'll handle call results in the main loop.
     for (llvm::Instruction& I : llvm::instructions(F)) {
-      for (const TransmitterOperand& op : get_transmitter_sensitive_operands(&I, false /* no pseudo-stores */)) {
+      for (const TransmitterOperand& op : get_transmitter_sensitive_operands(&I)) {
 	pub_vals.insert(op.V);
       }
     }

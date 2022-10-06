@@ -232,7 +232,7 @@ namespace clou {
       static void getTransmitters(llvm::Function& F, SpeculativeTaint& ST, std::map<llvm::Instruction *, ISet>& out) {
 	for (auto& B : F) {
 	  for (auto& I : B) {
-	    for (const TransmitterOperand& op : get_transmitter_sensitive_operands(&I, false)) {
+	    for (const TransmitterOperand& op : get_transmitter_sensitive_operands(&I)) {
 	      if (ST.secret(op.V)) {
 		auto *op_I = llvm::cast<llvm::Instruction>(op.V);
 		out[&I].insert(op_I);
