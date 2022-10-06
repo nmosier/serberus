@@ -82,6 +82,9 @@ namespace clou {
 	    case llvm::Intrinsic::abs:
 	    case llvm::Intrinsic::umul_with_overflow:
 	    case llvm::Intrinsic::bitreverse:
+	    case llvm::Intrinsic::cttz:
+	    case llvm::Intrinsic::usub_sat:
+	    case llvm::Intrinsic::fmuladd:
 	      // Passthrough
 	      for (llvm::Value *arg_V : II->args()) {
 		if (llvm::Instruction *arg_I = llvm::dyn_cast<llvm::Instruction>(arg_V)) {

@@ -96,6 +96,9 @@ namespace clou {
 	    case llvm::Intrinsic::x86_rdrand_32:
 	    case llvm::Intrinsic::umul_with_overflow:
 	    case llvm::Intrinsic::bitreverse:
+	    case llvm::Intrinsic::cttz:
+	    case llvm::Intrinsic::usub_sat:
+	    case llvm::Intrinsic::fmuladd:
 	      taint_rule = Taint::Passthrough;
 	      break;
 

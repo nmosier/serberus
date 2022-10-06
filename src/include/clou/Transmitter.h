@@ -90,6 +90,9 @@ OutputIt get_transmitter_sensitive_operands(llvm::Instruction *I,
 	  case llvm::Intrinsic::abs:
 	  case llvm::Intrinsic::umul_with_overflow:
 	  case llvm::Intrinsic::bitreverse:
+	  case llvm::Intrinsic::cttz:
+	  case llvm::Intrinsic::usub_sat:
+	  case llvm::Intrinsic::fmuladd:
 	    leaked_args = none;
 	    break;
 	  default:
