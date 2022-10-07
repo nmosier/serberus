@@ -5,10 +5,14 @@ import sys
 import os
 import tempfile
 import json
+import matplotlib.pyplot as plt
+import seaborn
+import pandas
 
 parser = argparse.ArgumentParser()
 parser.add_argument('tests')
 parser.add_argument('outdir')
+parser.add_argument('--skip', action = 'store_true')
 
 args = parser.parse_args()
 
@@ -23,10 +27,13 @@ os.makedirs(args.outdir, exist_ok = True)
 
 for test in tests:
     outpath = '{}/{}.json'.format(args.outdir, test['name'])
-    os.system('{} --benchmark_out={} --benchmark_out_format=json'.format(test['path'], outpath))
+    if not args.skip:
+        if os.system('{} --benchmark_out={} --benchmark_out_format=json'.format(test['path'], outpath)):
+            print('benchmark failed to run, exiting...', file = sys.stderr)
+            exit(1)
     with open(outpath) as f:
         j = json.load(f)
-    record = {'name': test['name'], 'bytes': [], 'time': []}
+    record = {'name': test['name'], 'bytes': [], 'time': [], 'percent': []}
     for d in j['benchmarks']:
         record['bytes'].append(int(d['name'].split('/')[-1]))
         record['time'].append(d['cpu_time'])
@@ -40,7 +47,79 @@ for test in tests:
     else:
         assert False
 
+# Some consistency checks
+for partial in partials:
+    assert partial['bytes'] == baseline['bytes']
+for full in fulls:
+    assert full['bytes'] == baseline['bytes']
 
-print('baseline:', baseline)
-print('partials:', partials)
-print('fulls:', fulls)
+partial_names = [partial['name'] for partial in partials]
+full_names = [full['name'] for full in fulls]
+baseline_name = baseline['name']
+
+# Compute percentages
+def compute_percentages(record):
+    record['percent'] = [(b / a - 1) * 100 for a, b in zip(baseline['time'], record['time'])]
+
+compute_percentages(baseline)
+for partial in partials:
+    compute_percentages(partial)
+for full in fulls:
+    compute_percentages(full)
+
+# Create long format dict
+results = {'name': [], 'bytes': [], 'time': [], 'percent': []}
+def add_record(record):
+    record['name'] = [record['name']] * len(record['bytes'])
+    for key in record:
+        results[key].extend(record[key])
+
+add_record(baseline)
+for partial in partials:
+    add_record(partial)
+for full in fulls:
+    add_record(full)
+
+df = pandas.DataFrame(data = results)
+ax = seaborn.lineplot(
+    data = df,
+    x = 'bytes',
+    y = 'percent',
+    hue = 'name',
+)
+ax.set(
+    xlabel = 'input size (bytes)',
+    ylabel = 'overhead (%)', # TODO: automatically infer unit
+    xscale = 'log',
+)
+plt.xticks(ticks = baseline['bytes'], labels = baseline['bytes'])
+
+num_lines = int(len(ax.lines) / 2)
+
+ax.lines[0].set(linestyle = ':')
+ax.lines[num_lines].set(linestyle = ':')
+
+def label_to_style(l):
+    if l == baseline_name:
+        return ':'
+    elif l in partial_names:
+        return '--'
+    elif l in full_names:
+        return '-'
+    else:
+        assert False
+
+for i in range(num_lines):
+    line1 = ax.lines[i]
+    line2 = ax.lines[i + num_lines]
+    label = line2._label
+    style = label_to_style(label)
+    line1.set_linestyle(style)
+    line2.set_linestyle(style)
+
+for line in ax.legend().get_lines():
+    style = label_to_style(line._label)
+    line.set_linestyle(style)
+
+plt.legend(ncols = 2)
+plt.savefig('{}/plot.svg'.format(args.outdir))
