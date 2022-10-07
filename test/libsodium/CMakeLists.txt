@@ -44,6 +44,24 @@ libsodium_baseline_library(libsodium_baseline_lfence+retpoline+ssbd ${baseline_l
 libsodium_baseline_library(libsodium_baseline_slh+retpoline+ssbd ${baseline_slh_args} ${baseline_retpoline_args} ${baseline_ssbd_args})
 
 # ClouCC Mitigation
+libsodium_cloucc_library(libsodium_cloucc_udt
+  PASS MitigatePass
+  LLVMFLAGS -clou=udt
+  CLOUFLAGS -clou=udt
+)
+
+libsodium_cloucc_library(libsodium_cloucc_ncas
+  PASS MitigatePass
+  LLVMFLAGS -clou=oobs
+  CLOUFLAGS -clou=oobs
+)
+
+libsodium_cloucc_library(libsodium_cloucc_fps
+  PASS NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=fps -no-stack-slot-sharing
+  CLOUFLAGS -clou=fps
+)
+
 libsodium_cloucc_library(libsodium_cloucc
   PASS MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou -no-stack-slot-sharing

@@ -1,10 +1,13 @@
 add_link_options(-fPIE -fPIC -pthread)
 
 configure_file(breakdown.py.in breakdown.py)
-file(GENERATE
-  OUTPUT baseline_breakdown.json
-  INPUT baseline_breakdown.json.in
-)
+
+foreach(benchspec IN ITEMS baseline_breakdown cloucc_breakdown)
+  file(GENERATE
+    OUTPUT ${benchspec}.json
+    INPUT ${benchspec}.json.in
+  )
+endforeach()
 
 function(add_benchmark NAME SRC LIB INC)
   message(LIB=${LIB})
@@ -27,6 +30,9 @@ set(libsodium_benchmark_libraries
   libsodium_baseline_ssbd
   libsodium_baseline_lfence+retpoline+ssbd
   libsodium_baseline_slh+retpoline+ssbd
+  libsodium_cloucc_udt
+  libsodium_cloucc_ncas
+  libsodium_cloucc_fps
   libsodium_cloucc
 )
 

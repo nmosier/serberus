@@ -1,0 +1,76 @@
+{
+    "benchmarks": [
+	{
+	    "name": "none",
+	    "path": "$<TARGET_FILE:baseline_none_benchmark>"
+	},
+	{
+	    "name": "udt",
+	    "path": "$<TARGET_FILE:cloucc_udt_benchmark>"
+	},
+	{
+	    "name": "ncas",
+	    "path": "$<TARGET_FILE:cloucc_ncas_benchmark>"
+	},
+	{
+	    "name": "fps",
+	    "path": "$<TARGET_FILE:cloucc_fps_benchmark>"
+	},
+	{
+	    "name": "all",
+	    "path": "$<TARGET_FILE:cloucc_benchmark>"
+	}
+    ],
+    "plots": [
+	{
+	    "name": "LLVM-SCT breakdown",
+	    "filename": "cloucc.svg",
+	    "axes": {
+		"xlabel": "input size (bytes)",
+		"ylabel": "overhead (%)",
+		"ylim": [-10, 100]
+	    },
+	    "baseline": "none",
+	    "lines": [
+		{
+		    "name": "none",
+		    "style": ":",
+		    "sources": ["none"]
+		},
+		{
+		    "name": "udt",
+		    "style": "--",
+		    "sources": ["udt"]
+		},
+		{
+		    "name": "ncas",
+		    "style": "--",
+		    "sources": ["ncas"]
+		},
+		{
+		    "name": "fps",
+		    "style": "--",
+		    "sources": ["fps"]
+		},
+		{
+		    "name": "all (expected)",
+		    "style": "-.",
+		    "sources": ["udt", "ncas", "fps"]
+		},
+		{
+		    "name": "all (actual)",
+		    "style": "-",
+		    "sources": ["all"]
+		}
+	    ]
+	}
+    ]
+}
+		    
+		    
+		   
+	    
+	    
+	
+    
+	
