@@ -1,6 +1,6 @@
 include(OpensslLibrary2)
 
-make_directory(logs)
+make_directory(${CMAKE_CURRENT_BINARY_DIR}/logs)
 
 openssl_library(openssl_baseline_none
   CFLAGS -O3 -fno-stack-protector

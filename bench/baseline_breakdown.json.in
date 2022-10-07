@@ -33,5 +33,23 @@
 	"name": "slh+retpoline+ssbd",
 	"path": "$<TARGET_FILE:baseline_slh+retpoline+ssbd_benchmark>",
 	"type": "full"
+    },
+    {
+	"name": "lfence+retpoline+ssbd (expected)",
+	"type": "sum",
+	"parts": [
+	    "lfence",
+	    "retpoline",
+	    "ssbd"
+	]
+    },
+    {
+	"name": "slh+retpoline+ssbd (expected)",
+	"type": "sum",
+	"parts": [
+	    "slh",
+	    "retpoline",
+	    "ssbd"
+	]
     }
 ]

@@ -22,28 +22,42 @@ with open(args.tests) as f:
 baseline = None
 partials = []
 fulls = []
+sums = []
+
+name_to_record = {}
 
 os.makedirs(args.outdir, exist_ok = True)
 
 for test in tests:
-    outpath = '{}/{}.json'.format(args.outdir, test['name'])
-    if not args.skip:
-        if os.system('{} --benchmark_out={} --benchmark_out_format=json'.format(test['path'], outpath)):
-            print('benchmark failed to run, exiting...', file = sys.stderr)
-            exit(1)
-    with open(outpath) as f:
-        j = json.load(f)
-    record = {'name': test['name'], 'bytes': [], 'time': [], 'percent': []}
-    for d in j['benchmarks']:
-        record['bytes'].append(int(d['name'].split('/')[-1]))
-        record['time'].append(d['cpu_time'])
     k = test['type']
+    outpath = '{}/{}.json'.format(args.outdir, test['name'])
+    record = {'name': test['name'], 'bytes': [], 'time': [], 'percent': []}
+    name_to_record[test['name']] = record
+
+    if k == 'sum':
+        record['bytes'] = baseline['bytes']
+        record['time'] = list(baseline['time'])
+        for partname in test['parts']:
+            for i, value in enumerate(name_to_record[partname]['time']):
+                record['time'][i] += value - baseline['time'][i]
+    else:
+        if not args.skip:
+            if os.system('{} --benchmark_out={} --benchmark_out_format=json'.format(test['path'], outpath)):
+                print('benchmark failed to run, exiting...', file = sys.stderr)
+                exit(1)
+        with open(outpath) as f:
+            j = json.load(f)
+        for d in j['benchmarks']:
+            record['bytes'].append(int(d['name'].split('/')[-1]))
+            record['time'].append(d['cpu_time'])
     if k == 'baseline':
         baseline = record
     elif k == 'partial':
         partials.append(record)
     elif k == 'full':
         fulls.append(record)
+    elif k == 'sum':
+        sums.append(record)
     else:
         assert False
 
@@ -56,6 +70,7 @@ for full in fulls:
 partial_names = [partial['name'] for partial in partials]
 full_names = [full['name'] for full in fulls]
 baseline_name = baseline['name']
+sum_names = [sum['name'] for sum in sums]
 
 # Compute percentages
 def compute_percentages(record):
@@ -66,6 +81,8 @@ for partial in partials:
     compute_percentages(partial)
 for full in fulls:
     compute_percentages(full)
+for sum in sums:
+    compute_percentages(sum)
 
 # Create long format dict
 results = {'name': [], 'bytes': [], 'time': [], 'percent': []}
@@ -79,6 +96,8 @@ for partial in partials:
     add_record(partial)
 for full in fulls:
     add_record(full)
+for sum in sums:
+    add_record(sum)
 
 df = pandas.DataFrame(data = results)
 ax = seaborn.lineplot(
@@ -106,6 +125,8 @@ def label_to_style(l):
         return '--'
     elif l in full_names:
         return '-'
+    elif l in sum_names:
+        return '-.'
     else:
         assert False
 
@@ -121,5 +142,10 @@ for line in ax.legend().get_lines():
     style = label_to_style(line._label)
     line.set_linestyle(style)
 
-plt.legend(ncols = 2)
-plt.savefig('{}/plot.svg'.format(args.outdir))
+plt.legend(
+    ncols = 2,
+    # bbox_to_anchor = (0.6, 1.1),
+    # loc = 'upper right',
+    fontsize = 'small',
+)
+plt.savefig('{}/plot.svg'.format(args.outdir), bbox_inches = 'tight')

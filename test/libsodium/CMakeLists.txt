@@ -1,6 +1,6 @@
 include(LibsodiumLibrary2)
 
-make_directory(logs)
+make_directory(${CMAKE_CURRENT_BINARY_DIR}/logs)
 
 function(libsodium_benchmark_library NAME)
   libsodium_library(${NAME}
