@@ -13,7 +13,7 @@ namespace clou {
       AttributesPass(): llvm::FunctionPass(ID) {}
 
       bool runOnFunction(llvm::Function& F) override {
-	if (stack_mitigation_mode == StackMitigationMode::FunctionPrivateStacks) {
+	if (enabled.fps) {
 	  F.addFnAttr("noredzone");
 	}
 

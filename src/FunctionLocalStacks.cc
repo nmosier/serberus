@@ -13,6 +13,7 @@
 #include <llvm/IR/Constant.h>
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/IntrinsicInst.h>
+#include <llvm/Clou/Clou.h>
 
 #include "clou/util.h"
 
@@ -32,7 +33,10 @@ namespace {
 
     FunctionLocalStacks(): ModulePass(ID) {}
 
-    virtual bool runOnModule(Module& M) override {
+    bool runOnModule(Module& M) override {
+      if (!enabled.fps)
+	return false;
+
       // for every function declaration, emit tentative wrappers
       {
 	std::vector<Function *> todo;

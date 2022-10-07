@@ -121,11 +121,6 @@ namespace clou {
       void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
 	AU.addRequired<NonspeculativeTaint>();
 	AU.addRequired<SpeculativeTaint>();
-	if (stack_mitigation_mode == StackMitigationMode::Lfence && false) {
-	  llvm::errs() << "AAGH!\n";
-	  abort();
-	  AU.addRequired<StackInitAnalysis>();
-	}
       }
 
       static bool ignoreCall(const llvm::CallBase *C) {
@@ -264,10 +259,6 @@ namespace clou {
 	
 	auto& NST = getAnalysis<NonspeculativeTaint>();
 	auto& ST = getAnalysis<SpeculativeTaint>();
-	StackInitAnalysis::Results *AIA;
-	if (stack_mitigation_mode == StackMitigationMode::Lfence && false) {
-	  AIA = &getAnalysis<StackInitAnalysis>().results;
-	}
 	
 	llvm::DominatorTree DT(F);
 	llvm::LoopInfo LI(DT);
@@ -291,30 +282,38 @@ namespace clou {
 	Alg A;
 	Alg::Graph& G = A.G;
 
-	// Create ST-pairs for {oob_sec_stores X spec_pub_loads}
-	for (auto *LI : spec_pub_loads) {
-	  for (auto *SI : oob_sec_stores) {
-	    A.add_st({.s = SI, .t = LI});
-	  }
-	}
+	if (enabled.oobs) {
 
-	// Create ST-pairs for {oob_sec_stores X ctrls}
-	for (auto *ctrl : ctrls) {
-	  for (auto *SI : oob_sec_stores) {
-	    A.add_st({.s = SI, .t = ctrl});
-	  }
-	}
-
-	// Create ST-pairs for {source X transmitter}
-	for (const auto& [transmitter, transmit_ops] : transmitters) {
-	  for (auto *op_I : transmit_ops) {
-	    for (auto *source : ST.taints.at(op_I)) {
-	      A.add_st({.s = source, .t = transmitter});
+	  // Create ST-pairs for {oob_sec_stores X spec_pub_loads}
+	  for (auto *LI : spec_pub_loads) {
+	    for (auto *SI : oob_sec_stores) {
+	      A.add_st({.s = SI, .t = LI});
 	    }
 	  }
+
+	  // Create ST-pairs for {oob_sec_stores X ctrls}
+	  for (auto *ctrl : ctrls) {
+	    for (auto *SI : oob_sec_stores) {
+	      A.add_st({.s = SI, .t = ctrl});
+	    }
+	  }
+	
 	}
 
-	if (stack_mitigation_mode == StackMitigationMode::Lfence && false) {
+	if (enabled.udt) {
+
+	  // Create ST-pairs for {source X transmitter}
+	  for (const auto& [transmitter, transmit_ops] : transmitters) {
+	    for (auto *op_I : transmit_ops) {
+	      for (auto *source : ST.taints.at(op_I)) {
+		A.add_st({.s = source, .t = transmitter});
+	      }
+	    }
+	  }
+	  
+	}
+
+#if 0
 	  // EXPERIMENTAL: Create ST-pairs for {entry, return}.
 	  for (auto& B : F) {
 	    for (auto& I : B) {
@@ -348,7 +347,7 @@ namespace clou {
 	      }
 	    }
 	  }
-	}
+#endif
 	
 	// Add CFG to graph
 	for (auto& B : F) {

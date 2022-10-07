@@ -46,7 +46,7 @@ libsodium_baseline_library(libsodium_baseline_slh+retpoline+ssbd ${baseline_slh_
 # ClouCC Mitigation
 libsodium_cloucc_library(libsodium_cloucc
   PASS MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -x86-function-local-stacks -no-stack-slot-sharing -clou-stack-mitigation=fps
-  CLOUFLAGS -clou-log=${CMAKE_CURRENT_BINARY_DIR}/logs
+  LLVMFLAGS -clou -no-stack-slot-sharing
+  CLOUFLAGS -clou -clou-log=${CMAKE_CURRENT_BINARY_DIR}/logs
 )
 

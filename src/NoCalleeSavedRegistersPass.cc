@@ -2,6 +2,7 @@
 
 #include <llvm/Pass.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Clou/Clou.h>
 
 #include "clou/util.h"
 
@@ -22,6 +23,9 @@ namespace clou {
       };
 
       bool runOnModule(llvm::Module& M) override {
+	if (!enabled.postch)
+	  return false;
+	
 	for (const auto& [key, value] : attrs) {
 	  for (llvm::Function& F : M) {
 	    F.addFnAttr(key, value);
