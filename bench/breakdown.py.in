@@ -13,6 +13,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('tests')
 parser.add_argument('outdir')
 parser.add_argument('--skip', action = 'store_true')
+parser.add_argument('-n', type = int, default = 5)
 
 args = parser.parse_args()
 
@@ -40,13 +41,15 @@ for benchmark in spec['benchmarks']:
     name = benchmark['name']
     jsonpath = f'{args.outdir}/{name}.json'
     if not args.skip:
-        if os.system('{} --benchmark_out={} --benchmark_out_format=json'.format(benchmark['path'], jsonpath)):
+        if os.system('{} --benchmark_out={} --benchmark_out_format=json --benchmark_repetitions={}'.format(benchmark['path'], jsonpath, args.n)):
             print('benchmark failed to run, exiting...', file = sys.stderr)
             exit(1)
     with open(jsonpath) as f:
         j = json.load(f)
     k = j['benchmarks']
-    xs = [int(d['name'].split('/')[-1]) for d in k]
+    mean = '_mean'
+    k = [d for d in k if d['name'].endswith(mean)]
+    xs = [int(d['name'][:-len(mean)].split('/')[-1]) for d in k]
     ys = [float(d['cpu_time']) for d in k]
     benchmarks[name] = {'x': xs, 'y': ys}
 

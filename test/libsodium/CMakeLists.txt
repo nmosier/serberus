@@ -58,8 +58,13 @@ libsodium_cloucc_library(libsodium_cloucc_ncas
 
 libsodium_cloucc_library(libsodium_cloucc_fps
   PASS NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -clou=fps -no-stack-slot-sharing
-  CLOUFLAGS -clou=fps
+  LLVMFLAGS -clou=fps,postch -no-stack-slot-sharing
+  CLOUFLAGS -clou=fps,postch
+)
+
+libsodium_cloucc_library(libsodium_cloucc_prech
+  LLVMFLAGS -clou=prech
+  CLOUFLAGS -clou=prech
 )
 
 libsodium_cloucc_library(libsodium_cloucc

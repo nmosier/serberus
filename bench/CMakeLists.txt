@@ -33,6 +33,7 @@ set(libsodium_benchmark_libraries
   libsodium_cloucc_udt
   libsodium_cloucc_ncas
   libsodium_cloucc_fps
+  libsodium_cloucc_prech
   libsodium_cloucc
 )
 

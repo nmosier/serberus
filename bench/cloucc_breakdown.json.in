@@ -17,6 +17,10 @@
 	    "path": "$<TARGET_FILE:cloucc_fps_benchmark>"
 	},
 	{
+	    "name": "prech",
+	    "path": "$<TARGET_FILE:cloucc_prech_benchmark>"
+	},
+	{
 	    "name": "all",
 	    "path": "$<TARGET_FILE:cloucc_benchmark>"
 	}
@@ -24,7 +28,7 @@
     "plots": [
 	{
 	    "name": "LLVM-SCT breakdown",
-	    "filename": "cloucc.svg",
+	    "filename": "cloucc.pdf",
 	    "axes": {
 		"xlabel": "input size (bytes)",
 		"ylabel": "overhead (%)",
@@ -53,9 +57,14 @@
 		    "sources": ["fps"]
 		},
 		{
+		    "name": "prech",
+		    "style": "--",
+		    "sources": ["prech"]
+		},
+		{
 		    "name": "all (expected)",
 		    "style": "-.",
-		    "sources": ["udt", "ncas", "fps"]
+		    "sources": ["udt", "ncas", "fps", "prech"]
 		},
 		{
 		    "name": "all (actual)",

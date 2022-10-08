@@ -32,7 +32,7 @@
     "plots": [
 	{
 	    "name": "lfence+retpoline+ssbd breakdown",
-	    "filename": "lfence+retpoline+ssbd.svg",
+	    "filename": "lfence+retpoline+ssbd.pdf",
 	    "axes": {
 		"xlabel": "input size (bytes)",
 		"ylabel": "overhead (%)",
@@ -74,7 +74,7 @@
 	},
 	{
 	    "name": "slh+retpoline+ssbd breakdown",
-	    "filename": "slh+retpoline+ssbd.svg",	    
+	    "filename": "slh+retpoline+ssbd.pdf",	    
 	    "axes": {
 		"xlabel": "input size (bytes)",
 		"ylabel": "overhead (%)",
@@ -103,12 +103,12 @@
 		    "sources": ["ssbd"]
 		},
 		{
-		    "name": "slh+retpoline+ssbd (expected)",
+		    "name": "all (expected)",
 		    "style": "-.",
 		    "sources": ["slh", "retpoline", "ssbd"]
 		},
 		{
-		    "name": "slh+retpoline+ssbd (actual)",
+		    "name": "all (actual)",
 		    "style": "-",
 		    "sources": ["slh+retpoline+ssbd"]
 		}

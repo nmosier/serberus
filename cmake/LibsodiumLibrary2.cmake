@@ -41,7 +41,7 @@ function(libsodium_library NAME)
     COMMAND touch ${STAMP_DIR}/configure.stamp
     COMMENT "Configuring libsodium library ${NAME}"
     WORKING_DIRECTORY ${BUILD_DIR}
-    DEPENDS ${LIBSODIUM_DEPENDS}
+    DEPENDS ${LIBSODIUM_DEPENDS} ${LLVM_BINARY_DIR}/bin/clang ${LLVM_BINARY_DIR}/bin/ld.lld
   )
 
   # clean step
@@ -54,8 +54,8 @@ function(libsodium_library NAME)
   )
 
   # build step
-  add_custom_command(OUTPUT ${STAMP_DIR}/build.stamp
-    COMMAND make --quiet -j64
+  add_custom_command(OUTPUT ${STAMP_DIR}/build.stamp ${BUILD_DIR}/build.log
+    COMMAND make --quiet -j64 2>&1 | tee ${BUILD_DIR}/build.log
     COMMAND touch ${STAMP_DIR}/build.stamp
     DEPENDS ${STAMP_DIR}/clean.stamp
     COMMENT "Building libsodium library ${NAME}"
