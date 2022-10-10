@@ -107,7 +107,7 @@ add_library(MitigatePass SHARED
   MitigatePass.cc
 )
 register_llvm_pass(MitigatePass)
-target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaintAnalysis SpeculativeTaintAnalysis CommandLine StackInitAnalysis ${Z3_LIBRARIES} MinCut)
+target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaintAnalysis SpeculativeTaintAnalysis CommandLine LeakAnalysis ${Z3_LIBRARIES} MinCut)
 
 add_library(FunctionLocalStacks SHARED
   FunctionLocalStacks.cc

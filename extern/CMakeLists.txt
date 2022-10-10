@@ -9,6 +9,17 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(google-benchmark)
 
+FetchContent_Declare(
+  Hacl
+  GIT_REPOSITORY https://github.com/hacl-star/hacl-star.git
+  GIT_TAG 0ea88bcfc3f6da97dc3f8eb46bf44816ddcf3da8
+  CONFIGURE_COMMAND
+  BUILD_COMMAND
+  TEST_COMMAND
+  INSTALL_COMMAND
+)
+FetchContent_MakeAvailable(Hacl)
+
 # set(BENCHMARK_ENABLE_TESTING OFF)
 
 if(0)

@@ -1,4 +1,5 @@
 include(LibsodiumLibrary2)
+include(BenchmarkFlags)
 
 make_directory(${CMAKE_CURRENT_BINARY_DIR}/logs)
 
@@ -16,21 +17,6 @@ endfunction()
 function(libsodium_cloucc_library NAME)
   libsodium_benchmark_library(${NAME} ${ARGN})
 endfunction()
-
-set(baseline_lfence_args
-  LLVMFLAGS -x86-speculative-load-hardening -x86-slh-lfence -x86-slh-fence-call-and-ret
-)
-set(baseline_slh_args
-  LLVMFLAGS -x86-speculative-load-hardening
-)
-set(baseline_retpoline_args
-  CFLAGS -mretpoline
-  LDFLAGS -Wl,-z,retpolineplt
-)
-set(baseline_ssbd_args
-  LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:libssbd> -L$<TARGET_FILE_DIR:libssbd> -l$<TARGET_FILE_BASE_NAME:libssbd>
-  DEPENDS libssbd
-)
 
 # Component Mitigations
 libsodium_baseline_library(libsodium_baseline_none)

@@ -13,9 +13,10 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(Libunwind REQUIRED libunwind-generic)
 # pkg_check_modules(GoogleBenchmark REQUIRED benchmark)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
+message("Libunwind: ${Libunwind_INCLUDE_DIRS}")
 
-# message("GoogleBenchmark @ ${GoogleBenchmark_LIBRARY_DIRS}")
-# pkg_check_modules(Capstone REQUIRED capstone)
+set(Libunwind_INCLUDE_DIRS "/usr/lib/x86_64-linux-gnu/include")
+set(Libunwind_LIBRARY_DIRS "/usr/lib/x86_64-linux-gnu/lib")
 
 if(DEFINED Z3_DIR)
   # TODO: Figure out why LLVM'ds F
@@ -54,8 +55,6 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 get_filename_component(LLVM_DIR ${LLVM_DIR} ABSOLUTE ${CMAKE_BINARY_DIR})
 
-message("Z3_INCLUDE_DIR=${Z3_INCLUDE_DIR}")
-
 add_subdirectory(extern)
 add_subdirectory(src)
 add_subdirectory(runtime)
@@ -63,5 +62,3 @@ add_subdirectory(tools)
 add_subdirectory(scripts)
 add_subdirectory(test)
 add_subdirectory(bench)
-
-message("LLVM_DIR=${LLVM_DIR}")

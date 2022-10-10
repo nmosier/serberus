@@ -34,7 +34,7 @@
 #include "clou/Log.h"
 #include "clou/analysis/NonspeculativeTaintAnalysis.h"
 #include "clou/analysis/SpeculativeTaintAnalysis.h"
-#include "clou/analysis/StackInitAnalysis.h"
+#include "clou/analysis/LeakAnalysis.h"
 
 using VSet = std::set<llvm::Value *>;
 using VSetSet = std::set<VSet>;
@@ -93,6 +93,17 @@ namespace clou {
     using VSet = std::set<llvm::Value *>;
     using IMap = std::map<llvm::Instruction *, ISet>;
 
+    void print_debugloc(std::ostream& os_, const llvm::Value *V) {
+      llvm::raw_os_ostream os(os_);
+      if (const auto *I = llvm::dyn_cast<llvm::Instruction>(V)) {
+	if (const auto& DL = I->getDebugLoc()) {
+	  DL.print(os);
+	  return;
+	}
+      }
+      os << "(none)";
+    }
+
     struct Node {
       llvm::Instruction *V;
       Node() {}
@@ -121,6 +132,7 @@ namespace clou {
       void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
 	AU.addRequired<NonspeculativeTaint>();
 	AU.addRequired<SpeculativeTaint>();
+	AU.addRequired<LeakAnalysis>();
       }
 
       static bool ignoreCall(const llvm::CallBase *C) {
@@ -178,13 +190,14 @@ namespace clou {
       }
 
       template <class OutputIt>
-      static OutputIt getPublicLoads(llvm::Function& F, SpeculativeTaint& ST, OutputIt out) {
-	for (auto& B : F) {
-	  for (auto& I : B) {
-	    if (auto *LI = llvm::dyn_cast<llvm::LoadInst>(&I)) {
-	      if (!ST.secret(LI)) {
-		*out++ = LI;
-	      }
+      OutputIt getPublicLoads(llvm::Function& F, OutputIt out) {
+	NonspeculativeTaint& NST = getAnalysis<NonspeculativeTaint>();
+	LeakAnalysis& LA = getAnalysis<LeakAnalysis>();
+	SpeculativeTaint& ST = getAnalysis<SpeculativeTaint>();
+	for (auto& I : llvm::instructions(F)) {
+	  if (auto *LI = llvm::dyn_cast<llvm::LoadInst>(&I)) {
+	    if (!NST.secret(LI) && !ST.secret(LI) && LA.mayLeak(LI)) {
+	      *out++ = LI;
 	    }
 	  }
 	}
@@ -265,7 +278,7 @@ namespace clou {
 
 	// Set of speculatively public loads	
 	std::set<llvm::LoadInst *> spec_pub_loads;
-	getPublicLoads(F, ST, std::inserter(spec_pub_loads, spec_pub_loads.end()));
+	getPublicLoads(F, std::inserter(spec_pub_loads, spec_pub_loads.end()));
 	
 	// Set of secret, speculatively out-of-bounds stores (speculative or nonspeculative)
 	std::set<llvm::StoreInst *> oob_sec_stores;
@@ -437,8 +450,7 @@ namespace clou {
 	    std::stringstream ss;
 	    ss << ClouLogDir << "/" << F.getName().str() << ".txt";
 	    std::ofstream ofs(ss.str());
-	    llvm::raw_os_ostream os(ofs);
-	    os << "function_name: " << F.getName() << "\n";
+	    ofs << "function_name: " << F.getName().str() << "\n";
 	    ofs << "solution_time: " << std::setprecision(3) << solve_duration << "s\n";
 	    ofs << "num_sts: " << A.sts.size() << "\n";
 	    VSet sources, sinks;
@@ -457,6 +469,22 @@ namespace clou {
 	      collapseOptimization(A.sts, gsources, gsinks);
 	      ofs << "num_source_groups: " << sources.size() << " " << gsources.size() << "\n";
 	      ofs << "num_sink_groups: " << sinks.size() << " " << gsinks.size() << "\n";
+	    }
+
+	    for (const auto& st : A.sts) {
+	      ofs << "st_pair: ";
+	      print_debugloc(ofs, st.s.V);
+	      ofs << " ";
+	      print_debugloc(ofs, st.t.V);
+	      ofs << "\n";
+	    }
+
+	    for (const auto& cut : cut_edges) {
+	      ofs << "cut_edge: ";
+	      print_debugloc(ofs, cut.src.V);
+	      ofs << " ";
+	      print_debugloc(ofs, cut.dst.V);
+	      ofs << "\n";
 	    }
 	  }
 	}

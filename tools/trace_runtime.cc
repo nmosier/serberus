@@ -1,6 +1,7 @@
 #include <libunwind.h>
 #include <err.h>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <map>
 #include <cstdint>
@@ -62,7 +63,11 @@ extern "C" void clou_trace(int64_t id, const char *s) {
   
   auto& record = trace.locs[rip];
   if (record.n == 0) {
-    UNW_CHK("unw_get_proc_name", unw_get_proc_name(&cursor, record.func, sizeof record.func, &record.off));
+    if (unw_get_proc_name(&cursor, record.func, sizeof record.func, &record.off) < 0) {
+      fprintf(stderr, "unw_get_proc_name: error\n");
+      strcpy(record.func, "(invalid)");
+    }
+    // UNW_CHK("unw_get_proc_name", unw_get_proc_name(&cursor, record.func, sizeof record.func, &record.off));
   }
   ++record.n;
   record.s = s;
