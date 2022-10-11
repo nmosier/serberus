@@ -14,8 +14,9 @@ void libsodium_salsa20_bench(benchmark::State& state) {
   for (auto& b : k) b = rand();
   for (auto& b : c) b = rand();
   for (auto _ : state) {
-    const auto res = crypto_core_salsa20(out, in, k, c);
-    if (res != 0) std::abort();
+    CLOBBER_REGS();
+    crypto_core_salsa20(out, in, k, c);
+    CLOBBER_REGS();    
   }
 }
 

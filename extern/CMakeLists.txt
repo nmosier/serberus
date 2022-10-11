@@ -1,6 +1,9 @@
 include(FetchContent)
 set(BENCHMARK_ENABLE_TESTING OFF)
 set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_C_FLAGS -fcf-protection=branch)
+set(CMAKE_CXX_FLAGS -fcf-protection=branch)
+add_link_options(-Wl,-z,ibt)
 FetchContent_Declare(
   google-benchmark
   GIT_REPOSITORY https://github.com/google/benchmark.git

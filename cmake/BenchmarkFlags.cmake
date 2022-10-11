@@ -26,7 +26,7 @@ set(baseline_slh_retpoline_ssbd_args
 )
 
 set(cloucc_args
-  PASSES MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes  
+  PASSES MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes InlinePass
   LLVMFLAGS -clou -no-stack-slot-sharing
 )
 

@@ -127,3 +127,9 @@ register_llvm_pass(NoCalleeSavedRegistersPass)
 target_link_libraries(NoCalleeSavedRegistersPass PRIVATE util)
 
 add_subdirectory(check)
+
+add_library(InlinePass SHARED
+  InlinePass.cc
+)
+register_llvm_pass(InlinePass)
+target_link_libraries(InlinePass PRIVATE util SpeculativeTaintAnalysis LeakAnalysis)

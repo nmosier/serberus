@@ -40,47 +40,6 @@ using VSet = std::set<llvm::Value *>;
 using VSetSet = std::set<VSet>;
 using VMap = std::map<llvm::Value *, VSet>;
 
-#if 0
-namespace llvm {
-  llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const llvm::Value *V) {
-    const std::string s = V->getNameOrAsOperand();
-    if (s == "<badref>") {
-      os << *V;
-    } else {
-      os << s;
-    }
-    return os;
-  }
-  
-llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const VSet& Vs) {
-  os << "{";
-  for (auto it = Vs.begin(); it != Vs.end(); ++it) {
-    if (it != Vs.begin())
-      os << ", ";
-    os << *it;
-  }
-  os << "}";
-  return os;
-}
-
-llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const VSetSet& VSS) {
-  os << "{\n";
-  for (const auto& VS : VSS)
-    os << "  " << VS << "\n";
-  os << "}";
-  return os;
-}
-
-llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const VMap& VM) {
-  os << "{\n";
-  for (const auto& [V, VS] : VM) {
-    os << "  " << V << " --> " << VS << "\n";
-  }
-  os << "}";
-}
-}
-#endif
-
 namespace clou {
   namespace {
 
@@ -223,28 +182,24 @@ namespace clou {
 
       template <class OutputIt>
       static OutputIt getCtrls(llvm::Function& F, OutputIt out) {
-	for (auto& B : F) {
-	  for (auto& I : B) {
-	    if (llvm::CallBase *CB = llvm::dyn_cast<llvm::CallBase>(&I)) {
-	      if (!ignoreCall(CB)) {
-		*out++ = CB;
-	      }
-	    } else if (llvm::isa<llvm::ReturnInst>(&I)) {
-	      *out++ = &I;
+	for (auto& I : llvm::instructions(F)) {
+	  if (llvm::CallBase *CB = llvm::dyn_cast<llvm::CallBase>(&I)) {
+	    if (!ignoreCall(CB)) {
+	      *out++ = CB;
 	    }
+	  } else if (llvm::isa<llvm::ReturnInst>(&I)) {
+	    *out++ = &I;
 	  }
 	}
 	return out;
       }
 
       static void getTransmitters(llvm::Function& F, SpeculativeTaint& ST, std::map<llvm::Instruction *, ISet>& out) {
-	for (auto& B : F) {
-	  for (auto& I : B) {
-	    for (const TransmitterOperand& op : get_transmitter_sensitive_operands(&I)) {
-	      if (ST.secret(op.V)) {
-		auto *op_I = llvm::cast<llvm::Instruction>(op.V);
-		out[&I].insert(op_I);
-	      }
+	for (auto& I : llvm::instructions(F)) {
+	  for (const TransmitterOperand& op : get_transmitter_sensitive_operands(&I)) {
+	    if (ST.secret(op.V)) {
+	      auto *op_I = llvm::cast<llvm::Instruction>(op.V);
+	      out[&I].insert(op_I);
 	    }
 	  }
 	}
@@ -268,6 +223,9 @@ namespace clou {
       }
     
       bool runOnFunction(llvm::Function &F) override {
+	if (whitelisted(F))
+	  return false;
+	
 	clock_t t_start = clock();
 	
 	auto& NST = getAnalysis<NonspeculativeTaint>();

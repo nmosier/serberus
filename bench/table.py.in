@@ -51,6 +51,7 @@ for bench in spec:
             '--benchmark_repetitions=5',
             '--benchmark_min_warmup_time=1',
         ]
+        print('Running: {}'.format(' '.join(args)), file = sys.stderr)
         if os.system(' '.join(args)) != 0:
             print('benchmark failed', file = sys.stderr)
             exit(1)

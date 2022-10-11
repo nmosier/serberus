@@ -132,7 +132,7 @@ namespace clou {
   bool SpeculativeTaint::secret(llvm::Value *V) {
     assert(V != nullptr);
     if (auto *I = llvm::dyn_cast<llvm::Instruction>(V)) {
-      return taints.contains(I);
+      return !taints[I].empty();
     } else {
       return false;
     }

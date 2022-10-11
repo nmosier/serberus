@@ -4,6 +4,10 @@ function(hacl_benchmark NAME BENCHSRC SRC)
 
   set(OBJ ${CMAKE_CURRENT_BINARY_DIR}/lib${NAME}.so)
 
+  list(APPEND Hacl_CFLAGS -fcf-protection=branch)
+  list(APPEND Hacl_LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:cet> -L$<TARGET_FILE_DIR:cet> -lcet -Wl,-z,ibt)
+  list(APPEND Hacl_DEPENDS cet)
+
   foreach(pass IN LISTS Hacl_PASSES)
     list(APPEND Hacl_CFLAGS -Xclang -load -Xclang $<TARGET_FILE:${pass}>)
     list(APPEND Hacl_DEPENDS ${pass})

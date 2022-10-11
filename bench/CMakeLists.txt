@@ -170,7 +170,7 @@ hacl_benchmark(hacl_curve25519_cloucc_benchmark_dbg Hacl_Curve25519_bench.cc Hac
   ${cloucc_args}
   CFLAGS -O3 -fno-stack-protector -g
   LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:trace_runtime> -ltrace_runtime -L$<TARGET_FILE_DIR:trace_runtime>
-  LLVMFLAGS -clou-log=${CMAKE_CURRENT_BINARY_DIR}/hacl_curve25519_cloucc_benchmark_logs
+  LLVMFLAGS -clou-log=${CMAKE_CURRENT_BINARY_DIR}/hacl_curve25519_cloucc_benchmark_logs -clou-whitelist=point_add_and_double,point_double
   PASSES TracePass
   DEPENDS trace_runtime
 )

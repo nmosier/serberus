@@ -5,6 +5,12 @@ function(libsodium_library NAME)
   set(multi_value_args DEPENDS PASS CPPFLAGS CFLAGS LDFLAGS LLVMFLAGS CLOUFLAGS CONFIGURE_OPTIONS)
   cmake_parse_arguments(LIBSODIUM "" "" "${multi_value_args}" ${ARGN})
 
+  # TESTING -- CET
+  list(APPEND LIBSODIUM_LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:cet> -L$<TARGET_FILE_DIR:cet> -lcet)
+  list(APPEND LIBSODIUM_DEPENDS cet)
+  list(APPEND LIBSODIUM_CFLAGS -fcf-protection=branch)
+  list(APPEND LIBSODIUM_LDFLAGS -Wl,-z,ibt)
+
   # Add arguments for pass
   list(APPEND LIBSODIUM_CPPFLAGS -flegacy-pass-manager)
   

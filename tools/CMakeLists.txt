@@ -1,3 +1,5 @@
+add_compile_options(-fcf-protection=branch)
+
 add_executable(ssbd
   ssbd.c
 )
@@ -13,3 +15,6 @@ add_library(libssbd SHARED
   libssbd.c
 )
 
+add_library(cet SHARED
+  cet.c
+)
