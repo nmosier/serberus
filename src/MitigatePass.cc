@@ -25,6 +25,7 @@
 #include <llvm/IR/IntrinsicsX86.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 #include <llvm/Clou/Clou.h>
+#include <llvm/ADT/STLExtras.h>
 
 #include "clou/MinCutSMT.h"
 #include "clou/util.h"
@@ -35,6 +36,7 @@
 #include "clou/analysis/NonspeculativeTaintAnalysis.h"
 #include "clou/analysis/SpeculativeTaintAnalysis.h"
 #include "clou/analysis/LeakAnalysis.h"
+#include "clou/Stat.h"
 
 using VSet = std::set<llvm::Value *>;
 using VSetSet = std::set<VSet>;
@@ -52,8 +54,7 @@ namespace clou {
     using VSet = std::set<llvm::Value *>;
     using IMap = std::map<llvm::Instruction *, ISet>;
 
-    void print_debugloc(std::ostream& os_, const llvm::Value *V) {
-      llvm::raw_os_ostream os(os_);
+    void print_debugloc(llvm::raw_ostream& os, const llvm::Value *V) {
       if (const auto *I = llvm::dyn_cast<llvm::Instruction>(V)) {
 	if (const auto& DL = I->getDebugLoc()) {
 	  DL.print(os);
@@ -230,6 +231,7 @@ namespace clou {
 	
 	auto& NST = getAnalysis<NonspeculativeTaint>();
 	auto& ST = getAnalysis<SpeculativeTaint>();
+	auto& LA = getAnalysis<LeakAnalysis>();
 	
 	llvm::DominatorTree DT(F);
 	llvm::LoopInfo LI(DT);
@@ -253,12 +255,41 @@ namespace clou {
 	Alg A;
 	Alg::Graph& G = A.G;
 
+	/* Stats */
+	std::ofstream log_cxx;
+	if (ClouLog) {
+	  std::string s;
+	  llvm::raw_string_ostream ss(s);
+	  ss << ClouLogDir << "/" << F.getName() << ".txt";
+	  log_cxx.open(s);
+	}
+	llvm::raw_os_ostream log_llvm(log_cxx);
+
+	CountStat stat_ncas_load("st_ncas_load", log_llvm);
+	CountStat stat_ncas_ctrl("st_ncas_ctrl", log_llvm);
+	CountStat stat_st_udts("st_udt", log_llvm);
+	CountStat stat_instructions("instructions", log_llvm, std::distance(llvm::inst_begin(F), llvm::inst_end(F)));
+	CountStat stat_nonspec_secrets("maybe_nonspeculative_secrets", log_llvm, llvm::count_if(llvm::instructions(F), [&] (auto& I) { return NST.secret(&I); }));
+	CountStat stat_nonspec_publics("definitely_nonspeculative_public", log_llvm, llvm::count_if(util::nonvoid_instructions(F), [&] (auto& I) { return !NST.secret(&I); }));
+	CountStat stat_spec_secrets("maybe_speculative_secrets", log_llvm, llvm::count_if(llvm::instructions(F), [&] (auto& I) { return ST.secret(&I); }));
+	CountStat stat_spec_publics("definitely_speculative_publics", log_llvm, llvm::count_if(util::nonvoid_instructions(F), [&] (auto& I) { return !ST.secret(&I); }));
+	CountStat stat_leaks("maybe_leaked_instructions", log_llvm, llvm::count_if(llvm::instructions(F), [&] (auto& I) { return LA.mayLeak(&I); }));
+	CountStat stat_nonleaks("definitely_not_leaked_instructions", log_llvm, llvm::count_if(util::nonvoid_instructions(F), [&] (auto& I) { return !LA.mayLeak(&I); }));
+	CountStat stat_leaked_spec_secrets("maybe_leaked_speculative_secret_loads", log_llvm, llvm::count_if(util::instructions<llvm::LoadInst>(F), [&] (auto& I) {
+	  return LA.mayLeak(&I) && ST.secret(&I);
+	}));
+	CountStat stat_nca_sec_stores("nca_secret_stores", log_llvm, llvm::count_if(util::instructions<llvm::StoreInst>(F), [&] (auto& SI) {
+	  auto *V = SI.getValueOperand();
+	  return !util::isSpeculativeInbounds(&SI) && (NST.secret(V) || ST.secret(V));
+	}));
+
 	if (enabled.oobs) {
 
 	  // Create ST-pairs for {oob_sec_stores X spec_pub_loads}
 	  for (auto *LI : spec_pub_loads) {
 	    for (auto *SI : oob_sec_stores) {
 	      A.add_st({.s = SI, .t = LI});
+	      ++stat_ncas_load;
 	    }
 	  }
 
@@ -266,6 +297,7 @@ namespace clou {
 	  for (auto *ctrl : ctrls) {
 	    for (auto *SI : oob_sec_stores) {
 	      A.add_st({.s = SI, .t = ctrl});
+	      ++stat_ncas_ctrl;
 	    }
 	  }
 	
@@ -278,47 +310,12 @@ namespace clou {
 	    for (auto *op_I : transmit_ops) {
 	      for (auto *source : ST.taints.at(op_I)) {
 		A.add_st({.s = source, .t = transmitter});
+		++stat_st_udts;
 	      }
 	    }
 	  }
 	  
 	}
-
-#if 0
-	  // EXPERIMENTAL: Create ST-pairs for {entry, return}.
-	  for (auto& B : F) {
-	    for (auto& I : B) {
-	      if (llvm::isa<llvm::ReturnInst>(&I)) {
-		A.add_st({.s = &F.getEntryBlock().front(), .t = &I});
-	      }
-	    }
-	  }
-
-	  // EXPERIMENTAL: Create ST-pairs for {arg-def, arg-use}
-	  std::vector<std::pair<llvm::Argument *, bool>> args_regs;
-	  for (auto& [arg, isreg] : args_regs) {
-	    if (!isreg) {
-	      for (llvm::Use& use : arg->uses()) {
-		llvm::Instruction *user = llvm::cast<llvm::Instruction>(use.getUser());
-		if (auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(user)) {
-		  if (II->isAssumeLikeIntrinsic() || llvm::isa<llvm::DbgInfoIntrinsic>(II)) {
-		    continue;
-		  }
-		}
-		A.add_st({.s = &F.getEntryBlock().front(), .t = user});
-	      }
-	    }
-	  }
-
-	  // SUPER EXPERIMENTAL: Create ST-pairs for {alloca-first-init, alloca-first-use}
-	  for (const auto& [alloca, result] : *AIA) {
-	    for (auto *store : result.stores) {
-	      for (auto *load : result.loads) {
-		A.add_st({.s = store, .t = load});
-	      }
-	    }
-	  }
-#endif
 	
 	// Add CFG to graph
 	for (auto& B : F) {
@@ -405,19 +402,16 @@ namespace clou {
 
 	  // emit stats
 	  {
-	    std::stringstream ss;
-	    ss << ClouLogDir << "/" << F.getName().str() << ".txt";
-	    std::ofstream ofs(ss.str());
-	    ofs << "function_name: " << F.getName().str() << "\n";
-	    ofs << "solution_time: " << std::setprecision(3) << solve_duration << "s\n";
-	    ofs << "num_sts: " << A.sts.size() << "\n";
+	    log_llvm << "function_name: " << F.getName().str() << "\n";
+	    log_llvm << "solution_time: " << util::make_string_std(std::setprecision(3), solve_duration) << "s\n";
+	    log_llvm << "num_sts: " << A.sts.size() << "\n";
 	    VSet sources, sinks;
 	    for (const auto& st : A.sts) {
 	      sources.insert(st.s.V);
 	      sinks.insert(st.t.V);
 	    }
-	    ofs << "num_distinct_sources: " << sources.size() << "\n";
-	    ofs << "num_distinct_sinks: " << sinks.size() << "\n";
+	    log_llvm << "num_distinct_sources: " << sources.size() << "\n";
+	    log_llvm << "num_distinct_sinks: " << sinks.size() << "\n";
 
 	    /* Potential optimization:
 	     * Try to reduce to product whereever possible.
@@ -425,25 +419,29 @@ namespace clou {
 	    {
 	      VSetSet gsources, gsinks;
 	      collapseOptimization(A.sts, gsources, gsinks);
-	      ofs << "num_source_groups: " << sources.size() << " " << gsources.size() << "\n";
-	      ofs << "num_sink_groups: " << sinks.size() << " " << gsinks.size() << "\n";
+	      log_llvm << "num_source_groups: " << sources.size() << " " << gsources.size() << "\n";
+	      log_llvm << "num_sink_groups: " << sinks.size() << " " << gsinks.size() << "\n";
 	    }
 
+	    // TODO: Should emit this to separatae file.
 	    for (const auto& st : A.sts) {
-	      ofs << "st_pair: ";
-	      print_debugloc(ofs, st.s.V);
-	      ofs << " ";
-	      print_debugloc(ofs, st.t.V);
-	      ofs << "\n";
+	      log_llvm << "st_pair: ";
+	      print_debugloc(log_llvm, st.s.V);
+	      log_llvm << " ";
+	      print_debugloc(log_llvm, st.t.V);
+	      log_llvm << "\n";
 	    }
 
+	    // TODO: emit this to separate file?
 	    for (const auto& cut : cut_edges) {
-	      ofs << "cut_edge: ";
-	      print_debugloc(ofs, cut.src.V);
-	      ofs << " ";
-	      print_debugloc(ofs, cut.dst.V);
-	      ofs << "\n";
+	      log_llvm << "cut_edge: ";
+	      print_debugloc(log_llvm, cut.src.V);
+	      log_llvm << " ";
+	      print_debugloc(log_llvm, cut.dst.V);
+	      log_llvm << "\n";
 	    }
+
+	    log_llvm << "lfences: " << cut_edges.size() << "\n";
 	  }
 	}
 

@@ -195,7 +195,18 @@ namespace util {
       return isSpeculativeInboundsValue(SI->getPointerOperand());
     }
   }
-  
+
+  bool isConstantAddress(const llvm::Value *V) {
+    if (llvm::isa<llvm::Argument, llvm::PHINode, llvm::CallBase, llvm::LoadInst>(V)) {
+      return false;
+    } else if (llvm::isa<llvm::Constant, llvm::AllocaInst>(V)) {
+      return true;
+    } else if (llvm::isa<llvm::GetElementPtrInst, llvm::CastInst, llvm::BinaryOperator, llvm::SelectInst, llvm::CmpInst>(V)) {
+      return llvm::all_of(llvm::cast<llvm::Instruction>(V)->operands(), isConstantAddress);
+    } else {
+      unhandled_value(*V);
+    }
+  }
 }
 
 }
@@ -316,6 +327,7 @@ namespace clou {
       }
     }
 
+    // TODO: Make this exhaustive.
     llvm::SmallVector<llvm::Value *, 3> getAccessOperands(llvm::Instruction *I) {
       if (auto *SI = llvm::dyn_cast<llvm::StoreInst>(I)) {
 	return {SI->getValueOperand()};
@@ -327,6 +339,18 @@ namespace clou {
 	return {XCHG->getCompareOperand(), XCHG->getNewValOperand(), XCHG};
       } else {
 	return {};
+      }
+    }
+
+    llvm::SmallVector<llvm::Value *, 3> getValueOperands(llvm::Instruction *I) {
+      if (auto *SI = llvm::dyn_cast<llvm::StoreInst>(I)) {
+	return {SI->getValueOperand()};
+      } else if (auto *RMW = llvm::dyn_cast<llvm::AtomicRMWInst>(I)) {
+	return {RMW->getValOperand()};
+      } else if (auto *XCHG = llvm::dyn_cast<llvm::AtomicCmpXchgInst>(I)) {
+	return {XCHG->getCompareOperand(), XCHG->getNewValOperand()};
+      } else {
+	unhandled_instruction(*I);
       }
     }
 

@@ -132,4 +132,10 @@ add_library(InlinePass SHARED
   InlinePass.cc
 )
 register_llvm_pass(InlinePass)
-target_link_libraries(InlinePass PRIVATE util SpeculativeTaintAnalysis LeakAnalysis)
+target_link_libraries(InlinePass PRIVATE util NonspeculativeTaintAnalysis SpeculativeTaintAnalysis LeakAnalysis)
+
+add_library(StatsPass SHARED
+  StatsPass.cc
+)
+register_llvm_pass(StatsPass)
+target_link_libraries(StatsPass PRIVATE util)

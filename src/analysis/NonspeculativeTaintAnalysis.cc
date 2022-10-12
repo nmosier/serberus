@@ -11,6 +11,7 @@
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Operator.h>
+#include <llvm/Clou/Clou.h>
 
 #include "clou/util.h"
 #include "clou/Transmitter.h"
@@ -26,6 +27,16 @@ namespace clou {
   void NonspeculativeTaint::getAnalysisUsage(llvm::AnalysisUsage& AU) const {
     AU.addRequired<llvm::AAResultsWrapperPass>();
     AU.setPreservesAll();
+  }
+
+  // Only return `true` if we're sure that it's a must alias.
+  static bool isDefinitelyMustAlias(llvm::AliasResult AR) {
+    switch (AR) {
+    case llvm::AliasResult::MustAlias: return true;
+    case llvm::AliasResult::MayAlias: return UnsafeAA;
+    case llvm::AliasResult::NoAlias: return false;
+    default: std::abort();
+    }
   }
 
   bool NonspeculativeTaint::runOnFunction(llvm::Function& F) {
@@ -141,7 +152,7 @@ namespace clou {
 	  llvm::copy(src_vals, std::inserter(pub_vals, pub_vals.end())); // all source values are tainted
 	  for (llvm::Instruction& dst : llvm::instructions(F)) {
 	    if (llvm::Value *dst_ptr = util::getPointerOperand(&dst)) {
-	      if (AA.isMustAlias(src_ptr, dst_ptr)) {
+	      if (isDefinitelyMustAlias(AA.alias(src_ptr, dst_ptr))) {
 		llvm::copy(util::getAccessOperands(&dst), std::inserter(pub_vals, pub_vals.end()));
 	      }
 	    }

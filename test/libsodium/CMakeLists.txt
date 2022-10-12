@@ -54,8 +54,17 @@ libsodium_cloucc_library(libsodium_cloucc_prech
 )
 
 libsodium_cloucc_library(libsodium_cloucc
-  PASS MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes InlinePass
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou -no-stack-slot-sharing
-  CLOUFLAGS -clou -clou-log=${CMAKE_CURRENT_BINARY_DIR}/logs
+  CLOUFLAGS -clou
 )
 
+libsodium_benchmark_library(libsodium_stats
+  PASS StatsPass
+)
+
+libsodium_benchmark_library(libsodium_cloucc_unsafeaa
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou -no-stack-slot-sharing
+  CLOUFLAGS -clou -clou-unsafe-aa
+)

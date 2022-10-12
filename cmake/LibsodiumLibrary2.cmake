@@ -5,11 +5,24 @@ function(libsodium_library NAME)
   set(multi_value_args DEPENDS PASS CPPFLAGS CFLAGS LDFLAGS LLVMFLAGS CLOUFLAGS CONFIGURE_OPTIONS)
   cmake_parse_arguments(LIBSODIUM "" "" "${multi_value_args}" ${ARGN})
 
+  set(PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/${NAME})
+  set(BUILD_DIR ${PREFIX_DIR}/build)
+  set(STAMP_DIR ${PREFIX_DIR}/stamp)
+  set(INSTALL_DIR ${PREFIX_DIR})
+  set(LOG_DIR ${PREFIX_DIR}/logs)
+
+  make_directory(${INSTALL_DIR}/include)
+  make_directory(${BUILD_DIR})
+  make_directory(${LOG_DIR})  
+
   # TESTING -- CET
   list(APPEND LIBSODIUM_LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:cet> -L$<TARGET_FILE_DIR:cet> -lcet)
   list(APPEND LIBSODIUM_DEPENDS cet)
   list(APPEND LIBSODIUM_CFLAGS -fcf-protection=branch)
   list(APPEND LIBSODIUM_LDFLAGS -Wl,-z,ibt)
+
+  # TODO: log
+  list(APPEND LIBSODIUM_LLVMFLAGS -clou-log=${LOG_DIR})
 
   # Add arguments for pass
   list(APPEND LIBSODIUM_CPPFLAGS -flegacy-pass-manager)
@@ -32,14 +45,6 @@ function(libsodium_library NAME)
   list(JOIN LIBSODIUM_CFLAGS " " LIBSODIUM_CFLAGS)
   list(JOIN LIBSODIUM_CPPFLAGS " " LIBSODIUM_CPPFLAGS)
   list(JOIN LIBSODIUM_LDFLAGS " " LIBSODIUM_LDFLAGS)
-
-  set(PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/${NAME})
-  set(BUILD_DIR ${PREFIX_DIR}/build)
-  set(STAMP_DIR ${PREFIX_DIR}/stamp)
-  set(INSTALL_DIR ${PREFIX_DIR})
-
-  make_directory(${INSTALL_DIR}/include)
-  make_directory(${BUILD_DIR})
   
   # configure command
   add_custom_command(OUTPUT ${STAMP_DIR}/configure.stamp
@@ -53,6 +58,7 @@ function(libsodium_library NAME)
   # clean step
   add_custom_command(OUTPUT ${STAMP_DIR}/clean.stamp
     COMMAND make --quiet clean
+    COMMAND rm -f ${LOG_DIR}/*
     COMMAND touch ${STAMP_DIR}/clean.stamp
     DEPENDS ${STAMP_DIR}/configure.stamp
     COMMENT "Cleaning libsodium library ${NAME}"
@@ -86,7 +92,7 @@ function(libsodium_library NAME)
     WORKING_DIRECTORY ${BUILD_DIR}
   )
 
-  add_custom_target(${NAME}_install ALL
+  add_custom_target(${NAME}_install
     DEPENDS ${STAMP_DIR}/install.stamp
   )
 

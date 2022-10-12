@@ -413,6 +413,7 @@ namespace clou {
 
     llvm::Value *getPointerOperand(llvm::Instruction *I);
     llvm::SmallVector<llvm::Value *, 3> getAccessOperands(llvm::Instruction *I);
+    llvm::SmallVector<llvm::Value *, 3> getValueOperands(llvm::Instruction *I);
     llvm::Value *getConditionOperand(llvm::Instruction *I);
 
     namespace impl {
@@ -436,7 +437,8 @@ namespace clou {
       impl::make_string(os, args...);
       return s;
     }
-    
+
+    bool isConstantAddress(const llvm::Value *V);
   }
 }
 

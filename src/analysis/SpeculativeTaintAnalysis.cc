@@ -9,6 +9,7 @@
 #include <llvm/Analysis/LoopInfo.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/IntrinsicsX86.h>
+#include <llvm/Clou/Clou.h>
 
 #include "clou/util.h"
 #include "clou/Mitigation.h"
@@ -21,6 +22,15 @@ namespace clou {
   void SpeculativeTaint::getAnalysisUsage(llvm::AnalysisUsage& AU) const {
     AU.addRequired<llvm::AAResultsWrapperPass>();
     AU.setPreservesAll();    
+  }
+
+  static bool isDefinitelyNoAlias(llvm::AliasResult AR) {
+    switch (AR) {
+    case llvm::AliasResult::NoAlias: return true;
+    case llvm::AliasResult::MayAlias: return UnsafeAA;
+    case llvm::AliasResult::MustAlias: return false;
+    default: std::abort();
+    }
   }
 
   bool SpeculativeTaint::runOnFunction(llvm::Function& F) {
@@ -46,7 +56,7 @@ namespace clou {
 	  } else {
 	    // check if it may overlap with a secret store
 	    for (const auto& [SI, origins] : mem) {
-	      if (AA.alias(SI->getPointerOperand(), LI->getPointerOperand()) != llvm::AliasResult::NoAlias) {
+	      if (!isDefinitelyNoAlias(AA.alias(SI->getPointerOperand(), LI->getPointerOperand()))) {
 		taints[LI].insert(origins.begin(), origins.end());
 	      }
 	    }

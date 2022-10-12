@@ -7,6 +7,7 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/IntrinsicsX86.h>
 #include <llvm/IR/DataLayout.h>
+#include <llvm/Clou/Clou.h>
 
 #include "clou/Transmitter.h"
 #include "clou/CommandLine.h"
@@ -23,6 +24,15 @@ namespace clou {
   void LeakAnalysis::getAnalysisUsage(llvm::AnalysisUsage& AU) const {
     AU.addRequired<llvm::AAResultsWrapperPass>();
     AU.setPreservesAll();
+  }
+
+  static bool isDefinitelyNoAlias(llvm::AliasResult AR) {
+    switch (AR) {
+    case llvm::AliasResult::NoAlias: return true;
+    case llvm::AliasResult::MayAlias: return UnsafeAA;
+    case llvm::AliasResult::MustAlias: return false;
+    default: std::abort();
+    }
   }
 
   bool LeakAnalysis::runOnFunction(llvm::Function& F) {
@@ -92,18 +102,19 @@ namespace clou {
 	    // Find all potentially overlapping stores.
 	    for (llvm::Instruction& store : llvm::instructions(F)) {
 	      if (store.mayWriteToMemory()) {
-		const auto mri = AA.getModRefInfo(&store, util::getPointerOperand(load), llvm::LocationSize::beforeOrAfterPointer());
-		if (isModSet(mri)) {
-		  if (auto *SI = llvm::dyn_cast<llvm::StoreInst>(&store)) {
-		    leaks.insert(SI->getValueOperand());
-		  } else if (auto *RMW = llvm::dyn_cast<llvm::AtomicRMWInst>(&store)) {
-		    leaks.insert(RMW->getValOperand());
-		  } else if (llvm::isa<llvm::CallBase, llvm::FenceInst>(&store)) {
-		    // ignore
-		  } else if ([[maybe_unused]] auto *LI = llvm::dyn_cast<llvm::LoadInst>(&store)) {
-		    assert(LI->isAtomic());
-		  } else {
-		    unhandled_instruction(store);
+		if (llvm::isa<llvm::CallBase, llvm::FenceInst>(&store)) {
+		  // ignore
+		} else {
+		  const auto AR = AA.alias(util::getPointerOperand(load), util::getPointerOperand(&store));
+		  if (!isDefinitelyNoAlias(AR)) {
+		    if ([[maybe_unused]] const auto *store_LI = llvm::dyn_cast<llvm::LoadInst>(&store)) {
+		      assert(store_LI->isAtomic() || store_LI->isVolatile());
+		      // ignore
+		    } else {
+		      for (llvm::Value *store_V : util::getValueOperands(&store)) {
+			leaks.insert(store_V);
+		      }
+		    }
 		  }
 		}
 	      }
