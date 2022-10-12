@@ -39,3 +39,8 @@ set(cloucc_ncas_args
   PASSES MitigatePass
   LLVMFLAGS -clou=oobs
 )
+
+
+# Google Benchmark Flags
+set(benchmark_runtime_flags --benchmark_repetitions=5 --benchmark_min_warmup_time=1 --benchmark_display_aggregates_only=true --benchmark_time_unit=us)
+

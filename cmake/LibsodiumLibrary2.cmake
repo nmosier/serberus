@@ -101,4 +101,6 @@ function(libsodium_library NAME)
   target_include_directories(${NAME} INTERFACE ${INSTALL_DIR}/include)
   add_dependencies(${NAME} ${NAME}_install)
 
+  set_target_properties(${NAME} PROPERTIES CLOU_LOGS ${LOG_DIR})
+
 endfunction()

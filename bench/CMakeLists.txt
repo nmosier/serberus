@@ -3,6 +3,7 @@ include(BenchmarkFlags)
 add_link_options(-fPIE -fPIC -pthread)
 
 configure_file(breakdown.py.in breakdown.py)
+configure_file(stats.py.in stats.py)
 
 foreach(benchspec IN ITEMS baseline_breakdown cloucc_breakdown)
   file(GENERATE
@@ -11,11 +12,11 @@ foreach(benchspec IN ITEMS baseline_breakdown cloucc_breakdown)
   )
 endforeach()
 
-function(add_benchmark NAME SRC LIB INC)
+function(add_benchmark NAME SRC LIB)
   add_executable(${NAME} ${SRC})
   target_link_libraries(${NAME} PRIVATE ${LIB} benchmark::benchmark)
   add_custom_command(OUTPUT ${NAME}.json
-    COMMAND ${NAME} --benchmark_out=${NAME}.json --benchmark_out_format=json
+    COMMAND ${NAME} --benchmark_out=${NAME}.json --benchmark_out_format=json --benchmark_repetitions=5 --benchmark_min_warmup_time=1
     DEPENDS ${NAME}
   )
   add_custom_target(${NAME}_json
@@ -36,13 +37,18 @@ set(libsodium_benchmark_libraries
   libsodium_cloucc_fps
   libsodium_cloucc_prech
   libsodium_cloucc
+  libsodium_cloucc_unweighted
+  libsodium_cloucc_unsafeaa
 )
 
 foreach(libsodium_benchmark_library IN LISTS libsodium_benchmark_libraries)
   # ExternalProject_Get_Property(${libsodium_benchmark_library} install_dir)
   string(REGEX REPLACE "^libsodium_" "" name ${libsodium_benchmark_library})
-  add_benchmark(${name}_benchmark libsodium_sha256.cc ${libsodium_benchmark_library} ${install_dir}/include)
+  add_benchmark(${name}_benchmark libsodium_sha256.cc ${libsodium_benchmark_library})
 endforeach()
+
+get_target_property(cloucc_benchmark_logs libsodium_cloucc CLOU_LOGS)
+set_target_properties(cloucc_benchmark PROPERTIES CLOU_LOGS ${cloucc_benchmark_logs})
 
 add_executable(libsodium_sha256_none_benchmark ALIAS baseline_none_benchmark)
 add_executable(libsodium_sha256_lfence+retpoline+ssbd_benchmark ALIAS baseline_lfence+retpoline+ssbd_benchmark)
@@ -57,6 +63,9 @@ target_link_libraries(libsodium_salsa20_none_benchmark PRIVATE libsodium_baselin
 target_link_libraries(libsodium_salsa20_lfence+retpoline+ssbd_benchmark PRIVATE libsodium_baseline_lfence+retpoline+ssbd benchmark::benchmark)
 target_link_libraries(libsodium_salsa20_slh+retpoline+ssbd_benchmark PRIVATE libsodium_baseline_slh+retpoline+ssbd benchmark::benchmark)
 target_link_libraries(libsodium_salsa20_cloucc_benchmark PRIVATE libsodium_cloucc benchmark::benchmark)
+
+get_target_property(libsodium_salsa20_cloucc_benchmark_logs libsodium_cloucc CLOU_LOGS)
+set_target_properties(libsodium_salsa20_cloucc_benchmark PROPERTIES CLOU_LOGS ${libsodium_salsa20_cloucc_benchmark_logs})
 
 # foreach(pass IN ITEMS MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes)
 #   list(APPEND PASS_FLAGS -Xclang -load -Xclang $<TARGET_FILE:${pass}>)
@@ -88,79 +97,23 @@ function(hacl_benchmarks BASENAME BENCHSRC SRC)
     ${baseline_slh_retpoline_ssbd_args}
     CFLAGS -O3 -fno-stack-protector
   )
+  set(logs ${CMAKE_CURRENT_BINARY_DIR}/${BASENAME}_cloucc_benchmark_logs)
+  make_directory(${logs})
   hacl_benchmark(${BASENAME}_cloucc_benchmark ${BENCHSRC} ${SRC}
     ${cloucc_args}
     CFLAGS -O3 -fno-stack-protector
+    LLVMFLAGS -clou-log=${logs}
   )
-  hacl_benchmark(${BASENAME}_udt_benchmark ${BENCHSRC} ${SRC}
-    ${cloucc_udt_args}
-    CFLAGS -O3 -fno-stack-protector
-  )
-  hacl_benchmark(${BASENAME}_ncas_benchmark ${BENCHSRC} ${SRC}
-    ${cloucc_ncas_args}
-    CFLAGS -O3 -fno-stack-protector
-  )
+  set_target_properties(${BASENAME}_cloucc_benchmark PROPERTIES CLOU_LOGS ${logs})
 endfunction()
 
 hacl_benchmarks(hacl_chacha20 Hacl_Chacha20_bench.cc Hacl_Chacha20.c)
 hacl_benchmarks(hacl_poly1305 Hacl_Poly1305_bench.cc Hacl_Poly1305_32.c)
 hacl_benchmarks(hacl_curve25519 Hacl_Curve25519_bench.cc Hacl_Curve25519_51.c)
 
-# Generate table
-set(table_json ${CMAKE_CURRENT_BINARY_DIR}/table.json)
-
-function(table_init FILENAME)
-  file(REMOVE ${FILENAME}.in)
-  file(APPEND ${FILENAME}.in "[")
-endfunction()
-
-function(table_finish FILENAME)
-  file(APPEND ${FILENAME}.in "]")
-  file(GENERATE OUTPUT ${FILENAME} INPUT ${FILENAME}.in)
-endfunction()
-
-function(table_add FILENAME NAME BASENAME SIZEUNIT)
-  list(JOIN ARGN ", " SIZES)
-
-  file(APPEND ${FILENAME}.in "
-  {
-    \"name\": \"${NAME}\",
-    \"sizes\": [${SIZES}],
-    \"sizeunit\": \"${SIZEUNIT}\",
-    \"defenses\": [
-      {
-        \"name\": \"none\",
-        \"bin\": \"$<TARGET_FILE:${BASENAME}_none_benchmark>\"
-      },
-      {
-        \"name\": \"lfence+retpoline+ssbd\",
-        \"bin\": \"$<TARGET_FILE:${BASENAME}_lfence+retpoline+ssbd_benchmark>\"
-      },
-      {
-        \"name\": \"slh+retpoline+ssbd\",
-        \"bin\": \"$<TARGET_FILE:${BASENAME}_slh+retpoline+ssbd_benchmark>\"
-      },
-      {
-        \"name\": \"\\\\tool{}\",
-        \"bin\": \"$<TARGET_FILE:${BASENAME}_cloucc_benchmark>\"
-      }
-    ]
-  }
-")
-endfunction()
-
-function(table_add1 FILENAME)
-  file(APPEND ${FILENAME}.in ",")
-  table_add(${FILENAME} ${ARGN})
-endfunction()
-
-table_init(${table_json})
-table_add(${table_json} "Salsa20 (libsodium)" "libsodium_salsa20" "bytes" 64)
-table_add1(${table_json} "SHA-256 (libsodium)" "libsodium_sha256" "bytes" 64 8192)
-table_add1(${table_json} "ChaCha20 (HACL*)" "hacl_chacha20" "bytes" 8192)
-table_add1(${table_json} "Poly1305 (HACL*)" "hacl_poly1305" "bytes" 1024 8192)
-table_add1(${table_json} "ECDH Curve25519 (HACL*)" "hacl_curve25519" "bytes" 0)
-table_finish(${table_json})
+file(GENERATE OUTPUT table.json
+  INPUT table.json.in
+)
 
 configure_file(table.py.in table.py)
 
@@ -179,3 +132,15 @@ hacl_benchmark(hacl_curve25519_cloucc_benchmark_test Hacl_Curve25519_bench.cc Ha
   ${cloucc_args}
   CFLAGS -O3 -fno-stack-protector -finline-functions
 )
+
+
+function(register_benchmark NAME FUNC)
+  add_custom_command(OUTPUT ${NAME}_stats.json
+    COMMAND ${Python3_EXECUTABLE} stats.py --logs $<TARGET_PROPERTY:${NAME},CLOU_LOGS> --func ${FUNC} --json ${CMAKE_CURRENT_SOURCE_DIR}/stats.json -o ${NAME}_stats.json
+    DEPENDS ${Python3_EXECUTABLE} ${NAME} stats.py stats.json
+  )
+  add_custom_target(${NAME}_stats ALL DEPENDS ${NAME}_stats.json stats.json)
+endfunction()
+
+register_benchmark(libsodium_salsa20_cloucc_benchmark "crypto_core_salsa20")
+register_benchmark(libsodium_sha256_cloucc_benchmark "crypto_hash_sha256")

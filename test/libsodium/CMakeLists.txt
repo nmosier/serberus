@@ -56,7 +56,6 @@ libsodium_cloucc_library(libsodium_cloucc_prech
 libsodium_cloucc_library(libsodium_cloucc
   PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou -no-stack-slot-sharing
-  CLOUFLAGS -clou
 )
 
 libsodium_benchmark_library(libsodium_stats
@@ -65,6 +64,10 @@ libsodium_benchmark_library(libsodium_stats
 
 libsodium_benchmark_library(libsodium_cloucc_unsafeaa
   PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -clou -no-stack-slot-sharing
-  CLOUFLAGS -clou -clou-unsafe-aa
+  LLVMFLAGS -clou -no-stack-slot-sharing -clou-unsafe-aa
+)
+
+libsodium_cloucc_library(libsodium_cloucc_unweighted
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou -no-stack-slot-sharing -clou-weight=0
 )

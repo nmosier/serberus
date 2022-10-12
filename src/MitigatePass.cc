@@ -143,10 +143,14 @@ namespace clou {
       }
 
       static unsigned compute_edge_weight(llvm::Instruction *I, const llvm::DominatorTree& DT, const llvm::LoopInfo& LI) {
-        float score = 1.;
-        score *= instruction_loop_nest_depth(I, LI) + 1;
-        score *= 1. / (instruction_dominator_depth(I, DT) + 1);
-        return score * 100;
+	if (WeightGraph) {
+	  float score = 1.;
+	  score *= instruction_loop_nest_depth(I, LI) + 1;
+	  score *= 1. / (instruction_dominator_depth(I, DT) + 1);
+	  return score * 100;
+	} else {
+	  return 1;
+	}
       }
 
       template <class OutputIt>
@@ -222,6 +226,30 @@ namespace clou {
 	  }
 	}
       }
+
+      void staticStats(llvm::json::Object& j, llvm::Function& F) {
+	// List callees
+	auto& callees = j["callees"] = llvm::json::Array();
+	auto& indirect_calls = j["indirect_calls"] = false;
+	for (const llvm::CallBase& CB : util::instructions<llvm::CallBase>(F)) {
+	  if (const llvm::Function *F = CB.getCalledFunction()) {
+	    callees.getAsArray()->push_back(llvm::json::Value(F->getName()));
+	  } else {
+	    indirect_calls = true;
+	  }
+	}
+      }
+
+      void saveLog(llvm::json::Object&& j, llvm::Function& F) {
+	if (!ClouLog)
+	  return;
+	std::string s;
+	llvm::raw_string_ostream ss(s);
+	ss << ClouLogDir << "/" << F.getName() << ".json";
+	std::ofstream os_cxx(s);
+	llvm::raw_os_ostream os_llvm(os_cxx);
+	os_llvm << llvm::json::Value(std::move(j));
+      }
     
       bool runOnFunction(llvm::Function &F) override {
 	if (whitelisted(F))
@@ -256,29 +284,30 @@ namespace clou {
 	Alg::Graph& G = A.G;
 
 	/* Stats */
-	std::ofstream log_cxx;
-	if (ClouLog) {
-	  std::string s;
-	  llvm::raw_string_ostream ss(s);
-	  ss << ClouLogDir << "/" << F.getName() << ".txt";
-	  log_cxx.open(s);
-	}
-	llvm::raw_os_ostream log_llvm(log_cxx);
+	llvm::json::Object log;
 
-	CountStat stat_ncas_load("st_ncas_load", log_llvm);
-	CountStat stat_ncas_ctrl("st_ncas_ctrl", log_llvm);
-	CountStat stat_st_udts("st_udt", log_llvm);
-	CountStat stat_instructions("instructions", log_llvm, std::distance(llvm::inst_begin(F), llvm::inst_end(F)));
-	CountStat stat_nonspec_secrets("maybe_nonspeculative_secrets", log_llvm, llvm::count_if(llvm::instructions(F), [&] (auto& I) { return NST.secret(&I); }));
-	CountStat stat_nonspec_publics("definitely_nonspeculative_public", log_llvm, llvm::count_if(util::nonvoid_instructions(F), [&] (auto& I) { return !NST.secret(&I); }));
-	CountStat stat_spec_secrets("maybe_speculative_secrets", log_llvm, llvm::count_if(llvm::instructions(F), [&] (auto& I) { return ST.secret(&I); }));
-	CountStat stat_spec_publics("definitely_speculative_publics", log_llvm, llvm::count_if(util::nonvoid_instructions(F), [&] (auto& I) { return !ST.secret(&I); }));
-	CountStat stat_leaks("maybe_leaked_instructions", log_llvm, llvm::count_if(llvm::instructions(F), [&] (auto& I) { return LA.mayLeak(&I); }));
-	CountStat stat_nonleaks("definitely_not_leaked_instructions", log_llvm, llvm::count_if(util::nonvoid_instructions(F), [&] (auto& I) { return !LA.mayLeak(&I); }));
-	CountStat stat_leaked_spec_secrets("maybe_leaked_speculative_secret_loads", log_llvm, llvm::count_if(util::instructions<llvm::LoadInst>(F), [&] (auto& I) {
-	  return LA.mayLeak(&I) && ST.secret(&I);
-	}));
-	CountStat stat_nca_sec_stores("nca_secret_stores", log_llvm, llvm::count_if(util::instructions<llvm::StoreInst>(F), [&] (auto& SI) {
+	CountStat stat_ncas_load(log, "st_ncas_load");
+	CountStat stat_ncas_ctrl(log, "st_ncas_ctrl");
+	CountStat stat_st_udts(log, "st_udt");
+	CountStat stat_instructions(log, "instructions", std::distance(llvm::inst_begin(F), llvm::inst_end(F)));
+	CountStat stat_nonspec_secrets(log, "maybe_nonspeculative_secrets",
+				       llvm::count_if(llvm::instructions(F), [&] (auto& I) { return NST.secret(&I); }));
+	CountStat stat_nonspec_publics(log, "definitely_nonspeculative_public",
+				       llvm::count_if(util::nonvoid_instructions(F), [&] (auto& I) { return !NST.secret(&I); }));
+	CountStat stat_spec_secrets(log, "maybe_speculative_secrets",
+				    llvm::count_if(llvm::instructions(F), [&] (auto& I) { return ST.secret(&I); }));
+	CountStat stat_spec_publics(log, "definitely_speculative_publics",
+				    llvm::count_if(util::nonvoid_instructions(F), [&] (auto& I) { return !ST.secret(&I); }));
+	CountStat stat_leaks(log, "maybe_leaked_instructions",
+			     llvm::count_if(llvm::instructions(F), [&] (auto& I) { return LA.mayLeak(&I); }));
+	CountStat stat_nonleaks(log, "definitely_not_leaked_instructions",
+				llvm::count_if(util::nonvoid_instructions(F), [&] (auto& I) { return !LA.mayLeak(&I); }));
+	CountStat stat_leaked_spec_secrets(log, "maybe_leaked_speculative_secret_loads",
+					   llvm::count_if(util::instructions<llvm::LoadInst>(F), [&] (auto& I) {
+					     return LA.mayLeak(&I) && ST.secret(&I);
+					   }));
+	CountStat stat_nca_sec_stores(log, "nca_secret_stores",
+				      llvm::count_if(util::instructions<llvm::StoreInst>(F), [&] (auto& SI) {
 	  auto *V = SI.getValueOperand();
 	  return !util::isSpeculativeInbounds(&SI) && (NST.secret(V) || ST.secret(V));
 	}));
@@ -402,16 +431,16 @@ namespace clou {
 
 	  // emit stats
 	  {
-	    log_llvm << "function_name: " << F.getName().str() << "\n";
-	    log_llvm << "solution_time: " << util::make_string_std(std::setprecision(3), solve_duration) << "s\n";
-	    log_llvm << "num_sts: " << A.sts.size() << "\n";
+	    log["function_name"] = F.getName();
+	    log["solution_time"] = util::make_string_std(std::setprecision(3), solve_duration) + "s";
+	    log["num_st_pairs"] = A.sts.size();
 	    VSet sources, sinks;
 	    for (const auto& st : A.sts) {
 	      sources.insert(st.s.V);
 	      sinks.insert(st.t.V);
 	    }
-	    log_llvm << "num_distinct_sources: " << sources.size() << "\n";
-	    log_llvm << "num_distinct_sinks: " << sinks.size() << "\n";
+	    log["distinct_sources"] = sources.size();
+	    log["distinct_sinks"] = sinks.size();
 
 	    /* Potential optimization:
 	     * Try to reduce to product whereever possible.
@@ -419,29 +448,36 @@ namespace clou {
 	    {
 	      VSetSet gsources, gsinks;
 	      collapseOptimization(A.sts, gsources, gsinks);
-	      log_llvm << "num_source_groups: " << sources.size() << " " << gsources.size() << "\n";
-	      log_llvm << "num_sink_groups: " << sinks.size() << " " << gsinks.size() << "\n";
+	      log["source_groups"] = gsources.size();
+	      log["sink_groups"] = gsinks.size();
 	    }
 
-	    // TODO: Should emit this to separatae file.
+	    auto& j_sts = log["st_pairs"] = llvm::json::Array();
 	    for (const auto& st : A.sts) {
-	      log_llvm << "st_pair: ";
-	      print_debugloc(log_llvm, st.s.V);
-	      log_llvm << " ";
-	      print_debugloc(log_llvm, st.t.V);
-	      log_llvm << "\n";
+	      std::string source, sink;
+	      llvm::raw_string_ostream source_os(source), sink_os(sink);
+	      print_debugloc(source_os, st.s.V);
+	      print_debugloc(sink_os, st.t.V);
+	      j_sts.getAsArray()->push_back(llvm::json::Object({
+		    {.K = "source", .V = source},
+		    {.K = "sink", .V = sink},
+		  }));
 	    }
 
 	    // TODO: emit this to separate file?
+	    auto& j_cuts = log["cut_edges"] = llvm::json::Array();
 	    for (const auto& cut : cut_edges) {
-	      log_llvm << "cut_edge: ";
-	      print_debugloc(log_llvm, cut.src.V);
-	      log_llvm << " ";
-	      print_debugloc(log_llvm, cut.dst.V);
-	      log_llvm << "\n";
+	      std::string src, dst;
+	      llvm::raw_string_ostream src_os(src), dst_os(dst);
+	      print_debugloc(src_os, cut.src.V);
+	      print_debugloc(dst_os, cut.dst.V);
+	      j_cuts.getAsArray()->push_back(llvm::json::Object({
+		    {.K = "src", .V = src},
+		    {.K = "dst", .V = dst},
+		  }));
 	    }
 
-	    log_llvm << "lfences: " << cut_edges.size() << "\n";
+	    log["lfences"] = cut_edges.size(); 
 	  }
 	}
 
@@ -461,10 +497,15 @@ namespace clou {
 	}
 #endif
 
+	
+	
 	const clock_t t_stop = clock();
 	if (log_times) {
 	  trace("time %.3f %s", static_cast<float>(t_stop - t_start) / CLOCKS_PER_SEC, F.getName().str().c_str());
 	}
+
+	staticStats(log, F);
+	saveLog(std::move(log), F);
 	
         return true;
       }
