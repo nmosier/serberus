@@ -136,7 +136,7 @@ hacl_benchmark(hacl_curve25519_cloucc_benchmark_test Hacl_Curve25519_bench.cc Ha
 
 function(register_benchmark NAME FUNC)
   add_custom_command(OUTPUT ${NAME}_stats.json
-    COMMAND ${Python3_EXECUTABLE} stats.py --logs $<TARGET_PROPERTY:${NAME},CLOU_LOGS> --func ${FUNC} --json ${CMAKE_CURRENT_SOURCE_DIR}/stats.json -o ${NAME}_stats.json
+    COMMAND ${Python3_EXECUTABLE} stats.py --logs $<TARGET_PROPERTY:${NAME},CLOU_LOGS> --func ${FUNC} --json ${CMAKE_CURRENT_SOURCE_DIR}/stats.json | clang-format --assume-filename=.json > ${NAME}_stats.json
     DEPENDS ${Python3_EXECUTABLE} ${NAME} stats.py stats.json
   )
   add_custom_target(${NAME}_stats ALL DEPENDS ${NAME}_stats.json stats.json)
@@ -144,3 +144,6 @@ endfunction()
 
 register_benchmark(libsodium_salsa20_cloucc_benchmark "crypto_core_salsa20")
 register_benchmark(libsodium_sha256_cloucc_benchmark "crypto_hash_sha256")
+register_benchmark(hacl_chacha20_cloucc_benchmark "Hacl_Chacha20_chacha20_encrypt")
+register_benchmark(hacl_poly1305_cloucc_benchmark "Hacl_Poly1305_32_poly1305_mac")
+register_benchmark(hacl_curve25519_cloucc_benchmark "Hacl_Curve25519_51_ecdh")

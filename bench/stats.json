@@ -1,5 +1,21 @@
 [
-    {
-	"name": "instructions"
-    }
+    "instructions",
+    "distinct_sources",
+    "distinct_sinks",
+    "sts_ncas_ctrl",
+    "sts_ncas_cal",
+    "sts_udt",
+    "maybe_leaked_instructions",
+    "maybe_leaked_speculative_secret_loads",
+    "maybe_nonspeculative_secrets",
+    "maybe_speculative_secrets",
+    "cas",
+    "ncas_sec",
+    "ncas_pub",
+    "cal",
+    "ncal_leak",
+    "ncal_safe",
+    "spec_pub_loads",
+    "cal_specsec",
+    "cal_leak"
 ]

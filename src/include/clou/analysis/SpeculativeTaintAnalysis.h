@@ -13,8 +13,11 @@ namespace clou {
     static char ID;
     SpeculativeTaint();
 
-    using ISet = std::set<llvm::Instruction *>;
-    using TaintMap = std::map<llvm::Instruction *, ISet>;
+    enum Kind {
+      ORIGIN,
+      DERIVED,
+    };
+    using TaintMap = std::map<llvm::Instruction *, std::map<llvm::Instruction *, Kind>>;
 
     TaintMap taints;
 

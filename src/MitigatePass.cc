@@ -160,7 +160,8 @@ namespace clou {
 	SpeculativeTaint& ST = getAnalysis<SpeculativeTaint>();
 	for (auto& I : llvm::instructions(F)) {
 	  if (auto *LI = llvm::dyn_cast<llvm::LoadInst>(&I)) {
-	    if (!NST.secret(LI) && !ST.secret(LI) && LA.mayLeak(LI)) {
+	    if (LA.mayLeak(LI) && (!ST.secret(LI) || util::isConstantAddress(LI->getPointerOperand()))) {
+	      // if (!ST.secret(LI) && LA.mayLeak(LI)) {
 	      *out++ = LI;
 	    }
 	  }
@@ -260,6 +261,7 @@ namespace clou {
 	auto& NST = getAnalysis<NonspeculativeTaint>();
 	auto& ST = getAnalysis<SpeculativeTaint>();
 	auto& LA = getAnalysis<LeakAnalysis>();
+
 	
 	llvm::DominatorTree DT(F);
 	llvm::LoopInfo LI(DT);
@@ -286,9 +288,9 @@ namespace clou {
 	/* Stats */
 	llvm::json::Object log;
 
-	CountStat stat_ncas_load(log, "st_ncas_load");
-	CountStat stat_ncas_ctrl(log, "st_ncas_ctrl");
-	CountStat stat_st_udts(log, "st_udt");
+	CountStat stat_ncas_load(log, "sts_ncas_cal");
+	CountStat stat_ncas_ctrl(log, "sts_ncas_ctrl");
+	CountStat stat_st_udts(log, "sts_udt");
 	CountStat stat_instructions(log, "instructions", std::distance(llvm::inst_begin(F), llvm::inst_end(F)));
 	CountStat stat_nonspec_secrets(log, "maybe_nonspeculative_secrets",
 				       llvm::count_if(llvm::instructions(F), [&] (auto& I) { return NST.secret(&I); }));
@@ -306,21 +308,91 @@ namespace clou {
 					   llvm::count_if(util::instructions<llvm::LoadInst>(F), [&] (auto& I) {
 					     return LA.mayLeak(&I) && ST.secret(&I);
 					   }));
-	CountStat stat_nca_sec_stores(log, "nca_secret_stores",
-				      llvm::count_if(util::instructions<llvm::StoreInst>(F), [&] (auto& SI) {
-	  auto *V = SI.getValueOperand();
-	  return !util::isSpeculativeInbounds(&SI) && (NST.secret(V) || ST.secret(V));
-	}));
+	
 
+	{
+	  CountStat stat_cas(log, "cas");
+	  CountStat stat_ncas_pub(log, "ncas_pub");
+	  CountStat stat_ncas_sec(log, "ncas_sec");
+	  
+	  for (auto& SI : util::instructions<llvm::StoreInst>(F)) {
+	    if (util::isConstantAddress(SI.getPointerOperand())) {
+	      ++stat_cas;
+	    } else {
+	      auto *V = SI.getValueOperand();
+	      if (NST.secret(V) || ST.secret(V)) {
+		++stat_ncas_sec;
+	      } else {
+		++stat_ncas_pub;
+	      }
+	    }
+	  }
+
+	  CountStat stat_cal(log, "cal");
+	  CountStat stat_ncal_leak(log, "ncal_leak");
+	  CountStat stat_ncal_safe(log, "ncal_safe");
+	  CountStat stat_cal_specsec(log, "cal_specsec");
+	  CountStat stat_cal_leak(log, "cal_leak");
+
+	  for (auto& LI : util::instructions<llvm::LoadInst>(F)) {
+	    if (util::isConstantAddress(LI.getPointerOperand())) {
+	      ++stat_cal;
+	      if (LA.mayLeak(&LI)) {
+		++stat_cal_leak;
+	      }
+	      if (ST.secret(&LI)) {
+		++stat_cal_specsec;
+	      }
+	    } else {
+	      assert(ST.secret(&LI));
+	      if (LA.mayLeak(&LI)) {
+		++stat_ncal_leak;
+	      } else {
+		++stat_ncal_safe;
+	      }
+	    }
+	  }
+	}
+
+	
 	if (enabled.oobs) {
 
 	  // Create ST-pairs for {oob_sec_stores X spec_pub_loads}
+	  CountStat stat_spec_pub_loads(log, "spec_pub_loads", spec_pub_loads.size());
+
+	  for (auto *SI : oob_sec_stores) {
+	    for (auto& LI : util::instructions<llvm::LoadInst>(F)) {
+	      if (LA.mayLeak(&LI)) {
+		if (ST.secret(&LI)) {
+		  if (util::isConstantAddress(LI.getPointerOperand())) {
+		    // Add pair from this load to all subsequent
+		    for (const auto& [transmitter, transmit_ops] : transmitters) {
+		      for (auto *op_I : transmit_ops) {
+			if (ST.taints[op_I].contains(&LI)) {
+			  A.add_st({.s = SI, .t = transmitter});
+			}
+		      }
+		    }
+		  } else {
+		    // we're already mitigating this as UDT
+		  }
+		} else {
+		  // Speculatively Public Constant-Address Store
+		  A.add_st({.s = SI, .t = &LI});
+		}
+	      }
+	    }
+	  }
+
+
+#if 0
 	  for (auto *LI : spec_pub_loads) {
 	    for (auto *SI : oob_sec_stores) {
 	      A.add_st({.s = SI, .t = LI});
 	      ++stat_ncas_load;
 	    }
 	  }
+#endif
 
 	  // Create ST-pairs for {oob_sec_stores X ctrls}
 	  for (auto *ctrl : ctrls) {
@@ -337,9 +409,11 @@ namespace clou {
 	  // Create ST-pairs for {source X transmitter}
 	  for (const auto& [transmitter, transmit_ops] : transmitters) {
 	    for (auto *op_I : transmit_ops) {
-	      for (auto *source : ST.taints.at(op_I)) {
-		A.add_st({.s = source, .t = transmitter});
-		++stat_st_udts;
+	      for (const auto& [source, kind] : ST.taints.at(op_I)) {
+		if (kind == SpeculativeTaint::ORIGIN) {
+		  A.add_st({.s = source, .t = transmitter});
+		  ++stat_st_udts;
+		}
 	      }
 	    }
 	  }

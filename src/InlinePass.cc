@@ -23,7 +23,6 @@ namespace clou {
 	AU.addRequired<NonspeculativeTaint>();
 	AU.addRequired<SpeculativeTaint>();
 	AU.addRequired<LeakAnalysis>();
-	AU.setPreservesCFG();
       }
 
       using ISet = std::set<llvm::Instruction *>;

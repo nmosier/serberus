@@ -38,7 +38,7 @@ namespace clou {
     llvm::DominatorTree DT(F);
     llvm::LoopInfo LI(DT);
 
-    std::map<llvm::StoreInst *, ISet> mem, mem_bak;
+    std::map<llvm::StoreInst *, std::map<llvm::Instruction *, Kind>> mem, mem_bak;
     TaintMap taints_bak;
     taints.clear();
     do {
@@ -48,11 +48,8 @@ namespace clou {
       for (llvm::Instruction& I : llvm::instructions(F)) {
 	  
 	if (llvm::LoadInst *LI = llvm::dyn_cast<llvm::LoadInst>(&I)) {
-	  if (has_incoming_addr(LI->getPointerOperand())) {
-	    // address dependency is always tainted, unless the result is known to be a secret
-	    if (!is_nonspeculative_secret(LI)) {
-	      taints[LI].insert(LI);
-	    }
+	  if (!util::isConstantAddress(LI->getPointerOperand())) {
+	    taints[LI][LI] = ORIGIN;
 	  } else {
 	    // check if it may overlap with a secret store
 	    for (const auto& [SI, origins] : mem) {
@@ -134,6 +131,13 @@ namespace clou {
 	}
 	  
       }
+
+      for (auto& [I, sources] : taints) {
+	if (!sources.empty() && !sources.contains(I)) {
+	  sources[I] = DERIVED;
+	}
+      }
+      
     } while (taints != taints_bak || mem != mem_bak);
 
     return false;
@@ -153,7 +157,7 @@ namespace clou {
     os << "Tainted instructions:\n";
     for (const auto& [I, sources] : taints) {
       if (!sources.empty()) {
-	os << *I << "\n";
+	os << I << " " << *I << "\n";
       }
     }
   }
