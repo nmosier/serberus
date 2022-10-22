@@ -86,8 +86,7 @@ for plotspec in spec['plots']:
             data['mitigation'].append(mitdisplay)
             data['overhead'].append(mean_pct)
             geomean_in[mitname].append(mean_pct)
-
-
+            
 for mitigation in spec['mitigations']:
     if 'reference' in mitigation:
         continue
@@ -101,6 +100,8 @@ for mitigation in spec['mitigations']:
     data['mitigation'].append(mitdisplay)
     data['overhead'].append(geomean)
 
+aspect = 2
+
 df = pandas.DataFrame(data = data)
 g = seaborn.catplot(
     data = df,
@@ -109,24 +110,43 @@ g = seaborn.catplot(
     y = 'overhead',
     hue = 'mitigation',
     errorbar = 'sd',
+    aspect = aspect,
+    height = 5 / aspect,
+    legend = None,
 )
-# ax.set_xticklabels(rotation = 46, horizontalalignment = 'right', fontsize = 7.5)
-g.set_xticklabels(fontsize = 6)
+g.set_xticklabels(rotation = 45, horizontalalignment = 'center')
 ax = g.facet_axis(0, 0)
 # ax.figure.tight_layout()
 
+ymin = -9.8
+ymax = 52.0
+
+ax.set_ybound(lower = ymin, upper = ymax)
+
 for c in ax.containers:
-    labels = [f'{v.get_height():.1f}' for v in c]
-    ax.bar_label(c, labels = labels, label_type = 'edge', rotation = 0, fontsize = 5)
+    labels = []
+    for v in c:
+        labels.append(f'{v.get_height():.1f}')
+        v.set_height(min(v.get_height(), ymax))
+    texts = ax.bar_label(c, labels = labels, label_type = 'edge', rotation = 90) #, fontsize = 'small')
+    for text in texts:
+        val = float(text._text)
+        if val < 0 or val >= ymax:
+            text.set(rotation = 0)
 
 plt.legend(
-    fontsize = '7.5',
-    loc = 'upper left',
-    bbox_to_anchor = (0.07, 0.9)
+    # fontsize = '7.5',
+    loc = 'upper right',
+    bbox_to_anchor = (1.02, 1.04),
+    labelspacing = 0.3,
+    borderpad = 0.3,
 )
 
 g.set(
-    ylabel = 'overhead (%)'
+    ylabel = 'overhead (%)',
+    xlabel = None
 )
+
+plt.subplots_adjust(top = 0.90, bottom = 0.28, left = 0.1, right = 0.98)
 
 plt.savefig(f'{args.outdir}/plot.pdf')

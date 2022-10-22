@@ -29,10 +29,11 @@ name_to_record = {}
 
 os.makedirs(args.outdir, exist_ok = True)
 
+# seaborn.set(rc = {"figure.figsize": (4, 3)})
+
 
 def overhead_of(a, b):
     return (a - b) / b * 100
-
 
 # Run each benchmark and save results in JSON.
 # Create benchmarks dictionary: benchmark_name -> json
@@ -72,12 +73,14 @@ for plot in spec['plots']:
 
     # generate dataframe
     df = pandas.DataFrame(data = table)
+    plt.figure(figsize=(3.5,2.25))
     ax = seaborn.lineplot(
         data = df,
         x = 'x',
         y = 'y',
         hue = 'name',
     )
+    ax.figure.tight_layout()    
     ax.set(xscale = 'log')
     if 'axes' in plot:
         ax.set(**plot['axes'])
@@ -85,6 +88,8 @@ for plot in spec['plots']:
         ticks = baseline_xs,
         labels = baseline_xs,
     )
+    # ax.legend().set(ncols = 2)
+    ax.set_xticklabels(labels = ['64', '128', '256', '512', '1K', '2K', '4K', '8K', '16K', '32K', '64K'], rotation = 45, horizontalalignment = 'right')
 
     line_styles = dict([(line['name'], line['style']) for line in plot['lines']])
 
@@ -100,133 +105,13 @@ for plot in spec['plots']:
     for line in ax.legend().get_lines():
         line.set_linestyle(line_styles[line._label])
 
+        # plt.legend().set(ncols = 2)
+
+    ax.legend(
+        ncol = 2,
+        columnspacing = 1.0,
+        labelspacing = 0.25,
+    )
+        
     plt.savefig('{}/{}'.format(args.outdir, plot['filename']))
     plt.clf()
-
-    
-exit(0)
-
-    
-
-
-for test in tests:
-    k = test['type']
-    outpath = '{}/{}.json'.format(args.outdir, test['name'])
-    record = {'name': test['name'], 'bytes': [], 'time': [], 'percent': []}
-    name_to_record[test['name']] = record
-
-    if k == 'sum':
-        record['bytes'] = baseline['bytes']
-        record['time'] = list(baseline['time'])
-        for partname in test['parts']:
-            for i, value in enumerate(name_to_record[partname]['time']):
-                record['time'][i] += value - baseline['time'][i]
-    else:
-        if not args.skip:
-            if os.system('{} --benchmark_out={} --benchmark_out_format=json'.format(test['path'], outpath)):
-                print('benchmark failed to run, exiting...', file = sys.stderr)
-                exit(1)
-        with open(outpath) as f:
-            j = json.load(f)
-        for d in j['benchmarks']:
-            record['bytes'].append(int(d['name'].split('/')[-1]))
-            record['time'].append(d['cpu_time'])
-    if k == 'baseline':
-        baseline = record
-    elif k == 'partial':
-        partials.append(record)
-    elif k == 'full':
-        fulls.append(record)
-    elif k == 'sum':
-        sums.append(record)
-    else:
-        assert False
-
-# Some consistency checks
-for partial in partials:
-    assert partial['bytes'] == baseline['bytes']
-for full in fulls:
-    assert full['bytes'] == baseline['bytes']
-
-partial_names = [partial['name'] for partial in partials]
-full_names = [full['name'] for full in fulls]
-baseline_name = baseline['name']
-sum_names = [sum['name'] for sum in sums]
-
-# Compute percentages
-def compute_percentages(record):
-    record['percent'] = [(b / a - 1) * 100 for a, b in zip(baseline['time'], record['time'])]
-
-compute_percentages(baseline)
-for partial in partials:
-    compute_percentages(partial)
-for full in fulls:
-    compute_percentages(full)
-for sum in sums:
-    compute_percentages(sum)
-
-# Create long format dict
-results = {'name': [], 'bytes': [], 'time': [], 'percent': []}
-def add_record(record):
-    record['name'] = [record['name']] * len(record['bytes'])
-    for key in record:
-        results[key].extend(record[key])
-
-add_record(baseline)
-for partial in partials:
-    add_record(partial)
-for full in fulls:
-    add_record(full)
-for sum in sums:
-    add_record(sum)
-
-df = pandas.DataFrame(data = results)
-ax = seaborn.lineplot(
-    data = df,
-    x = 'bytes',
-    y = 'percent',
-    hue = 'name',
-)
-ax.set(
-    xlabel = 'input size (bytes)',
-    ylabel = 'overhead (%)', # TODO: automatically infer unit
-    xscale = 'log',
-)
-plt.xticks(ticks = baseline['bytes'], labels = baseline['bytes'])
-
-num_lines = int(len(ax.lines) / 2)
-
-ax.lines[0].set(linestyle = ':')
-ax.lines[num_lines].set(linestyle = ':')
-
-def label_to_style(l):
-    if l == baseline_name:
-        return ':'
-    elif l in partial_names:
-        return '--'
-    elif l in full_names:
-        return '-'
-    elif l in sum_names:
-        return '-.'
-    else:
-        assert False
-
-for i in range(num_lines):
-    line1 = ax.lines[i]
-    line2 = ax.lines[i + num_lines]
-    label = line2._label
-    style = label_to_style(label)
-    line1.set_linestyle(style)
-    line2.set_linestyle(style)
-
-for line in ax.legend().get_lines():
-    style = label_to_style(line._label)
-    line.set_linestyle(style)
-
-plt.legend(
-    ncols = 2,
-    # bbox_to_anchor = (0.6, 1.1),
-    # loc = 'upper right',
-    fontsize = 'small',
-)
-plt.savefig('{}/plot.svg'.format(args.outdir), bbox_inches = 'tight')

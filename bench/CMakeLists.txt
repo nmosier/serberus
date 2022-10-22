@@ -12,6 +12,11 @@ foreach(benchspec IN ITEMS baseline_breakdown cloucc_breakdown)
   )
 endforeach()
 
+file(GENERATE
+  OUTPUT plot.json
+  INPUT plot.json.in
+)
+
 function(add_benchmark NAME SRC LIB)
   add_executable(${NAME} ${SRC})
   target_link_libraries(${NAME} PRIVATE ${LIB} benchmark::benchmark)

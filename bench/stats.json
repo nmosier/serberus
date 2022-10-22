@@ -17,5 +17,11 @@
     "ncal_safe",
     "spec_pub_loads",
     "cal_specsec",
-    "cal_leak"
+    "cal_leak",
+    "lfences",
+    "xmit_safe",
+    "xmit_true",
+    "xmit_pseudo",
+    "naive_loads",
+    "naive_xmits"
 ]

@@ -61,12 +61,12 @@
 		    "sources": ["ssbd"]
 		},
 		{
-		    "name": "lfence+retpoline+ssbd (expected)",
+		    "name": "all (expected)",
 		    "style": "-.",
 		    "sources": ["lfence", "retpoline", "ssbd"]
 		},
 		{
-		    "name": "lfence+retpoline+ssbd (actual)",
+		    "name": "all (actual)",
 		    "style": "-",
 		    "sources": ["lfence+retpoline+ssbd"]
 		}

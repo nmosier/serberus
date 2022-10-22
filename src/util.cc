@@ -41,6 +41,12 @@ unsigned instruction_dominator_depth(llvm::Instruction *I, const llvm::Dominator
     }
 }
 
+  std::set<llvm::Value *> get_incoming_loads(llvm::Value *V) {
+    std::set<llvm::Value *> set;
+    get_incoming_loads(V, std::inserter(set, set.end()));
+    return set;
+  }
+
 namespace util {
 
   namespace {

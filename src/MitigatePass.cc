@@ -1,3 +1,4 @@
+
 #include <ctime>
 
 #include <fstream>
@@ -62,6 +63,13 @@ namespace clou {
 	}
       }
       os << "(none)";
+    }
+
+    std::string str_debugloc(const llvm::Value *V) {
+      std::string s;
+      llvm::raw_string_ostream ss(s);
+      print_debugloc(ss, V);
+      return s;
     }
 
     struct Node {
@@ -161,7 +169,6 @@ namespace clou {
 	for (auto& I : llvm::instructions(F)) {
 	  if (auto *LI = llvm::dyn_cast<llvm::LoadInst>(&I)) {
 	    if (LA.mayLeak(LI) && (!ST.secret(LI) || util::isConstantAddress(LI->getPointerOperand()))) {
-	      // if (!ST.secret(LI) && LA.mayLeak(LI)) {
 	      *out++ = LI;
 	    }
 	  }
@@ -232,12 +239,32 @@ namespace clou {
 	// List callees
 	auto& callees = j["callees"] = llvm::json::Array();
 	auto& indirect_calls = j["indirect_calls"] = false;
+	std::set<const llvm::Function *> seen;
 	for (const llvm::CallBase& CB : util::instructions<llvm::CallBase>(F)) {
 	  if (const llvm::Function *F = CB.getCalledFunction()) {
-	    callees.getAsArray()->push_back(llvm::json::Value(F->getName()));
+	    if (seen.insert(F).second) {
+	      callees.getAsArray()->push_back(llvm::json::Value(F->getName()));
+	    }
 	  } else {
 	    indirect_calls = true;
 	  }
+	}
+
+	// Get all transmitters
+	CountStat stat_naive_loads(j, "naive_loads");
+	CountStat stat_naive_xmits(j, "naive_xmits");
+	for (llvm::Instruction& I : llvm::instructions(F)) {
+	  bool is_xmit = false;
+	  for (const auto& op : get_transmitter_sensitive_operands(&I)) {
+	    if (op.kind == TransmitterOperand::TRUE) {
+	      for (llvm::Value *V : get_incoming_loads(op.V)) {
+		is_xmit = true;
+		++stat_naive_loads;
+	      }
+	    }
+	  }
+	  if (is_xmit)
+	    ++stat_naive_xmits;
 	}
       }
 
@@ -308,8 +335,49 @@ namespace clou {
 					   llvm::count_if(util::instructions<llvm::LoadInst>(F), [&] (auto& I) {
 					     return LA.mayLeak(&I) && ST.secret(&I);
 					   }));
-	
 
+
+	{
+	  // Transmitter stats
+	  CountStat stat_xmit_pub(log, "xmit_safe");
+	  CountStat stat_xmit_pseudo(log, "xmit_pseudo");
+	  CountStat stat_xmit_true(log, "xmit_true");
+	  for (auto& I : llvm::instructions(F)) {
+	    enum Kind {
+	      NONE = 0,
+	      SAFE,
+	      PSEUDO,
+	      TRUE,
+	    };
+	    Kind kind = NONE;
+	    for (const auto& op : get_transmitter_sensitive_operands(&I)) {
+	      if (ST.secret(op.V)) {
+		switch (op.kind) {
+		case TransmitterOperand::TRUE:
+		  kind = std::max(kind, TRUE);
+		  break;
+		case TransmitterOperand::PSEUDO:
+		  kind = std::max(kind, PSEUDO);
+		  break;
+		default: std::abort();
+		}
+	      } else {
+		kind = std::max(kind, SAFE);
+	      }
+	    }
+
+	    switch (kind) {
+	    case NONE: break;
+	    case SAFE: ++stat_xmit_pub; break;
+	    case PSEUDO: ++stat_xmit_pseudo; break;
+	    case TRUE: ++stat_xmit_true; break;
+	    default: std::abort();
+	    }
+	    
+	  }
+	}
+	
+	
 	{
 	  CountStat stat_cas(log, "cas");
 	  CountStat stat_ncas_pub(log, "ncas_pub");
@@ -370,6 +438,7 @@ namespace clou {
 		      for (auto *op_I : transmit_ops) {
 			if (ST.taints[op_I].contains(&LI)) {
 			  A.add_st({.s = SI, .t = transmitter});
+			  ++stat_ncas_load;
 			}
 		      }
 		    }
@@ -379,6 +448,7 @@ namespace clou {
 		} else {
 		  // Speculatively Public Constant-Address Store
 		  A.add_st({.s = SI, .t = &LI});
+		  ++stat_ncas_load;	  
 		}
 	      }
 	    }
@@ -411,6 +481,8 @@ namespace clou {
 	    for (auto *op_I : transmit_ops) {
 	      for (const auto& [source, kind] : ST.taints.at(op_I)) {
 		if (kind == SpeculativeTaint::ORIGIN) {
+		  assert(llvm::isa<llvm::LoadInst>(source));
+		  assert(!util::isConstantAddress(llvm::cast<llvm::LoadInst>(source)));
 		  A.add_st({.s = source, .t = transmitter});
 		  ++stat_st_udts;
 		}
@@ -556,8 +628,17 @@ namespace clou {
 	}
 
 	// Mitigations
+	auto& lfence_srclocs = log["lfence_srclocs"] = llvm::json::Array();
 	for (const auto& [src, dst] : cut_edges) {
 	  CreateMitigation(getMitigationPoint(src.V, dst.V), "clou-mitigate-pass");
+
+	  // Print out mitigation info
+	  if (ClouLog) {
+	    lfence_srclocs.getAsArray()->push_back(llvm::json::Object({
+		  {.K = "src", .V = str_debugloc(src.V)},
+		  {.K = "dst", .V = str_debugloc(dst.V)},
+		}));
+	  }
 	}
 
 #if 0
@@ -653,7 +734,7 @@ namespace clou {
 	    os << "sink_out: " << sink_out << "\n";
 	    
 	  }
-#endif	  
+#endif
 	  assert(src_out_flat == src_in);
 	  assert(sink_out_flat == sink_in);
 	}

@@ -41,37 +41,37 @@
     "plots": [
 	{
 	    "name": "libsodium_salsa20",
-	    "displayname": "Salsa20\n64B\n(libsodium)",
+	    "displayname": "Salsa20\n64B",
 	    "key": "libsodium_salsa20_bench/64"
 	},
 	{
 	    "name": "libsodium_sha256",
-	    "displayname": "SHA-256\n64B\n(libsodium)",
+	    "displayname": "SHA-256\n64B",
 	    "key": "sha256_bench/64"
 	},
 	{
 	    "name": "libsodium_sha256",
-	    "displayname": "SHA-256\n8192B\n(libsodium)",
+	    "displayname": "SHA-256\n8KB",
 	    "key": "sha256_bench/8192"
 	},
 	{
 	    "name": "hacl_chacha20",
-	    "displayname": "ChaCha20\n8192B\n(HACL*)",
+	    "displayname": "ChaCha20\n8KB",
 	    "key": "hacl_chacha20_benchmark/8192"
 	},
 	{
 	    "name": "hacl_poly1305",
-	    "displayname": "Poly1305\n1024B\n(HACL*)",
+	    "displayname": "Poly1305\n1024B",
 	    "key": "hacl_poly1305_benchmark/1024"
 	},
 	{
 	    "name": "hacl_poly1305",
-	    "displayname": "Poly1305\n8192B\n(HACL*)",
+	    "displayname": "Poly1305\n8KB",
 	    "key": "hacl_poly1305_benchmark/8192"
 	},
 	{
 	    "name": "hacl_curve25519",
-	    "displayname": "ECDH\nCurve25519\n(HACL*)",
+	    "displayname": "Curve-\n25519",
 	    "key": "hacl_curve25519_bench"
 	}
     ]

@@ -140,6 +140,18 @@ namespace clou {
       
     } while (taints != taints_bak || mem != mem_bak);
 
+
+    for (llvm::LoadInst& LI : util::instructions<llvm::LoadInst>(F)) {
+      if (!util::isConstantAddress(LI.getPointerOperand())) {
+	for (const auto& [dst, srcs] : taints) {
+	  const auto it = srcs.find(&LI);
+	  if (it != srcs.end()) {
+	    assert(it->second == ORIGIN);
+	  }
+	}
+      }
+    }
+
     return false;
   }
 

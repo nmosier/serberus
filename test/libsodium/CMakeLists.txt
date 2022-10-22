@@ -58,6 +58,12 @@ libsodium_cloucc_library(libsodium_cloucc
   LLVMFLAGS -clou -no-stack-slot-sharing
 )
 
+libsodium_cloucc_library(libsodium_cloucc_dbg
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou -no-stack-slot-sharing
+  CFLAGS -g
+)
+
 libsodium_benchmark_library(libsodium_stats
   PASS StatsPass
 )
