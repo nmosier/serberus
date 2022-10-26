@@ -21,6 +21,9 @@ function(libsodium_library NAME)
   list(APPEND LIBSODIUM_CFLAGS -fcf-protection=branch)
   list(APPEND LIBSODIUM_LDFLAGS -Wl,-z,ibt)
 
+  # Use ld.lld
+  # list(APPEND LIBSODIUM_LDFLAGS -fuse-ld=${LLVM_BINARY_DIR}/bin/ld.lld)
+
   # TODO: log
   list(APPEND LIBSODIUM_LLVMFLAGS -clou-log=${LOG_DIR})
 
@@ -67,6 +70,7 @@ function(libsodium_library NAME)
 
   # build step
   add_custom_command(OUTPUT ${STAMP_DIR}/build.stamp ${BUILD_DIR}/build.log
+    COMMAND rm -f ${LOG_DIR}/*
     COMMAND make --quiet -j64 2>&1 | tee ${BUILD_DIR}/build.log
     COMMAND touch ${STAMP_DIR}/build.stamp
     DEPENDS ${STAMP_DIR}/clean.stamp

@@ -8,6 +8,9 @@ function(hacl_benchmark NAME BENCHSRC SRC)
   list(APPEND Hacl_LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:cet> -L$<TARGET_FILE_DIR:cet> -lcet -Wl,-z,ibt)
   list(APPEND Hacl_DEPENDS cet)
 
+  make_directory(${CMAKE_CURRENT_BINARY_DIR}/${NAME}_logs)
+  list(APPEND Hacl_LLVMFLAGS -clou-log=${NAME}_logs)
+
   foreach(pass IN LISTS Hacl_PASSES)
     list(APPEND Hacl_CFLAGS -Xclang -load -Xclang $<TARGET_FILE:${pass}>)
     list(APPEND Hacl_DEPENDS ${pass})
@@ -27,6 +30,7 @@ function(hacl_benchmark NAME BENCHSRC SRC)
   endforeach()
   
   add_custom_command(OUTPUT ${OBJ}
+    COMMAND rm -f ${NAME}_logs/*
     COMMAND ${LLVM_BINARY_DIR}/bin/clang -flegacy-pass-manager -fPIE ${Hacl_CFLAGS} ${Hacl_LDFLAGS} ${Hacl_SOURCE_DIR}/dist/gcc-compatible/${SRC} -o ${OBJ} -fuse-ld=${LLVM_BINARY_DIR}/bin/ld.lld -shared
     DEPENDS ${Hacl_DEPENDS} ${LLVM_BINARY_DIR}/bin/clang ${LLVM_BINARY_DIR}/bin/ld.lld ${Hacl_SOURCE_DIR}/dist/gcc-compatible/${SRC}
   )

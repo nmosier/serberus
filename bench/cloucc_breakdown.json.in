@@ -5,7 +5,7 @@
 	    "path": "$<TARGET_FILE:baseline_none_benchmark>"
 	},
 	{
-	    "name": "udt",
+	    "name": "ncal",
 	    "path": "$<TARGET_FILE:cloucc_udt_benchmark>"
 	},
 	{
@@ -13,11 +13,11 @@
 	    "path": "$<TARGET_FILE:cloucc_ncas_benchmark>"
 	},
 	{
-	    "name": "fps",
+	    "name": "fps+bwd",
 	    "path": "$<TARGET_FILE:cloucc_fps_benchmark>"
 	},
 	{
-	    "name": "prech",
+	    "name": "fwd",
 	    "path": "$<TARGET_FILE:cloucc_prech_benchmark>"
 	},
 	{
@@ -42,9 +42,9 @@
 		    "sources": ["none"]
 		},
 		{
-		    "name": "udt",
+		    "name": "ncal",
 		    "style": "--",
-		    "sources": ["udt"]
+		    "sources": ["ncal"]
 		},
 		{
 		    "name": "ncas",
@@ -52,19 +52,19 @@
 		    "sources": ["ncas"]
 		},
 		{
-		    "name": "fps",
+		    "name": "fwd",
 		    "style": "--",
-		    "sources": ["fps"]
+		    "sources": ["fwd"]
 		},
 		{
-		    "name": "prech",
+		    "name": "fps+bwd",
 		    "style": "--",
-		    "sources": ["prech"]
+		    "sources": ["fps+bwd"]
 		},
 		{
 		    "name": "all (expected)",
 		    "style": "-.",
-		    "sources": ["udt", "ncas", "fps", "prech"]
+		    "sources": ["ncal", "ncas", "fps+bwd", "fwd"]
 		},
 		{
 		    "name": "all (actual)",

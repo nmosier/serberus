@@ -100,7 +100,7 @@ for mitigation in spec['mitigations']:
     data['mitigation'].append(mitdisplay)
     data['overhead'].append(geomean)
 
-aspect = 2
+aspect = 1.75
 
 df = pandas.DataFrame(data = data)
 g = seaborn.catplot(
@@ -118,7 +118,7 @@ g.set_xticklabels(rotation = 45, horizontalalignment = 'center')
 ax = g.facet_axis(0, 0)
 # ax.figure.tight_layout()
 
-ymin = -9.8
+ymin = -6
 ymax = 52.0
 
 ax.set_ybound(lower = ymin, upper = ymax)
@@ -131,8 +131,12 @@ for c in ax.containers:
     texts = ax.bar_label(c, labels = labels, label_type = 'edge', rotation = 90) #, fontsize = 'small')
     for text in texts:
         val = float(text._text)
-        if val < 0 or val >= ymax:
-            text.set(rotation = 0)
+        if val < 0:
+            print(f'warning: dropping label for negative bar: {text._text}', file = sys.stderr)
+            text.remove()
+            # text.set_position((0, 0))
+        # if val < 0 or val >= ymax:
+        # text.set(rotation = 0)
 
 plt.legend(
     # fontsize = '7.5',
@@ -147,6 +151,6 @@ g.set(
     xlabel = None
 )
 
-plt.subplots_adjust(top = 0.90, bottom = 0.28, left = 0.1, right = 0.98)
+plt.subplots_adjust(top = 0.80, bottom = 0.25, left = 0.1, right = 0.98)
 
 plt.savefig(f'{args.outdir}/plot.pdf')

@@ -107,7 +107,7 @@ function(hacl_benchmarks BASENAME BENCHSRC SRC)
   hacl_benchmark(${BASENAME}_cloucc_benchmark ${BENCHSRC} ${SRC}
     ${cloucc_args}
     CFLAGS -O3 -fno-stack-protector
-    LLVMFLAGS -clou-log=${logs}
+    # LLVMFLAGS -clou-log=${logs}
   )
   set_target_properties(${BASENAME}_cloucc_benchmark PROPERTIES CLOU_LOGS ${logs})
 endfunction()
@@ -124,14 +124,14 @@ configure_file(table.py.in table.py)
 
 
 make_directory(${CMAKE_CURRENT_BINARY_DIR}/hacl_curve25519_cloucc_benchmark_logs)
-hacl_benchmark(hacl_curve25519_cloucc_benchmark_dbg Hacl_Curve25519_bench.cc Hacl_Curve25519_51.c
-  ${cloucc_args}
-  CFLAGS -O3 -fno-stack-protector -g
-  LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:trace_runtime> -ltrace_runtime -L$<TARGET_FILE_DIR:trace_runtime>
-  LLVMFLAGS -clou-log=${CMAKE_CURRENT_BINARY_DIR}/hacl_curve25519_cloucc_benchmark_logs -clou-whitelist=point_add_and_double,point_double
-  PASSES TracePass
-  DEPENDS trace_runtime
-)
+# hacl_benchmark(hacl_curve25519_cloucc_benchmark_dbg Hacl_Curve25519_bench.cc Hacl_Curve25519_51.c
+#   ${cloucc_args}
+#   CFLAGS -O3 -fno-stack-protector -g
+#   LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:trace_runtime> -ltrace_runtime -L$<TARGET_FILE_DIR:trace_runtime>
+#   LLVMFLAGS -clou-log=${CMAKE_CURRENT_BINARY_DIR}/hacl_curve25519_cloucc_benchmark_logs -clou-whitelist=point_add_and_double,point_double
+#   PASSES TracePass
+#   DEPENDS trace_runtime
+# )
 
 hacl_benchmark(hacl_curve25519_cloucc_benchmark_test Hacl_Curve25519_bench.cc Hacl_Curve25519_51.c
   ${cloucc_args}
