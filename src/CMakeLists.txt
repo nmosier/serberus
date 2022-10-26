@@ -65,12 +65,12 @@ add_library(Transmitter OBJECT
 )
 target_link_libraries(Transmitter INTERFACE util)
 
-add_library(ZeroFillCalls SHARED
-  ZeroFillCalls.cc
-  $<TARGET_OBJECTS:InstructionPass>
-  util
-)
-register_llvm_pass(ZeroFillCalls)
+# add_library(ZeroFillCalls SHARED
+#   ZeroFillCalls.cc
+#   $<TARGET_OBJECTS:InstructionPass>
+#   util
+# )
+# register_llvm_pass(ZeroFillCalls)
 
 add_library(TracePass SHARED
   TracePass.cc
@@ -91,11 +91,11 @@ add_library(NoSpillLowering SHARED
 register_llvm_pass(NoSpillLowering)
 target_link_libraries(NoSpillLowering PRIVATE util Metadata)
 
-add_library(BaselinePass SHARED
-  BaselinePass.cc
-)
-register_llvm_pass(BaselinePass)
-target_link_libraries(BaselinePass PRIVATE Mitigation util)
+# add_library(BaselinePass SHARED
+#   BaselinePass.cc
+# )
+# register_llvm_pass(BaselinePass)
+# target_link_libraries(BaselinePass PRIVATE Mitigation util)
 
 add_library(NoSpillPublic SHARED
   NoSpillPublic.cc
@@ -134,8 +134,8 @@ add_library(InlinePass SHARED
 register_llvm_pass(InlinePass)
 target_link_libraries(InlinePass PRIVATE util NonspeculativeTaintAnalysis SpeculativeTaintAnalysis LeakAnalysis)
 
-add_library(StatsPass SHARED
-  StatsPass.cc
-)
-register_llvm_pass(StatsPass)
-target_link_libraries(StatsPass PRIVATE util)
+# add_library(StatsPass SHARED
+#   StatsPass.cc
+# )
+# register_llvm_pass(StatsPass)
+# target_link_libraries(StatsPass PRIVATE util)

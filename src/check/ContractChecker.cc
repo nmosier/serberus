@@ -11,6 +11,7 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Constant.h>
 #include <llvm/ADT/STLExtras.h>
+#include <llvm/Support/WithColor.h>
 
 #include "clou/util.h"
 #include "clou/Transmitter.h"
@@ -42,7 +43,15 @@ namespace clou {
 	  return llvm::all_of(range, is_pub);
 	};
 
+	for (llvm::Argument& A : F.args()) {
+	  if (A.getType()->isPointerTy()) {
+	    vals.insert(&A);
+	  }
+	}
+      
 	do {
+	  mem_bak = mem;
+	  vals_bak = vals;	  
 
 	  for (llvm::Instruction& I : llvm::instructions(F)) {
 	    // Pointers are public per CT
@@ -90,7 +99,7 @@ namespace clou {
 		default:
 		  warn_unhandled_intrinsic(II);
 		}
-	      } else if (llvm::isa<llvm::CallBase>(&I)) {
+	      } else if (llvm::isa<llvm::CallBase, llvm::ExtractValueInst, llvm::ShuffleVectorInst, llvm::ExtractElementInst, llvm::InsertElementInst>(&I)) {
 		// conservatively don't propagate
 	      } else {
 		unhandled_instruction(I);
@@ -161,13 +170,20 @@ namespace clou {
 	    
 	  }
 
-	  mem_bak = mem;
-	  vals_bak = vals;
 	} while (!(mem == mem_bak && vals == vals_bak));
 
 	// TODO: check
 
-	
+	// Check for non-public arguments.
+	for (llvm::Argument& A : F.args()) {
+	  if (!vals.contains(&A)) {
+	    std::string name = A.getName().str();
+	    if (name.empty()) {
+	      name = std::to_string(A.getArgNo());
+	    }
+	    llvm::WithColor::warning() << "argument " << name << " possibly secret in function " << F.getName() << "\n";
+	  }
+	}
 	
 	
 	return false;
