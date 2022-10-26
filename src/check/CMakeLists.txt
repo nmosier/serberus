@@ -1,6 +1,6 @@
-add_library(StackInitChecker SHARED
-  StackInitChecker.cc
+add_library(ContractChecker SHARED
+  ContractChecker.cc
 )
-register_llvm_pass(StackInitChecker)
-target_link_libraries(StackInitChecker PRIVATE util)
+register_llvm_pass(ContractChecker)
+target_link_libraries(ContractChecker PRIVATE util Transmitter)
 
