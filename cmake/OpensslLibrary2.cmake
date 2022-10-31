@@ -4,6 +4,8 @@ function(openssl_library NAME)
 
   list(APPEND OPENSSL_CFLAGS -flegacy-pass-manager)
 
+  list(APPEND OPENSSL_CONFIGURE_OPTIONS no-threads)
+
   foreach(pass IN LISTS OPENSSL_PASS)
     list(APPEND OPENSSL_CFLAGS -Xclang -load -Xclang $<TARGET_FILE:${pass}>)
     list(APPEND OPENSSL_DEPENDS ${pass})
