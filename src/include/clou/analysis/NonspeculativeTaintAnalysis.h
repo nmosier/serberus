@@ -8,6 +8,8 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 
+#include "clou/containers.h"
+
 namespace clou {
 
   class NonspeculativeTaint final: public llvm::FunctionPass {
@@ -16,7 +18,6 @@ namespace clou {
     NonspeculativeTaint();
     
   private:
-    using VSet = std::set<llvm::Value *>;
     VSet pub_vals;
     llvm::Function *F;
     

@@ -38,10 +38,7 @@
 #include "clou/analysis/SpeculativeTaintAnalysis.h"
 #include "clou/analysis/LeakAnalysis.h"
 #include "clou/Stat.h"
-
-using VSet = std::set<llvm::Value *>;
-using VSetSet = std::set<VSet>;
-using VMap = std::map<llvm::Value *, VSet>;
+#include "clou/containers.h"
 
 namespace clou {
   namespace {
@@ -50,10 +47,6 @@ namespace clou {
       "clou-times",
       llvm::cl::desc("Log execution times of Mitigate Pass"),
     };
-
-    using ISet = std::set<llvm::Instruction *>;
-    using VSet = std::set<llvm::Value *>;
-    using IMap = std::map<llvm::Instruction *, ISet>;
 
     void print_debugloc(llvm::raw_ostream& os, const llvm::Value *V) {
       if (const auto *I = llvm::dyn_cast<llvm::Instruction>(V)) {
@@ -163,7 +156,6 @@ namespace clou {
 
       template <class OutputIt>
       OutputIt getPublicLoads(llvm::Function& F, OutputIt out) {
-	NonspeculativeTaint& NST = getAnalysis<NonspeculativeTaint>();
 	LeakAnalysis& LA = getAnalysis<LeakAnalysis>();
 	SpeculativeTaint& ST = getAnalysis<SpeculativeTaint>();
 	for (auto& I : llvm::instructions(F)) {
@@ -257,7 +249,7 @@ namespace clou {
 	  bool is_xmit = false;
 	  for (const auto& op : get_transmitter_sensitive_operands(&I)) {
 	    if (op.kind == TransmitterOperand::TRUE) {
-	      for (llvm::Value *V : get_incoming_loads(op.V)) {
+	      for ([[maybe_unused]] const auto& V : get_incoming_loads(op.V)) {
 		is_xmit = true;
 		++stat_naive_loads;
 	      }

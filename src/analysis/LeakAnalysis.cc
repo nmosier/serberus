@@ -11,6 +11,7 @@
 
 #include "clou/Transmitter.h"
 #include "clou/CommandLine.h"
+#include "clou/containers.h"
 
 namespace clou {
 
@@ -72,6 +73,13 @@ namespace clou {
 	      case llvm::Intrinsic::umin:
 	      case llvm::Intrinsic::umax:
 	      case llvm::Intrinsic::x86_rdrand_32:
+	      case llvm::Intrinsic::smax:
+	      case llvm::Intrinsic::smin:
+	      case llvm::Intrinsic::umul_with_overflow:
+	      case llvm::Intrinsic::abs:
+	      case llvm::Intrinsic::cttz:
+	      case llvm::Intrinsic::usub_sat:
+	      case llvm::Intrinsic::fmuladd:
 		for (llvm::Value *V : II->args()) {
 		  leaks.insert(V);
 		}
@@ -120,8 +128,9 @@ namespace clou {
 	      }
 	    }
 
-	  } else if (llvm::isa<llvm::CmpInst, llvm::GetElementPtrInst, llvm::BinaryOperator, llvm::PHINode, llvm::CastInst, llvm::SelectInst, llvm::ExtractValueInst, llvm::ExtractElementInst, llvm::InsertElementInst, llvm::ShuffleVectorInst, llvm::FreezeInst>(I)) {
-
+	  } else if (llvm::isa<llvm::CmpInst, llvm::GetElementPtrInst, llvm::BinaryOperator, llvm::PHINode, llvm::CastInst, llvm::SelectInst, llvm::ExtractValueInst, llvm::ExtractElementInst, llvm::InsertElementInst, llvm::ShuffleVectorInst, llvm::FreezeInst>(I)
+		     || (llvm::isa<llvm::UnaryOperator>(I) && llvm::cast<llvm::UnaryOperator>(I)->getOpcode() == llvm::UnaryOperator::UnaryOps::FNeg)
+		     ) {
 	    // Leaks all input operands
 	    for (llvm::Value *op : I->operands()) {
 	      leaks.insert(op);
@@ -129,6 +138,7 @@ namespace clou {
 
 	  } else if (llvm::isa<llvm::AllocaInst>(I)) {
 	    // ignore
+
 	  } else {
 	    unhandled_instruction(I);
 	  }

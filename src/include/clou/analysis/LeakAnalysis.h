@@ -5,6 +5,8 @@
 #include <llvm/Pass.h>
 #include <llvm/IR/Value.h>
 
+#include "clou/containers.h"
+
 namespace clou {
 
   class LeakAnalysis final : public llvm::FunctionPass {
@@ -13,7 +15,6 @@ namespace clou {
     LeakAnalysis();
 
   private:
-    using VSet = std::set<llvm::Value *>;
     VSet leaks;
     llvm::Function *F;
 

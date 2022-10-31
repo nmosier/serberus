@@ -47,7 +47,9 @@ namespace clou {
 	*out++ = TransmitterOperand(TransmitterOperand::TRUE, cond);
     } else if (llvm::CallBase *C = llvm::dyn_cast<llvm::CallBase>(I)) {
       if (auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(C)) {
-	if (!II->isAssumeLikeIntrinsic() && !II->getType()->isVoidTy() && II->arg_size() > 0) {
+	if (!II->isAssumeLikeIntrinsic() && !II->getType()->isVoidTy() && II->arg_size() > 0
+	    && II->getIntrinsicID() != llvm::Intrinsic::annotation
+	    ) {
 	  std::vector<unsigned> none;
 	  std::vector<unsigned> all;
 	  for (unsigned i = 0; i < II->arg_size(); ++i) {

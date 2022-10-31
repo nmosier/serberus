@@ -292,6 +292,19 @@ namespace clou {
       return nullptr;
     }
 
+
+    bool ExtCallBase::classof(const llvm::CallBase *C) {
+      return !llvm::isa<llvm::IntrinsicInst>(C);
+    }
+
+    bool ExtCallBase::classof(const llvm::Value *V) {
+      if (const auto *C = llvm::dyn_cast<llvm::CallBase>(V)) {
+	return classof(C);
+      } else {
+	return false;
+      }
+    }
+
   }
   
 }

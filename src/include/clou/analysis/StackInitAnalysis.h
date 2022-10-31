@@ -8,12 +8,12 @@
 #include <llvm/Pass.h>
 #include <llvm/IR/Instructions.h>
 
+#include "clou/containers.h"
+
 namespace clou {
 
   class StackInitAnalysis final : public llvm::FunctionPass {
   public:
-    using ISet = std::set<llvm::Instruction *>;
-    
     static char ID;
     StackInitAnalysis();
 

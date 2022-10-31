@@ -29,6 +29,33 @@ namespace clou {
 	AU.setPreservesAll();
       }
 
+      bool annotatedPublicReturnValue(llvm::Function& F) const {
+	auto *M = F.getParent();
+	if (auto *GV = M->getGlobalVariable("llvm.global.annotations")) {
+	  for (llvm::Value *AOp : GV->operands()) {
+	    if (auto *CA = llvm::dyn_cast<llvm::ConstantArray>(AOp)) {
+	      for (llvm::Value *CAOp : CA->operands()) {
+		if (auto *CS = llvm::dyn_cast<llvm::ConstantStruct>(CAOp)) {
+		  if (CS->getNumOperands() >= 2) {
+		    if (&F == llvm::cast<llvm::Function>(CS->getOperand(0)->getOperand(0))) {
+		      if (auto *GAnn = llvm::dyn_cast<llvm::GlobalVariable>(CS->getOperand(1)->getOperand(0))) {
+			if (auto *A = llvm::dyn_cast<llvm::ConstantDataArray>(GAnn->getOperand(0))) {
+			  const auto AS = A->getAsCString();
+			  if (AS == "public") {
+			    return true;
+			  }
+			}
+		      }
+		    }
+		  }
+		}
+	      }
+	    }
+	  }
+	}
+	return false;
+      }
+
       bool runOnFunction(llvm::Function& F) override {
 	std::set<llvm::Value *> mem, mem_bak; // public memory
 	std::set<llvm::Value *> vals, vals_bak; // public values
@@ -46,6 +73,30 @@ namespace clou {
 	for (llvm::Argument& A : F.args()) {
 	  if (A.getType()->isPointerTy()) {
 	    vals.insert(&A);
+	  }
+	}
+
+	for (llvm::IntrinsicInst& II : util::instructions<llvm::IntrinsicInst>(F)) {
+	  if (II.getIntrinsicID() == llvm::Intrinsic::annotation) {
+	    // the second argument is the annotation string
+	    if (const auto *str_GV = llvm::dyn_cast<llvm::GlobalVariable>(II.getArgOperand(1)->stripPointerCasts())) {
+	      if (const auto *str_V = llvm::dyn_cast<llvm::ConstantDataArray>(str_GV->getInitializer())) {
+		if (str_V->isCString()) {
+		  const llvm::StringRef str = str_V->getAsCString();
+		  if (str == "public") {
+		    vals.insert(II.getArgOperand(0));
+		  }
+		}
+	      }
+	    }
+	  }
+	}
+
+	if (annotatedPublicReturnValue(F)) {
+	  for (llvm::ReturnInst& RI : util::instructions<llvm::ReturnInst>(F)) {
+	    if (auto *RV = RI.getReturnValue()) {
+	      vals.insert(RV);
+	    }
 	  }
 	}
       
@@ -66,13 +117,24 @@ namespace clou {
 	      }
 	    }
 
+	    // Assume that called functions obey the contract
+	    if (auto *C = llvm::dyn_cast<util::ExtCallBase>(&I)) {
+	      for (llvm::Value *V : C->args()) {
+		vals.insert(V);
+	      }
+	      if (!C->getType()->isVoidTy()) {
+		vals.insert(C);
+	      }
+	    }
+
 	    // TODO: Merge these for simpler code.
 
 	    // Backwards publicity propagation
 	    if (vals.contains(&I) && I.getNumOperands() > 0) {
 	      if (auto *LI = llvm::dyn_cast<llvm::LoadInst>(&I)) {
 		mem.insert(LI->getPointerOperand());
-	      } else if (llvm::isa<llvm::CmpInst, llvm::GetElementPtrInst, llvm::BinaryOperator, llvm::PHINode, llvm::CastInst, llvm::SelectInst, llvm::FreezeInst, llvm::AllocaInst>(I)) {
+	      } else if (llvm::isa<llvm::CmpInst, llvm::GetElementPtrInst, llvm::BinaryOperator, llvm::PHINode, llvm::CastInst,
+			 llvm::SelectInst, llvm::FreezeInst, llvm::AllocaInst>(I)) {
 		// All input operands must be public as well
 		for (llvm::Value *op : I.operands()) {
 		  vals.insert(op);
@@ -96,10 +158,14 @@ namespace clou {
 		    vals.insert(V);
 		  }
 		  break;
+		case llvm::Intrinsic::annotation:
+		  vals.insert(II->getArgOperand(0));
+		  break;
 		default:
 		  warn_unhandled_intrinsic(II);
 		}
-	      } else if (llvm::isa<llvm::CallBase, llvm::ExtractValueInst, llvm::ShuffleVectorInst, llvm::ExtractElementInst, llvm::InsertElementInst>(&I)) {
+	      } else if (llvm::isa<util::ExtCallBase, llvm::ExtractValueInst, llvm::ShuffleVectorInst, llvm::ExtractElementInst,
+			 llvm::InsertElementInst>(&I)) {
 		// conservatively don't propagate
 	      } else {
 		unhandled_instruction(I);
@@ -133,10 +199,15 @@ namespace clou {
 		    vals.insert(II);
 		  }
 		  break;
+		case llvm::Intrinsic::annotation:
+		  if (is_pub(II->getArgOperand(0))) {
+		    vals.insert(II);
+		  }
+		  break;
 		default:
 		  warn_unhandled_intrinsic(II);
 		}
-	      } else if (llvm::isa<llvm::CallBase, llvm::ExtractValueInst, llvm::InsertElementInst, llvm::ExtractElementInst, llvm::ShuffleVectorInst>(&I)) {
+	      } else if (llvm::isa<util::ExtCallBase, llvm::ExtractValueInst, llvm::InsertElementInst, llvm::ExtractElementInst, llvm::ShuffleVectorInst>(&I)) {
 		// conservatively don't propagate
 	      } else {
 		unhandled_instruction(I);
@@ -174,6 +245,8 @@ namespace clou {
 
 	// TODO: check
 
+	bool ok = true;
+
 	// Check for non-public arguments.
 	for (llvm::Argument& A : F.args()) {
 	  if (!vals.contains(&A)) {
@@ -181,10 +254,50 @@ namespace clou {
 	    if (name.empty()) {
 	      name = std::to_string(A.getArgNo());
 	    }
-	    llvm::WithColor::warning() << "argument " << name << " possibly secret in function " << F.getName() << "\n";
+
+	    std::string prefix;
+	    {
+	      llvm::raw_string_ostream os(prefix);
+	      if (const auto *SP = F.getSubprogram()) {
+		os << SP->getDirectory() << "/" << SP->getFilename() << ":" << SP->getLine();
+	      }
+	    }
+
+	    auto& os = llvm::WithColor::error(llvm::errs(), prefix);
+	    os << "argument '" << name << "' possibly secret in function " << F.getName() << "\n";
+
+	    ok = false;
 	  }
 	}
-	
+
+	// Check for non-public return values.
+	for (llvm::ReturnInst& RI : util::instructions<llvm::ReturnInst>(F)) {
+	  if (auto *RV = RI.getReturnValue()) {
+	    if (!is_pub(RV)) {
+	      std::string prefix;
+	      {
+		llvm::raw_string_ostream os(prefix);
+		if (const auto& DL = RI.getDebugLoc()) {
+		  if (const auto *scope = llvm::cast<llvm::DIScope>(DL.getScope())) {
+		    os << scope->getDirectory() << "/" << scope->getFilename() << ":" << DL.getLine() << ":" << DL.getCol();
+		  }
+		}
+	      }
+
+	      auto& os = llvm::WithColor::error(llvm::errs(), prefix);
+	      os << "return value possibly secret in function " << F.getName() << "\n";
+#if 0	      
+	      os << RI << "\n" << *RV << "\n";
+	      os << F << "\n";
+#endif
+	      ok = false;
+	    }
+	  }
+	}
+
+	if (!ok)
+	  std::_Exit(EXIT_FAILURE);
+
 	
 	return false;
       }

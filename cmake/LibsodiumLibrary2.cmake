@@ -13,7 +13,7 @@ function(libsodium_library NAME)
 
   make_directory(${INSTALL_DIR}/include)
   make_directory(${BUILD_DIR})
-  make_directory(${LOG_DIR})  
+  make_directory(${LOG_DIR})
 
   # TESTING -- CET
   list(APPEND LIBSODIUM_LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:cet> -L$<TARGET_FILE_DIR:cet> -lcet)
@@ -45,6 +45,9 @@ function(libsodium_library NAME)
 
   list(APPEND LIBSODIUM_LDFLAGS -pthread)
 
+  # Experimental: include sct.h
+  # list(APPEND LIBSODIUM_CFLAGS -include "${LIBSODIUM_DIR}/sct.h")
+
   list(JOIN LIBSODIUM_CFLAGS " " LIBSODIUM_CFLAGS)
   list(JOIN LIBSODIUM_CPPFLAGS " " LIBSODIUM_CPPFLAGS)
   list(JOIN LIBSODIUM_LDFLAGS " " LIBSODIUM_LDFLAGS)
@@ -71,7 +74,7 @@ function(libsodium_library NAME)
   # build step
   add_custom_command(OUTPUT ${STAMP_DIR}/build.stamp ${BUILD_DIR}/build.log
     COMMAND rm -f ${LOG_DIR}/*
-    COMMAND make --quiet -j64 2>&1 | tee ${BUILD_DIR}/build.log
+    COMMAND make --quiet -j64 2>&1 # | tee ${BUILD_DIR}/build.log
     COMMAND touch ${STAMP_DIR}/build.stamp
     DEPENDS ${STAMP_DIR}/clean.stamp
     COMMENT "Building libsodium library ${NAME}"

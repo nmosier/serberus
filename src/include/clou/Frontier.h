@@ -9,10 +9,9 @@
 #include <llvm/ADT/iterator.h>
 #include <llvm/IR/InstIterator.h>
 
-namespace clou {
+#include "clou/containers.h"
 
-  using ISet = std::set<llvm::Instruction *>;
-  using IQueue = std::queue<llvm::Instruction *>;
+namespace clou {
 
   template <class OutputIt, class UnaryPredicate>
   OutputIt copy_if(llvm::Function& F, OutputIt out, UnaryPredicate pred) {

@@ -18,3 +18,7 @@ add_library(libssbd SHARED
 add_library(cet SHARED
   cet.c
 )
+
+add_executable(memusage
+  memusage.c
+)

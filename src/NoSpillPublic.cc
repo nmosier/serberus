@@ -12,12 +12,9 @@
 #include "clou/Transmitter.h"
 #include "clou/Mitigation.h"
 #include "clou/util.h"
+#include "clou/containers.h"
 
 namespace clou {
-  using ISet = std::set<llvm::Instruction *>;
-  using VSet = std::set<llvm::Value *>;
-  using IQueue = std::queue<llvm::Instruction *>;
-  
   namespace {
     
     struct NoSpillPublic final : public llvm::FunctionPass {

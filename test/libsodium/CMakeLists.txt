@@ -76,4 +76,6 @@ libsodium_cloucc_library(libsodium_cloucc_unweighted
 
 libsodium_cloucc_library(libsodium_cloucc_check
   PASS ContractChecker
+  CFLAGS -g -Werror
+  LLVMFLAGS -no-promote-arguments
 )

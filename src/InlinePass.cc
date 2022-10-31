@@ -9,6 +9,7 @@
 #include "clou/util.h"
 #include "clou/analysis/SpeculativeTaintAnalysis.h"
 #include "clou/analysis/LeakAnalysis.h"
+#include "clou/containers.h"
 #include "clou/analysis/NonspeculativeTaintAnalysis.h"
 
 namespace clou {
@@ -25,8 +26,6 @@ namespace clou {
 	AU.addRequired<LeakAnalysis>();
       }
 
-      using ISet = std::set<llvm::Instruction *>;
-      using IQueue = std::queue<llvm::Instruction *>;
       llvm::CallBase *handleSecretStore(llvm::StoreInst *SI, const CBSet& skip) {
 	// check if we encounter any public loads along the way
 	auto& ST = getAnalysis<SpeculativeTaint>();
