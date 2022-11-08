@@ -38,3 +38,16 @@ add_benchmarks(libsodium sha256     8192)
 add_benchmarks(hacl      chacha20   8192)
 add_benchmarks(hacl      poly1305   1024)
 add_benchmarks(hacl      curve25519 64)
+
+
+function(add_breakdowns)
+  set(modes baseline_none baseline_lfence baseline_slh baseline_retpoline baseline_ssbd baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc cloucc_udt cloucc_ncas cloucc_fps cloucc_prech)
+  foreach(mode IN LISTS modes)
+    set(exe breakdown_${mode})
+    add_executable(${exe} ${ARGN})
+    target_link_libraries(${exe} PRIVATE libsodium_${mode} benchmark::benchmark)
+    target_compile_definitions(${exe} PRIVATE BENCH_LIBSODIUM BENCH_TIME)
+  endforeach()
+endfunction()
+
+add_breakdowns(breakdown.cc libsodium_sha256.cc)

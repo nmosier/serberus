@@ -67,7 +67,8 @@ int main(int argc, char *argv[]) {
 
     fprintf(f, "{\n");
     fprintf(f, "\t\"mem\": %f,\n", mean);
-    fprintf(f, "\t\"stddev\": %f\n", stddev);
+    fprintf(f, "\t\"stddev\": %f,\n", stddev);
+    fprintf(f, "\t\"unit\": \"KB\"\n");
     fprintf(f, "}\n");
   }
 }
