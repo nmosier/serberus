@@ -10,6 +10,17 @@ function(add_benchmark_shared lib name mode arg metric)
   target_link_libraries(${exe} PRIVATE ${lib}_${mode})
   target_compile_definitions(${exe} PRIVATE BENCH_${LIB} BENCH_${METRIC} BENCH_NAME=${lib}_${name} BENCH_ARG=${arg})
   set(exe ${exe} PARENT_SCOPE)
+
+  # add rule for generating jsons
+  set(json ${exe}.json)
+  add_custom_command(OUTPUT ${json}
+    COMMAND ${exe} ${benchmark_runtime_flags} --benchmark_out_format=json --benchmark_out=${json} --benchmark_color=true
+  )
+  add_custom_target(${exe}_json
+    DEPENDS ${json}
+  )
+  get_directory_property(jsons ${metric}_jsons)
+  set_property(DIRECTORY PROPERTY ${metric}_jsons ${jsons} ${json})
 endfunction()
 
 function(add_mem_benchmark)
@@ -19,6 +30,17 @@ endfunction()
 function(add_time_benchmark)
   add_benchmark_shared(${ARGN} time)
   target_link_libraries(${exe} PRIVATE benchmark::benchmark)
+# 
+#   set(json ${exe}.json)
+#   add_custom_command(OUTPUT ${json}
+#     COMMAND ${exe} ${benchmark_runtime_flags} --benchmark_out_format=json --benchmark_out=${json} --benchmark_color=true
+#   )
+#   add_custom_target(${exe}_json
+#     DEPENDS ${json}
+#   )
+# 
+#   get_property(time_jsons DIRECTORY PROPERTY time_jsons)
+#   set_property(DIRECTORY PROPERTY time_jsons ${time_jsons} ${json})
 endfunction()
 
 function(add_benchmarks lib name arg)
@@ -51,3 +73,18 @@ function(add_breakdowns)
 endfunction()
 
 add_breakdowns(breakdown.cc libsodium_sha256.cc)
+
+get_property(time_jsons DIRECTORY PROPERTY time_jsons)
+add_custom_target(time_jsons DEPENDS ${time_jsons})
+add_custom_target(clean_bench
+  COMMAND rm -f ${time_jsons}
+)
+
+# Generate timing plot
+add_custom_command(OUTPUT time.pdf
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/plot.py ${time_jsons} -o time.pdf
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/plot.py ${time_jsons} ${Python3_EXECUTABLE}
+)
+add_custom_target(time_pdf
+  DEPENDS time.pdf
+)
