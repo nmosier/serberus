@@ -80,6 +80,7 @@ namespace clou {
 	    enum class Taint {
 	      Passthrough,
 	      Invalid,
+	      Handled,
 	    } taint_rule = Taint::Invalid;
 	  
 	    switch (id) {
@@ -113,11 +114,20 @@ namespace clou {
 	      taint_rule = Taint::Passthrough;
 	      break;
 
+	    case llvm::Intrinsic::annotation:
+	      if (pub_vals.contains(II)) {
+		pub_vals.insert(II->getArgOperand(0));
+	      }
+	      taint_rule = Taint::Handled;
+	      break;
+
 	    default:
 	      warn_unhandled_intrinsic(II);
 	    }
 
 	    switch (taint_rule) {
+	    case Taint::Handled:
+	      break;
 	    case Taint::Invalid:
 	      assert(II->getType()->isVoidTy());
 	      break;

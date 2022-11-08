@@ -100,6 +100,12 @@ namespace clou {
 		}
 	      }
 	      break;
+
+	    case llvm::Intrinsic::annotation:
+	      if (auto *arg = llvm::dyn_cast<llvm::Instruction>(II->getArgOperand(0))) {
+		llvm::copy(taints[arg], std::inserter(taints[II], taints[II].end()));
+	      }
+	      break;
 	      
 	    default:
 	      warn_unhandled_intrinsic(II);

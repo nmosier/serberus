@@ -85,6 +85,10 @@ namespace clou {
 		}
 		break;
 
+	      case llvm::Intrinsic::annotation:
+		leaks.insert(II->getArgOperand(0));
+		break;
+
 	      default:
 		warn_unhandled_intrinsic(II);
 	      }
