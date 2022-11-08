@@ -49,4 +49,3 @@ function(hacl_benchmark NAME BENCHSRC SRC)
   target_include_directories(${NAME} PRIVATE ${Hacl_INCLUDE_DIRS})
     
 endfunction()
-
