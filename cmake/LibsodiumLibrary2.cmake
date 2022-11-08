@@ -74,7 +74,7 @@ function(libsodium_library NAME)
   # build step
   add_custom_command(OUTPUT ${STAMP_DIR}/build.stamp ${BUILD_DIR}/build.log
     COMMAND rm -f ${LOG_DIR}/*
-    COMMAND make --quiet -j64 2>&1 # | tee ${BUILD_DIR}/build.log
+    COMMAND make --quiet 2>&1 # | tee ${BUILD_DIR}/build.log
     COMMAND touch ${STAMP_DIR}/build.stamp
     DEPENDS ${STAMP_DIR}/clean.stamp
     COMMENT "Building libsodium library ${NAME}"
@@ -83,7 +83,7 @@ function(libsodium_library NAME)
 
   # test step
   add_custom_command(OUTPUT ${STAMP_DIR}/test.stamp
-    COMMAND make --quiet -j64 check
+    COMMAND make --quiet check
     COMMAND touch ${STAMP_DIR}/test.stamp
     DEPENDS ${STAMP_DIR}/build.stamp
     COMMENT "Testing libsodium library ${NAME}"
