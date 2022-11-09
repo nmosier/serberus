@@ -12,6 +12,7 @@
 #include <sys/wait.h>
 #include <cassert>
 #include <string>
+#include "shared.h"
 
 #define ptrace_chk(request, pid, addr, data)				\
   do {									\
@@ -38,10 +39,15 @@ static long execute([[maybe_unused]] char *argv[]) {
   if (pid < 0) {
     err(EXIT_FAILURE, "fork");
   } else if (pid == 0) {
-    fprintf(stderr, "pid = %d\n", getpid());
+    benchmark::State state(BENCH_ARG);
+
+    // warm up the cache
+    for (int i = 0; i < 16; ++i) {
+      SAFE_CALL(BENCH_NAME(state));
+    }
+    
     while (!*shm) {}
     asm volatile ("int3");
-    benchmark::State state(BENCH_ARG);
     BENCH_NAME(state);
     asm volatile ("int3");
     exit(EXIT_SUCCESS);
@@ -69,13 +75,15 @@ static long execute([[maybe_unused]] char *argv[]) {
       err(EXIT_FAILURE, "fork");
     } else if (perf_pid == 0) {
       if (dup2(pipefds[1], STDERR_FILENO) < 0) err(EXIT_FAILURE, "dup2");
-      const char *perf = "perf-5.9.0+";
-      execlp(perf, perf, "stat", "-e", "cache-misses", "-p", std::to_string(pid).c_str(), nullptr);
+      char pidstr[16];
+      std::sprintf(pidstr, "%d", pid);
+      const char *cmd[] = {"perf-5.9.0+", "stat", "-e", "cache-misses", "-p", pidstr, nullptr};
+      execvp(cmd[0], (char **) cmd);
       err(EXIT_FAILURE, "execlp");
     }
     close(pipefds[1]);
     if ((f = fdopen(pipefds[0], "r")) == nullptr) err(EXIT_FAILURE, "fdopen");
-    sleep(1); // give perf time to start up
+    usleep(0.5 * 1e6); // give perf time to start up
   }
   
   // run process until finish breakpoint then kill it
