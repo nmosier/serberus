@@ -15,6 +15,7 @@ function(add_benchmark_shared lib name mode arg metric)
   set(json ${exe}.json)
   add_custom_command(OUTPUT ${json}
     COMMAND ${exe} ${benchmark_runtime_flags} --benchmark_out_format=json --benchmark_out=${json} --benchmark_color=true
+    DEPENDS ${exe}
   )
   add_custom_target(${exe}_json
     DEPENDS ${json}
@@ -74,17 +75,24 @@ endfunction()
 
 add_breakdowns(breakdown.cc libsodium_sha256.cc)
 
-get_property(time_jsons DIRECTORY PROPERTY time_jsons)
-add_custom_target(time_jsons DEPENDS ${time_jsons})
-add_custom_target(clean_bench
-  COMMAND rm -f ${time_jsons}
-)
-
 # Generate timing plot
-add_custom_command(OUTPUT time.pdf
-  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/plot.py ${time_jsons} -o time.pdf
-  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/plot.py ${time_jsons} ${Python3_EXECUTABLE}
-)
-add_custom_target(time_pdf
-  DEPENDS time.pdf
+foreach(metric IN ITEMS time mem)
+  get_directory_property(metric_jsons ${metric}_jsons)
+  get_directory_property(bench_clean bench_clean)
+  set_property(DIRECTORY PROPERTY bench_clean ${bench_clean} ${metric_jsons} ${metric}.pdf)
+  
+  add_custom_target(${metric}_jsons DEPENDS ${metric_jsons})
+  
+  add_custom_command(OUTPUT ${metric}.pdf
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/plot.py ${metric_jsons} -o ${metric}.pdf
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/plot.py ${metric_jsons} ${Python3_EXECUTABLE}
+  )
+  add_custom_target(${metric}_pdf
+    DEPENDS ${metric}.pdf
+  )
+endforeach()
+
+get_directory_property(bench_clean bench_clean)
+add_custom_target(clean_bench
+  COMMAND rm -f ${bench_clean}
 )

@@ -14,6 +14,9 @@
 #include <numeric>
 #include <cmath>
 
+#define STR(x) #x
+#define XSTR(x) STR(x)
+
 #if 1
 static FILE *f = stdout;
 static unsigned repetitions = 1;
@@ -59,17 +62,25 @@ int main(int argc, char *argv[]) {
 
     // compute average
     const double mean = std::accumulate(measurements.begin(), measurements.end(), 0.) / measurements.size();
+#if 0
     const double variance = std::accumulate(measurements.begin(), measurements.end(), 0., [mean] (double acc, double newval) {
       const double diff = newval - mean;
       return acc + diff * diff;
     }) / measurements.size();
     const double stddev = std::sqrt(variance);
+#endif
 
-    fprintf(f, "{\n");
-    fprintf(f, "\t\"mem\": %f,\n", mean);
-    fprintf(f, "\t\"stddev\": %f,\n", stddev);
-    fprintf(f, "\t\"unit\": \"KB\"\n");
-    fprintf(f, "}\n");
+    const char *fmt = R"=(
+{
+  "benchmarks": [
+    {
+      "name": "%s/%d_mean",
+      "mem": %f
+    }
+  ]
+}
+)=";
+    std::fprintf(f, fmt, XSTR(BENCH_NAME), BENCH_ARG, mean);
   }
 }
 #else
