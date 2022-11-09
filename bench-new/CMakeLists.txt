@@ -8,7 +8,8 @@ function(add_benchmark_shared lib name mode arg metric)
   set(exe ${metric}_${lib}_${name}_${arg}_${mode})
   add_executable(${exe} ${lib}_${name}.cc ${metric}-main.cc)
   target_link_libraries(${exe} PRIVATE ${lib}_${mode})
-  target_compile_definitions(${exe} PRIVATE BENCH_${LIB} BENCH_${METRIC} BENCH_NAME=${lib}_${name} BENCH_ARG=${arg})
+  target_compile_definitions(${exe} PRIVATE BENCH_${LIB} BENCH_${METRIC} BENCH_METRIC=${metric}
+    BENCH_NAME=${lib}_${name} BENCH_ARG=${arg})
   set(exe ${exe} PARENT_SCOPE)
 
   # add rule for generating jsons
@@ -44,11 +45,16 @@ function(add_time_benchmark)
 #   set_property(DIRECTORY PROPERTY time_jsons ${time_jsons} ${json})
 endfunction()
 
+function(add_cache_benchmark)
+  add_benchmark_shared(${ARGN} cache)
+endfunction()
+
 function(add_benchmarks lib name arg)
   set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc)
   foreach(mode IN LISTS modes)
     add_time_benchmark(${lib} ${name} ${mode} ${arg})
     add_mem_benchmark(${lib} ${name} ${mode} ${arg})
+    add_cache_benchmark(${lib} ${name} ${mode} ${arg})
   endforeach()
 endfunction()
 
@@ -69,14 +75,14 @@ function(add_breakdowns)
     set(exe breakdown_${mode})
     add_executable(${exe} ${ARGN})
     target_link_libraries(${exe} PRIVATE libsodium_${mode} benchmark::benchmark)
-    target_compile_definitions(${exe} PRIVATE BENCH_LIBSODIUM BENCH_TIME)
+    target_compile_definitions(${exe} PRIVATE BENCH_NAME=libsodium_sha256 BENCH_LIBSODIUM BENCH_TIME BENCH_METRIC=time BENCH_ARG=0)
   endforeach()
 endfunction()
 
 add_breakdowns(breakdown.cc libsodium_sha256.cc)
 
 # Generate timing plot
-foreach(metric IN ITEMS time mem)
+foreach(metric IN ITEMS time mem cache)
   get_directory_property(metric_jsons ${metric}_jsons)
   get_directory_property(bench_clean bench_clean)
   set_property(DIRECTORY PROPERTY bench_clean ${bench_clean} ${metric_jsons} ${metric}.pdf)

@@ -3,6 +3,17 @@
 #include <cstdint>
 #include <cstdlib>
 #include <vector>
+
+#ifndef BENCH_NAME
+# error "BENCH_NAME not defined"
+#endif
+#ifndef BENCH_ARG
+# error "BENCH_ARG not defined"
+#endif
+#ifndef BENCH_METRIC
+# error "BENCH_METRIC not defined"
+#endif
+
 #if defined(BENCH_LIBSODIUM)
 # include <sodium.h>
 #elif defined(BENCH_HACL)
@@ -17,7 +28,7 @@ extern "C" {
 
 #if defined(BENCH_TIME)
 # include <benchmark/benchmark.h>
-#elif defined(BENCH_MEM)
+#elif defined(BENCH_MEM) || defined(BENCH_CACHE)
 # include "benchmark_memory.h"
 #else
 # error "No benchmark type specified"

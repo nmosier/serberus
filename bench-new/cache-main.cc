@@ -41,14 +41,22 @@ static long execute([[maybe_unused]] char *argv[]) {
   } else if (pid == 0) {
     benchmark::State state(BENCH_ARG);
 
+#if 0
     // warm up the cache
     for (int i = 0; i < 16; ++i) {
       SAFE_CALL(BENCH_NAME(state));
     }
+#else
+    // completely clear the cache
+    {
+      std::vector<char> x(1024 * 1024 * 32); // 32 MB
+      std::fill(x.begin(), x.end(), 0x42);
+    }
+#endif
     
     while (!*shm) {}
     asm volatile ("int3");
-    BENCH_NAME(state);
+    SAFE_CALL(BENCH_NAME(state));
     asm volatile ("int3");
     exit(EXIT_SUCCESS);
   }

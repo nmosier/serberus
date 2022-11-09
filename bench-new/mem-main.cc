@@ -1,37 +1,10 @@
-#include "benchmark_memory.h"
-#include "shared-main.h"
-#include <sys/resource.h>
-#include <err.h>
-#include <cstdlib>
-#include <iostream>
-#include <vector>
+#include <sys/types.h>
 #include <unistd.h>
+#include <cstdlib>
+#include <err.h>
 #include <sys/wait.h>
-#include <climits>
-#include <cstring>
-#include <vector>
-#include <fstream>
-#include <numeric>
-#include <cmath>
-
-#define STR(x) #x
-#define XSTR(x) STR(x)
-
-#if 1
-static FILE *f = stdout;
-static unsigned repetitions = 1;
-
-static void parse_args(int argc, char *argv[]) {
-  for (int i = 1; i < argc; ++i) {
-    const char *arg = argv[i];
-    std::vector<char> value(std::strlen(arg) + 1);
-    if (std::sscanf(arg, "--benchmark_out=%s", value.data()) == 1) {
-      if ((f = fopen(value.data(), "w")) == nullptr)
-	err(EXIT_FAILURE, "fopen: %s", value.data());
-    } else if (std::sscanf(arg, "--benchmark_repetitions=%u", &repetitions) == 1) {
-    }
-  }
-}
+#include "shared-pseudo.h"
+#include <sys/resource.h>
 
 static long execute(char *argv[]) {
   const pid_t pid = fork();
@@ -48,44 +21,3 @@ static long execute(char *argv[]) {
     return ru.ru_maxrss;
   }
 }
-
-int main(int argc, char *argv[]) {
-  if (getenv("EXECUTE")) {
-    benchmark::State state(BENCH_ARG);
-    BENCH_NAME(state);
-  } else {
-    parse_args(argc, argv);
-    std::vector<double> measurements(repetitions);
-    for (unsigned i = 0; i < repetitions; ++i) {
-      measurements[i] = execute(argv);
-    }
-
-    // compute average
-    const double mean = std::accumulate(measurements.begin(), measurements.end(), 0.) / measurements.size();
-#if 0
-    const double variance = std::accumulate(measurements.begin(), measurements.end(), 0., [mean] (double acc, double newval) {
-      const double diff = newval - mean;
-      return acc + diff * diff;
-    }) / measurements.size();
-    const double stddev = std::sqrt(variance);
-#endif
-
-    const char *fmt = R"=(
-{
-  "benchmarks": [
-    {
-      "name": "%s/%d_mean",
-      "mem": %f
-    }
-  ]
-}
-)=";
-    std::fprintf(f, fmt, XSTR(BENCH_NAME), BENCH_ARG, mean);
-  }
-}
-#else
-int main() {
-  benchmark::State state(BENCH_ARG);
-  BENCH_NAME(state);
-}
-#endif
