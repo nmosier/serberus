@@ -26,16 +26,19 @@ static int waitpid_chk(pid_t pid) {
   return status;
 }
 
-static long execute([[maybe_unused]] char *argv[]) {
-  bool *shm;
+bool *shm = nullptr;
+__attribute__((constructor)) void init_shared_memory(void) {
   if ((shm = (bool *) mmap(nullptr, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0)) == MAP_FAILED)
     err(EXIT_FAILURE, "mmap");
+}
+
+static long execute([[maybe_unused]] char *argv[]) {
   *shm = false;
-  
   const pid_t pid = fork();
   if (pid < 0) {
     err(EXIT_FAILURE, "fork");
   } else if (pid == 0) {
+    fprintf(stderr, "pid = %d\n", getpid());
     while (!*shm) {}
     asm volatile ("int3");
     benchmark::State state(BENCH_ARG);
@@ -45,57 +48,50 @@ static long execute([[maybe_unused]] char *argv[]) {
   }
 
   int status;
-    
+
   // attach to process
   ptrace_chk(PTRACE_ATTACH, pid, NULL, NULL);
   status = waitpid_chk(pid);
   assert(WIFSTOPPED(status) && WSTOPSIG(status) == SIGSTOP);
-  ptrace_chk(PTRACE_CONT, pid, NULL, NULL);
   *shm = true;
+  ptrace_chk(PTRACE_CONT, pid, NULL, NULL);
   status = waitpid_chk(pid);
   assert(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
   
   // start perf monitoring
-  int pipefds[2];
-  if (pipe(pipefds) < 0) err(EXIT_FAILURE, "pipe");
-  const pid_t perf_pid = fork();
-  if (perf_pid < 0) {
-    err(EXIT_FAILURE, "fork");
-  } else if (perf_pid == 0) {
-    close(pipefds[0]);
-    if (dup2(pipefds[1], STDERR_FILENO) < 0) err(EXIT_FAILURE, "dup2");
-    // TODO: parameterize perf tool
-    execlp("perf-5.9.0+", "stat", "-p", std::to_string(perf_pid).c_str(),
-	   "-e", "cache-misses", nullptr);
-    err(EXIT_FAILURE, "execlp: perf-5.9.0+");
-  }
-  close(pipefds[1]);
-
   FILE *f;
-  if ((f = fdopen(pipefds[0], "r")) == nullptr) err(EXIT_FAILURE, "fdopen");
+  char cmd[1024];
+  const char *perf = "perf-5.9.0+";
+  sprintf(cmd, "%s stat -e cache-misses -p %d 2>&1", perf, pid);
+  if ((f = popen(cmd, "r")) == nullptr) err(EXIT_FAILURE, "popen: %s", cmd);
 
-  // run process until finish breakpoint
+  // give perf time to be able to start up
+  sleep(1);
+  
+  // run process until finish breakpoint then kill it
   ptrace_chk(PTRACE_CONT, pid, nullptr, nullptr);
   status = waitpid_chk(pid);
   assert(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
-    
-  // kill perf tool
-  if (kill(perf_pid, SIGINT) < 0) err(EXIT_FAILURE, "kill: %d", perf_pid);
-  status = waitpid_chk(perf_pid);
-  assert(WIFSIGNALED(status) && WTERMSIG(SIGINT));
-
-  // let tracee run to completion
-  ptrace(PTRACE_CONT, pid, nullptr, nullptr);
+  ptrace_chk(PTRACE_KILL, pid, nullptr, nullptr);
   status = waitpid_chk(pid);
-  assert(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS);
+  assert(WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL);
 
-  fprintf(stderr, "here\n");
+#if 0
+  status = waitpid_chk(perf_pid);
+  assert(WIFEXITED(status));
+  if (WEXITSTATUS(status) != EXIT_SUCCESS) {
+    char line[4096];
+    while (std::fgets(line, sizeof line, f)) {
+      std::fprintf(stderr, "%s", line);
+    }
+    errx(EXIT_FAILURE, "'perf' command failed");
+  }
+#endif
 
   // finally, process perf's output
   char line[4096];
   while (std::fgets(line, sizeof line, f)) {
-    fprintf(stderr, "%s", line);
-    
+    fputs(line, stderr);
     if (std::strstr(line, "cache-misses")) {
       // find first non-empty token
       char *s = line;
@@ -113,8 +109,7 @@ static long execute([[maybe_unused]] char *argv[]) {
       if (num.empty() || *end) {
 	errx(EXIT_FAILURE, "bad count in output of 'perf' command");
       }
-      std::fclose(f);
-      close(pipefds[1]);      
+      fclose(f);
       return count;
     }
   }
