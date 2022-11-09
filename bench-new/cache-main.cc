@@ -60,13 +60,23 @@ static long execute([[maybe_unused]] char *argv[]) {
   
   // start perf monitoring
   FILE *f;
-  char cmd[1024];
-  const char *perf = "perf-5.9.0+";
-  sprintf(cmd, "%s stat -e cache-misses -p %d 2>&1", perf, pid);
-  if ((f = popen(cmd, "r")) == nullptr) err(EXIT_FAILURE, "popen: %s", cmd);
-
-  // give perf time to be able to start up
-  sleep(1);
+  pid_t perf_pid;
+  {
+    int pipefds[2];
+    if (pipe(pipefds) < 0) err(EXIT_FAILURE, "pipe");
+    perf_pid = fork();
+    if (perf_pid < 0) {
+      err(EXIT_FAILURE, "fork");
+    } else if (perf_pid == 0) {
+      if (dup2(pipefds[1], STDERR_FILENO) < 0) err(EXIT_FAILURE, "dup2");
+      const char *perf = "perf-5.9.0+";
+      execlp(perf, perf, "stat", "-e", "cache-misses", "-p", std::to_string(pid).c_str(), nullptr);
+      err(EXIT_FAILURE, "execlp");
+    }
+    close(pipefds[1]);
+    if ((f = fdopen(pipefds[0], "r")) == nullptr) err(EXIT_FAILURE, "fdopen");
+    sleep(1); // give perf time to start up
+  }
   
   // run process until finish breakpoint then kill it
   ptrace_chk(PTRACE_CONT, pid, nullptr, nullptr);
@@ -76,7 +86,6 @@ static long execute([[maybe_unused]] char *argv[]) {
   status = waitpid_chk(pid);
   assert(WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL);
 
-#if 0
   status = waitpid_chk(perf_pid);
   assert(WIFEXITED(status));
   if (WEXITSTATUS(status) != EXIT_SUCCESS) {
@@ -86,7 +95,6 @@ static long execute([[maybe_unused]] char *argv[]) {
     }
     errx(EXIT_FAILURE, "'perf' command failed");
   }
-#endif
 
   // finally, process perf's output
   char line[4096];
