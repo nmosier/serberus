@@ -69,7 +69,7 @@ function(hacl_library NAME)
   )
   add_library(${NAME} INTERFACE)
   target_link_libraries(${NAME} INTERFACE ${output})
-  target_include_directories(${NAME} INTERFACE ${include_dirs})
+  target_include_directories(${NAME} SYSTEM INTERFACE ${include_dirs})
   add_dependencies(${NAME} ${NAME}_so)
 
 endfunction()
