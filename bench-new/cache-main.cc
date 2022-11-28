@@ -27,7 +27,7 @@ static int waitpid_chk(pid_t pid) {
   return status;
 }
 
-bool *shm = nullptr;
+volatile bool *shm = nullptr;
 __attribute__((constructor)) void init_shared_memory(void) {
   if ((shm = (bool *) mmap(nullptr, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0)) == MAP_FAILED)
     err(EXIT_FAILURE, "mmap");
