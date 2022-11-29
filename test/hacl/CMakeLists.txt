@@ -5,6 +5,10 @@ make_directory(${CMAKE_CURRENT_BINARY_DIR}/logs)
 
 function(hacl_benchmark_library NAME)
   hacl_library(${NAME} ${ARGN} CFLAGS -O3 -fno-stack-protector)
+  hacl_library(${NAME}_marked ${ARGN}
+    CFLAGS -O3 -fno-stack-protector
+    LLVMFLAGS -clou-mitigation-trap
+  )
 endfunction()
 
 hacl_benchmark_library(hacl_baseline_none)

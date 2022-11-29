@@ -2,12 +2,12 @@ include(BenchmarkFlags)
 
 add_link_options(-fPIE -fPIC -pthread)
 
-function(add_benchmark_shared lib name mode arg metric)
+function(add_benchmark_shared lib name mode arg metric libsuffix)
   string(TOUPPER ${lib} LIB)
   string(TOUPPER ${metric} METRIC)
   set(exe ${metric}_${lib}_${name}_${arg}_${mode})
   add_executable(${exe} ${lib}_${name}.cc ${metric}-main.cc)
-  target_link_libraries(${exe} PRIVATE ${lib}_${mode})
+  target_link_libraries(${exe} PRIVATE ${lib}_${mode}${libsuffix})
   target_compile_definitions(${exe} PRIVATE BENCH_${LIB} BENCH_${METRIC} BENCH_METRIC=${metric}
     BENCH_NAME=${lib}_${name} BENCH_ARG=${arg})
   set(exe ${exe} PARENT_SCOPE)
@@ -26,45 +26,40 @@ function(add_benchmark_shared lib name mode arg metric)
 endfunction()
 
 function(add_mem_benchmark)
-  add_benchmark_shared(${ARGN} mem)
+  add_benchmark_shared(${ARGN} mem "")
 endfunction()
 
 function(add_time_benchmark)
-  add_benchmark_shared(${ARGN} time)
+  add_benchmark_shared(${ARGN} time "")
   target_link_libraries(${exe} PRIVATE benchmark::benchmark)
-# 
-#   set(json ${exe}.json)
-#   add_custom_command(OUTPUT ${json}
-#     COMMAND ${exe} ${benchmark_runtime_flags} --benchmark_out_format=json --benchmark_out=${json} --benchmark_color=true
-#   )
-#   add_custom_target(${exe}_json
-#     DEPENDS ${json}
-#   )
-# 
-#   get_property(time_jsons DIRECTORY PROPERTY time_jsons)
-#   set_property(DIRECTORY PROPERTY time_jsons ${time_jsons} ${json})
 endfunction()
 
 function(add_cache_benchmark)
-  add_benchmark_shared(${ARGN} cache)
+  add_benchmark_shared(${ARGN} cache "")
 endfunction()
 
 function(add_stall_benchmark)
-  add_benchmark_shared(${ARGN} stall)
+  add_benchmark_shared(${ARGN} stall "")
 endfunction()
 
 function(add_inst_benchmark)
-  add_benchmark_shared(${ARGN} inst)
+  add_benchmark_shared(${ARGN} inst "")
   target_compile_definitions(${exe} PRIVATE PIN_DIR=\"${PIN_DIR}\" PIN_TOOL=\"$<TARGET_PROPERTY:inscount,LIBRARY>\")
   add_dependencies(${exe} inscount)
 endfunction()
 
 function(add_serial_benchmark)
-  add_benchmark_shared(${ARGN} serial)
+  add_benchmark_shared(${ARGN} serial "")
 endfunction()
 
 function(add_perf_benchmark)
-  add_benchmark_shared(${ARGN} perf)
+  add_benchmark_shared(${ARGN} perf "")
+endfunction()
+
+function(add_mitigation_benchmark)
+  add_benchmark_shared(${ARGN} mitigation "_marked")
+  target_compile_definitions(${exe} PRIVATE PIN_DIR=\"${PIN_DIR}\" PIN_TOOL=\"$<TARGET_PROPERTY:bkptcount,LIBRARY>\")
+  add_dependencies(${exe} bkptcount)
 endfunction()
 
 function(add_benchmarks lib name arg)
@@ -77,6 +72,7 @@ function(add_benchmarks lib name arg)
     add_inst_benchmark(${lib} ${name} ${mode} ${arg})
     add_serial_benchmark(${lib} ${name} ${mode} ${arg})
     add_perf_benchmark(${lib} ${name} ${mode} ${arg})
+    add_mitigation_benchmark(${lib} ${name} ${mode} ${arg})
   endforeach()
 endfunction()
 
@@ -104,7 +100,7 @@ endfunction()
 add_breakdowns(breakdown.cc libsodium_sha256.cc)
 
 # Generate timing plot
-foreach(metric IN ITEMS time mem cache stall inst serial perf)
+foreach(metric IN ITEMS time mem cache stall inst serial perf mitigation)
   get_directory_property(metric_jsons ${metric}_jsons)
   get_directory_property(bench_clean bench_clean)
   set_property(DIRECTORY PROPERTY bench_clean ${bench_clean} ${metric_jsons} ${metric}.pdf)

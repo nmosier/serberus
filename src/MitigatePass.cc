@@ -127,6 +127,7 @@ namespace clou {
 	    case llvm::Intrinsic::usub_sat:
 	    case llvm::Intrinsic::fmuladd:
 	    case llvm::Intrinsic::annotation:
+	    case llvm::Intrinsic::x86_sse2_mfence:
 	      return true;
 
 	    case llvm::Intrinsic::memset:

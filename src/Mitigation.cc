@@ -4,6 +4,7 @@
 
 #include <llvm/IR/IntrinsicsX86.h>
 #include <llvm/IR/Instructions.h>
+#include <llvm/Clou/Clou.h>
 
 #include "clou/Metadata.h"
 
@@ -45,6 +46,10 @@ namespace clou {
     llvm::MDNode *MDN = llvm::MDNode::get(IRB.getContext(), {llvm::ConstantAsMetadata::get(invalid_id), desc});
     I->setMetadata(MitigationInst::mitigation_flag, MDN);
     assert(llvm::isa<MitigationInst>(I));
+
+    if (clou::InsertTrapAfterMitigations)
+      IRB.CreateIntrinsic(llvm::Intrinsic::x86_sse2_mfence, {}, {});
+    
     return llvm::cast<MitigationInst>(I);
   }
 

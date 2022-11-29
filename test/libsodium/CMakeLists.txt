@@ -7,6 +7,12 @@ function(libsodium_benchmark_library NAME)
   libsodium_library(${NAME}
     CFLAGS -O3 -fno-stack-protector
     ${ARGN}
+    LLVMFLAGS -clou-mitigation-trap
+  )
+  libsodium_library(${NAME}_marked
+    CFLAGS -O3 -fno-stack-protector
+    ${ARGN}
+    LLVMFLAGS -clou-mitigation-trap
   )
 endfunction()
 
