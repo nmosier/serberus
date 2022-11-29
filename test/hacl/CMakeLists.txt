@@ -8,6 +8,7 @@ function(hacl_benchmark_library NAME)
   hacl_library(${NAME}_marked ${ARGN}
     CFLAGS -O3 -fno-stack-protector
     LLVMFLAGS -clou-mitigation-trap
+    LDFLAGS -Wl,-z,trace-mitigations
   )
 endfunction()
 

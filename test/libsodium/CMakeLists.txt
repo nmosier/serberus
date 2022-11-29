@@ -13,6 +13,7 @@ function(libsodium_benchmark_library NAME)
     CFLAGS -O3 -fno-stack-protector
     ${ARGN}
     LLVMFLAGS -clou-mitigation-trap
+    LDFLAGS -Wl,-z,trace-mitigations
   )
 endfunction()
 
