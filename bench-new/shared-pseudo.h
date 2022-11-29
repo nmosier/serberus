@@ -27,10 +27,18 @@ static void parse_args(int argc, char *argv[]) {
 
 static long execute(char *argv[]);
 
+#ifdef EXECUTE_CUSTOM
+static void execute_nested(void);
+#endif
+
 int main(int argc, char *argv[]) {
   if (getenv("EXECUTE")) {
+#ifndef EXECUTE_CUSTOM
     benchmark::State state(BENCH_ARG);
     BENCH_NAME(state);
+#else
+    execute_nested();
+#endif
   } else {
     parse_args(argc, argv);
     std::vector<double> measurements(repetitions);

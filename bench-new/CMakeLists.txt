@@ -55,6 +55,8 @@ endfunction()
 
 function(add_inst_benchmark)
   add_benchmark_shared(${ARGN} inst)
+  target_compile_definitions(${exe} PRIVATE PIN_DIR=\"${PIN_DIR}\" PIN_TOOL=\"$<TARGET_PROPERTY:inscount,LIBRARY>\")
+  add_dependencies(${exe} inscount)
 endfunction()
 
 function(add_serial_benchmark)

@@ -34,11 +34,13 @@ static VOID handle_sentinel() {
 // Pin calls this function every time a new instruction is encountered
 VOID Instruction(INS ins, VOID* v)
 {
-  if (INS_Opcode(ins) == XED_ICLASS_INT3)
+  if (INS_Opcode(ins) == XED_ICLASS_INT3) {
     INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) handle_sentinel, IARG_END);
-  else
+    INS_Delete(ins);
+  } else {
     // Insert a call to docount before every instruction, no arguments are passed
     INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)docount, IARG_END);
+  }
 }
 
 KNOB< string > KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool", "o", "inscount.out", "specify output file name");
@@ -46,10 +48,7 @@ KNOB< string > KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool", "o", "inscount.out
 // This function is called when the application exits
 VOID Fini(INT32 code, VOID* v)
 {
-    // Write to a file since cout and cerr maybe closed by the application
-    OutFile.setf(ios::showbase);
-    OutFile << "Count " << icount << endl;
-    OutFile.close();
+    std::cout << "Count: " << icount << "\n";
 }
 
 /* ===================================================================== */

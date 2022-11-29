@@ -1,70 +1,50 @@
-#include <vector>
-#include <algorithm>
+#include <string>
 
 #include <cstring>
 #include <cstdint>
 
-#include <linux/perf_event.h>
-#include <linux/hw_breakpoint.h>
-#include <sys/syscall.h>
-#include <unistd.h>
-#include <sys/ioctl.h>
 #include <err.h>
+
+#define EXECUTE_CUSTOM
 
 #include "shared-pseudo.h"
 #include "shared.h"
+#include "shared-pin.h"
 
-#define WARMUP_ITERS 10
-#define COLLECT_ITERS 100
+#define WARMUP_ITERS 1
+#define COLLECT_ITERS 10
 
-static void ioctl_perf(int fd, int request) {
-  if (ioctl(fd, request, 0) < 0)
-    err(EXIT_FAILURE, "ioctl");
-}
-
-static void clear_cache(void) {
-  std::vector<uint8_t> x(1024 * 1024 * 32); // 32 MB
-  std::fill(x.begin(), x.end(), 0x42);  
-}
-
-static long execute([[maybe_unused]] char *argv[]) {
-  struct perf_event_attr pea;
-  memset(&pea, 0, sizeof pea);
-  pea.type = PERF_TYPE_HARDWARE;
-  pea.config = PERF_COUNT_HW_INSTRUCTIONS;
-  pea.size = sizeof pea;
-  pea.disabled = 1;
-
-  int fd;
-  if ((fd = syscall(SYS_perf_event_open, &pea, 0, -1, -1, 0)) < 0)
-    err(EXIT_FAILURE, "perf_event_open");
-
-  // clear the cache
-  clear_cache();
-
+static void execute_nested(void) {
   benchmark::State state(BENCH_ARG);
 
   for (unsigned i = 0; i < WARMUP_ITERS; ++i)
     SAFE_CALL(BENCH_NAME(state));
 
-  ioctl_perf(fd, PERF_EVENT_IOC_RESET);
-  ioctl_perf(fd, PERF_EVENT_IOC_ENABLE);
-
+  asm volatile ("int3");
+  
   for (unsigned i = 0; i < COLLECT_ITERS; ++i)
     SAFE_CALL(BENCH_NAME(state));
 
-  ioctl_perf(fd, PERF_EVENT_IOC_DISABLE);
+  asm volatile ("int3");
+}
 
-  uint64_t count;
-  ssize_t bytes;
-  if ((bytes = read(fd, &count, sizeof count) != sizeof count)) {
-    if (bytes < 0)
-      err(EXIT_FAILURE, "read");
-    else
-      errx(EXIT_FAILURE, "read: unexpected partial read");
+static long execute([[maybe_unused]] char *argv[]) {
+  char command[1024];
+  snprintf(command, sizeof command, "NOCET=1 EXECUTE=1 %s/pin -t %s -- %s", PIN_DIR, PIN_TOOL, argv[0]);
+  fprintf(stderr, "Executing command: %s\n", command);
+
+  FILE *f = popen(command, "r");
+  char line[1024];
+  long n = -1;
+  while (fgets(line, sizeof line, f)) {
+    printf("%s", line);
+    if (sscanf(line, "Count: %ld", &n) == 1)
+      break;
   }
+  if (ferror(f))
+    err(EXIT_FAILURE, "fgets");
+  if (n < 0)
+    errx(EXIT_FAILURE, "didn't see COUNT in output");
 
-  fprintf(stderr, "instructions: %lu\n", count);
-
-  return count;
+  return n / COLLECT_ITERS;
 }

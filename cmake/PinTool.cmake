@@ -19,4 +19,5 @@ function(add_pin_tool name source)
     COMMENT "Building Pintool ${name}"
   )
   add_custom_target(${name} ALL DEPENDS ${so})
+  set_target_properties(${name} PROPERTIES LIBRARY ${so})
 endfunction()
