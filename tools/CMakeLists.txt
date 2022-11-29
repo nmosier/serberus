@@ -22,3 +22,5 @@ add_library(cet SHARED
 add_executable(memusage
   memusage.c
 )
+
+add_subdirectory(pin)

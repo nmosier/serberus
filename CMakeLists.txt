@@ -41,6 +41,10 @@ if(NOT DEFINED OPENSSL_DIR)
 endif()
 get_filename_component(OPENSSL_DIR ${OPENSSL_DIR} ABSOLUTE BASE_DIR ${CMAKE_BINARY_DIR})
 
+if(NOT DEFINED PIN_DIR)
+  message(FATAL_ERROR "PIN_DIR is not defined. Please define it.")
+endif()
+
 add_compile_options(-Wall -Wextra -pedantic)
 
 # For testing infrastructure

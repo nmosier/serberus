@@ -25,6 +25,20 @@ set(baseline_slh_retpoline_ssbd_args
   ${baseline_ssbd_args}
 )
 
+set(cloucc_base_args
+  LLVMFLAGS -clou
+  
+  # Restrictions
+  LLVMFLAGS -no-stack-slot-sharing -no-promote-arguments
+  CFLAGS -fno-jump-tables
+
+  # CET
+  LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:cet> -L$<TARGET_FILE_DIR:cet> -lcet
+  DEPENDS cet
+  LDFLAGS -Wl,-z,force-ibt
+)
+
+if(0)
 set(cloucc_args
   PASSES InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou -no-stack-slot-sharing
@@ -39,6 +53,7 @@ set(cloucc_ncas_args
   PASSES MitigatePass
   LLVMFLAGS -clou=oobs
 )
+endif()
 
 
 # Google Benchmark Flags

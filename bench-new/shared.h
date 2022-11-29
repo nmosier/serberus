@@ -15,8 +15,10 @@
 #endif
 
 #if defined(BENCH_LIBSODIUM)
+# define BENCH_LIB "libsodium"
 # include <sodium.h>
 #elif defined(BENCH_HACL)
+# define BENCH_LIB "hacl"
 extern "C" {
 # include <Hacl_Chacha20.h>
 # include <Hacl_Poly1305_32.h>
@@ -28,10 +30,9 @@ extern "C" {
 
 #if defined(BENCH_TIME)
 # include <benchmark/benchmark.h>
-#elif defined(BENCH_MEM) || defined(BENCH_CACHE)
-# include "benchmark_memory.h"
 #else
-# error "No benchmark type specified"
+// #elif defined(BENCH_MEM) || defined(BENCH_CACHE) || defined(BENCH_STALL) || defined(BENCH_INST)
+# include "benchmark_memory.h"
 #endif
 
 #define CLOBBER_REGS() asm volatile ("" ::: "r12", "r13", "r14", "r15")

@@ -49,12 +49,32 @@ function(add_cache_benchmark)
   add_benchmark_shared(${ARGN} cache)
 endfunction()
 
+function(add_stall_benchmark)
+  add_benchmark_shared(${ARGN} stall)
+endfunction()
+
+function(add_inst_benchmark)
+  add_benchmark_shared(${ARGN} inst)
+endfunction()
+
+function(add_serial_benchmark)
+  add_benchmark_shared(${ARGN} serial)
+endfunction()
+
+function(add_perf_benchmark)
+  add_benchmark_shared(${ARGN} perf)
+endfunction()
+
 function(add_benchmarks lib name arg)
-  set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc)
+  set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc cloucc_fps cloucc_nofps)
   foreach(mode IN LISTS modes)
     add_time_benchmark(${lib} ${name} ${mode} ${arg})
     add_mem_benchmark(${lib} ${name} ${mode} ${arg})
     add_cache_benchmark(${lib} ${name} ${mode} ${arg})
+    add_stall_benchmark(${lib} ${name} ${mode} ${arg})
+    add_inst_benchmark(${lib} ${name} ${mode} ${arg})
+    add_serial_benchmark(${lib} ${name} ${mode} ${arg})
+    add_perf_benchmark(${lib} ${name} ${mode} ${arg})
   endforeach()
 endfunction()
 
@@ -82,7 +102,7 @@ endfunction()
 add_breakdowns(breakdown.cc libsodium_sha256.cc)
 
 # Generate timing plot
-foreach(metric IN ITEMS time mem cache)
+foreach(metric IN ITEMS time mem cache stall inst serial perf)
   get_directory_property(metric_jsons ${metric}_jsons)
   get_directory_property(bench_clean bench_clean)
   set_property(DIRECTORY PROPERTY bench_clean ${bench_clean} ${metric_jsons} ${metric}.pdf)

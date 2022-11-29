@@ -4,6 +4,8 @@ function(openssl_library NAME)
 
   list(APPEND OPENSSL_CFLAGS -flegacy-pass-manager)
 
+  list(APPEND OPENSSL_CONFIGURE_OPTIONS no-threads)
+
   foreach(pass IN LISTS OPENSSL_PASS)
     list(APPEND OPENSSL_CFLAGS -Xclang -load -Xclang $<TARGET_FILE:${pass}>)
     list(APPEND OPENSSL_DEPENDS ${pass})
@@ -23,25 +25,65 @@ function(openssl_library NAME)
   list(JOIN OPENSSL_CPPFLAGS " " OPENSSL_CPPFLAGS)
   list(JOIN OPENSSL_LDFLAGS " " OPENSSL_LDFLAGS)
 
-  ExternalProject_Add(${NAME}
-    SOURCE_DIR ${OPENSSL_DIR}
-    CONFIGURE_COMMAND ${OPENSSL_DIR}/Configure "--prefix=${CMAKE_CURRENT_BINARY_DIR}/${NAME}-prefix" "CC=${LLVM_BINARY_DIR}/bin/clang" "LD=${LLVM_BINARY_DIR}/bin/ld.lld" "CPPFLAGS=${OPENSSL_CPPFLAGS}" "CFLAGS=${OPENSSL_CFLAGS}" "LDFLAGS=${OPENSSL_LDFLAGS}" ${OPENSSL_CONFIGURE_OPTIONS}
-    BUILD_COMMAND ${MAKE_EXE} -j64 2>&1 | tee ${NAME}.build.log
-    INSTALL_COMMAND ${MAKE_EXE} --quiet install
+  set(PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/${NAME})
+  set(BUILD_DIR ${PREFIX_DIR}/build)
+  set(STAMP_DIR ${PREFIX_DIR}/stamp)
+  set(INSTALL_DIR ${PREFIX_DIR})
+
+  make_directory(${INSTALL_DIR}/include)
+  make_directory(${BUILD_DIR})
+
+  add_custom_command(OUTPUT ${STAMP_DIR}/configure.stamp
+    COMMAND ${OPENSSL_DIR}/Configure --prefix=${INSTALL_DIR} CC=${LLVM_BINARY_DIR}/bin/clang LD=${LLVM_BINARY_DIR}/bin/ld.lld "CPPFLAGS=${OPENSSL_CPPFLAGS}" "CFLAGS=${OPENSSL_CFLAGS}" "LDFLAGS=${OPENSSL_LDFLAGS}" ${OPENSSL_CONFIGURE_OPTIONS}
+    COMMAND touch ${STAMP_DIR}/configure.stamp
+    COMMENT "Configuring OpenSSL library ${NAME}"
+    WORKING_DIRECTORY ${BUILD_DIR}
+    DEPENDS ${OPENSSL_DEPENDS}
   )
-  ExternalProject_Get_Property(${NAME} BINARY_DIR)
-  ExternalProject_Add_Step(${NAME} clean
+
+  # clean step
+  add_custom_command(OUTPUT ${STAMP_DIR}/clean.stamp
     COMMAND make --quiet clean
-    DEPENDEES configure
-    DEPENDERS build
-    WORKING_DIRECTORY ${BINARY_DIR}
-  )
-  ExternalProject_Add_StepDependencies(${NAME} clean ${OPENSSL_DEPENDS})
-
-  add_test(${NAME}_test
-    COMMAND ${MAKE_EXE} test
-    WORKING_DIRECTORY ${BINARY_DIR}
+    COMMAND touch ${STAMP_DIR}/clean.stamp
+    DEPENDS ${STAMP_DIR}/configure.stamp
+    COMMENT "Cleaning OpenSSL library ${NAME}"
+    WORKING_DIRECTORY ${BUILD_DIR}
   )
 
+  # build step
+  add_custom_command(OUTPUT ${STAMP_DIR}/build.stamp
+    COMMAND make --quiet -j64
+    COMMAND touch ${STAMP_DIR}/build.stamp
+    DEPENDS ${STAMP_DIR}/clean.stamp
+    COMMENT "Building OpenSSL library ${NAME}"
+    WORKING_DIRECTORY ${BUILD_DIR}
+  )
+
+  # test step
+  add_custom_command(OUTPUT ${STAMP_DIR}/test.stamp
+    COMMAND make --quiet test
+    COMMAND touch ${STAMP_DIR}/test.stamp
+    DEPENDS ${STAMP_DIR}/build.stamp
+    COMMENT "Testing OpenSSL library ${NAME}"
+    WORKING_DIRECTORY ${BUILD_DIR}
+  )
+
+  # install step
+  add_custom_command(OUTPUT ${STAMP_DIR}/install.stamp ${INSTALL_DIR}/lib/libssl.so ${INSTALL_DIR}/lib/libcrypto.so
+    COMMAND make --quiet install
+    COMMAND touch ${STAMP_DIR}/install.stamp
+    DEPENDS ${STAMP_DIR}/test.stamp
+    COMMENT "Installing OpenSSL library ${NAME}"
+    WORKING_DIRECTORY ${BUILD_DIR}
+  )
+
+  add_custom_target(${NAME}_install ALL
+    DEPENDS ${STAMP_DIR}/install.stamp
+  )
+
+  add_library(${NAME} INTERFACE)
+  target_link_libraries(${NAME} INTERFACE ${INSTALL_DIR}/lib/libssl.so ${INSTALL_DIR}/lib/libcrypto.so)
+  target_include_directories(${NAME} INTERFACE ${INSTALL_DIR}/include)
+  add_dependencies(${NAME} ${NAME}_install)
+  
 endfunction()
-

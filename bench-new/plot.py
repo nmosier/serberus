@@ -19,12 +19,8 @@ def get_basename(path):
 # Infer the metric from the filenames
 
 metric = get_basename(args.json[0]).split('_', maxsplit = 1)[0]
-metric_keys = {
-    'time': 'cpu_time',
-    'mem': 'mem',
-    'cache': 'cache',
-}
-metric_key = metric_keys[metric]
+metric_keys = {'time': 'cpu_time'}
+metric_key = metric_keys[metric] if metric in metric_keys else metric
 
 # From the JSON filenames, we can gather the exact benchmarks.
 # time_<lib>_<size>_<mode>.json
@@ -81,7 +77,7 @@ for benchmark in benchmarks:
         if mitigation == 'baseline_none':
             continue
         mitigation_metric = result[metric_key]
-        overhead = (mitigation_metric - baseline_metric) / baseline_metric * 100
+        overhead = (mitigation_metric - baseline_metric) / max(baseline_metric, 1) * 100
         data['benchmark'].append(benchmark_displayname(*benchmark))
         data['overhead'].append(overhead)
         data['mitigation'].append(mitigation_displayname(mitigation))
@@ -104,10 +100,15 @@ g = seaborn.catplot(
     x = 'benchmark',
     y = 'overhead',
     hue = 'mitigation',
+    legend = None
 )
 
 g.set_xticklabels(rotation = 45, horizontalalignment = 'center')
 plt.tight_layout()
+
+plt.legend(
+    loc = 'upper center',
+)
 
 if args.out:
     plt.savefig(f'{args.out}')

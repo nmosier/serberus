@@ -14,6 +14,22 @@ hacl_benchmark_library(hacl_baseline_retpoline ${baseline_retpoline_args})
 hacl_benchmark_library(hacl_baseline_ssbd ${baseline_ssbd_args})
 hacl_benchmark_library(hacl_baseline_lfence+retpoline+ssbd ${baseline_lfence_retpoline_ssbd_args})
 hacl_benchmark_library(hacl_baseline_slh+retpoline+ssbd ${baseline_slh_retpoline_ssbd_args})
-hacl_benchmark_library(hacl_cloucc ${cloucc_args}
+
+hacl_benchmark_library(hacl_cloucc ${cloucc_base_args}
   PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou
+)
+
+hacl_benchmark_library(hacl_cloucc_ncas ${cloucc_base_args}
+  PASS InlinePass MitigatePass Attributes
+  LLVMFLAGS -clou=oobs
+)
+hacl_benchmark_library(hacl_cloucc_fps ${cloucc_base_args}
+  PASS InlinePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=fps,postch
+)
+
+hacl_benchmark_library(hacl_cloucc_nofps ${cloucc_base_args}
+  PASS InlinePass MitigatePass Attributes
+  LLVMFLAGS -clou=udt,oobs,prech
 )

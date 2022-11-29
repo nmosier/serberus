@@ -14,6 +14,9 @@
 #include "shared-pseudo.h"
 #include "shared.h"
 
+#define WARMUP_ITERS 10
+#define COLLECT_ITERS 100
+
 static void ioctl_perf(int fd, int request) {
   if (ioctl(fd, request, 0) < 0)
     err(EXIT_FAILURE, "ioctl");
@@ -28,7 +31,7 @@ static long execute([[maybe_unused]] char *argv[]) {
   struct perf_event_attr pea;
   memset(&pea, 0, sizeof pea);
   pea.type = PERF_TYPE_HARDWARE;
-  pea.config = PERF_COUNT_HW_CACHE_MISSES;
+  pea.config = PERF_COUNT_HW_INSTRUCTIONS;
   pea.size = sizeof pea;
   pea.disabled = 1;
 
@@ -37,14 +40,18 @@ static long execute([[maybe_unused]] char *argv[]) {
     err(EXIT_FAILURE, "perf_event_open");
 
   // clear the cache
+  clear_cache();
+
   benchmark::State state(BENCH_ARG);
 
-  clear_cache();
+  for (unsigned i = 0; i < WARMUP_ITERS; ++i)
+    SAFE_CALL(BENCH_NAME(state));
 
   ioctl_perf(fd, PERF_EVENT_IOC_RESET);
   ioctl_perf(fd, PERF_EVENT_IOC_ENABLE);
 
-  SAFE_CALL(BENCH_NAME(state));
+  for (unsigned i = 0; i < COLLECT_ITERS; ++i)
+    SAFE_CALL(BENCH_NAME(state));
 
   ioctl_perf(fd, PERF_EVENT_IOC_DISABLE);
 
@@ -56,6 +63,8 @@ static long execute([[maybe_unused]] char *argv[]) {
     else
       errx(EXIT_FAILURE, "read: unexpected partial read");
   }
+
+  fprintf(stderr, "instructions: %lu\n", count);
 
   return count;
 }

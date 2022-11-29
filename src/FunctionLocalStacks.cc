@@ -37,6 +37,7 @@ namespace {
       if (!enabled.fps)
 	return false;
 
+#if 0
       // for every function declaration, emit tentative wrappers
       {
 	std::vector<Function *> todo;
@@ -53,6 +54,7 @@ namespace {
       replaceMalloc(M);
       replaceMemoryRealloc(M, "realloc");
       replaceMemoryRealloc(M, "reallocarray");
+#endif
       
       std::vector<GlobalVariable *> GVs;
       

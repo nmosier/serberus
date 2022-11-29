@@ -139,3 +139,8 @@ target_link_libraries(InlinePass PRIVATE util NonspeculativeTaintAnalysis Specul
 # )
 # register_llvm_pass(StatsPass)
 # target_link_libraries(StatsPass PRIVATE util)
+
+
+
+add_library(Bundles SHARED Bundles.cc)
+register_llvm_pass(Bundles)
