@@ -17,7 +17,14 @@ public:
   struct ST {
     Node s;
     Node t;
-    bool operator==(const ST& o) const { return s == o.s && t == o.t; }
+
+    auto pair() const {
+      return std::make_pair(s, t);
+    }
+
+    bool operator==(const ST& o) const { return pair() == o.pair(); }
+    bool operator!=(const ST& o) const { return !(*this == o); }
+    bool operator<(const ST& o) const { return pair() < o.pair(); }
   };
   
   using Graph = std::map<Node, std::map<Node, Weight>>;
@@ -26,11 +33,16 @@ public:
     Node src;
     Node dst;
 
-    bool operator==(const Edge& o) const { return src == o.src && dst == o.dst; }
+    auto pair() const {
+      return std::make_pair(src, dst);
+    }
+
+    bool operator==(const Edge& o) const { return pair() == o.pair(); }
     bool operator!=(const Edge& o) const { return !(*this == o); }
+    bool operator<(const Edge& o) const { return pair() < o.pair(); }
   };
 
-  Graph G;
+  mutable Graph G;
   std::vector<ST> sts;
   std::vector<Edge> cut_edges;
 

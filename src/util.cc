@@ -123,7 +123,7 @@ namespace util {
     }
   }
 
-  bool isConstantAddress(const llvm::Value *V) {
+  bool isConstantValue(const llvm::Value *V) {
     if (llvm::isa<llvm::Argument, llvm::PHINode, llvm::CallBase, llvm::LoadInst>(V)) {
       return false;
     } else if (llvm::isa<llvm::Constant, llvm::AllocaInst>(V)) {

@@ -18,11 +18,13 @@ namespace clou {
       while (true) {
 	++i;
 	llvm::errs() << "start " << i << "\n";
+
+	auto reaching_sts = computeReaching();
       
 	Weight maxw = 0;
 	Edge maxe;
 	for (const auto& [e, cost] : getEdges()) {
-	  const unsigned paths = computePaths(e);
+	  const unsigned paths = reaching_sts[e].size();
 	  const float w = paths * (1.f / static_cast<float>(cost));
 	  if (w > maxw) {
 	    maxw = w;
@@ -61,6 +63,7 @@ namespace clou {
       return es;
     }
 
+#if 0
     // want to check if path exists between two nodes.
     bool pathExists(const Node& u, const Node& v) const {
       std::set<Node> seen;
@@ -86,6 +89,62 @@ namespace clou {
       return llvm::count_if(this->sts, [&] (const ST& st) {
 	return pathExists(st.s, e.src) && pathExists(e.dst, st.t);
       });
+    }
+#endif
+
+    std::map<Edge, std::set<ST>> computeReaching() const {
+      std::map<Node, std::set<ST>> fwd, bwd, both;
+      bool changed;
+      
+      for (const ST& st : this->sts)
+	fwd[st.s].insert(st);
+      changed = true;
+      while (changed) {
+	changed = false;
+	for (const auto& [src, dsts] : this->G) {
+	  for (const auto& [dst, _] : dsts) {
+	    const auto& in = fwd[src];
+	    auto& out = fwd[dst];
+	    for (const auto& x : in)
+	      changed |= out.insert(x).second;
+	  }
+	}
+      }
+
+      for (const ST& st : this->sts)
+	bwd[st.t].insert(st);
+      changed = true;
+      while (changed) {
+	changed = false;
+	for (const auto& [src, dsts] : this->G) {
+	  for (const auto& [dst, _] : dsts) {
+	    const auto& in = bwd[dst];
+	    auto& out = bwd[src];
+	    for (const auto& x : in)
+	      changed |= out.insert(x).second;
+	  }
+	}
+      }
+      
+      for (const auto& [node, _] : this->G) {
+	const auto& sources = fwd[node];
+	const auto& sinks = bwd[node];
+	auto& out = both[node];
+	std::set_intersection(sources.begin(), sources.end(), sinks.begin(), sinks.end(), std::inserter(out, out.end()));
+      }
+
+      // finally, get edges
+      std::map<Edge, std::set<ST>> results;
+      for (const auto& [src, dsts] : this->G) {
+	for (const auto& [dst, _] : dsts) {
+	  const auto& a = both[src];
+	  const auto& b = both[dst];
+	  auto& out = results[{.src = src, .dst = dst}];
+	  std::set_intersection(a.begin(), a.end(), b.begin(), b.end(), std::inserter(out, out.end()));
+	}
+      }
+
+      return results;
     }
   };
 

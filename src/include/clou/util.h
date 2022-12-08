@@ -438,7 +438,8 @@ namespace clou {
       return s;
     }
 
-    bool isConstantAddress(const llvm::Value *V);
+    bool isConstantValue(const llvm::Value *V);
+    inline bool isConstantAddress(const llvm::Value *V) { return isConstantValue(V); }
 
     class ExtCallBase : public llvm::CallBase {
     public:
