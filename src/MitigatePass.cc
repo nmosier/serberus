@@ -29,6 +29,7 @@
 #include <llvm/ADT/STLExtras.h>
 
 #include "clou/MinCutSMT.h"
+#include "clou/MinCutGreedy.h"
 #include "clou/util.h"
 #include "clou/Transmitter.h"
 #include "clou/CommandLine.h"
@@ -39,6 +40,7 @@
 #include "clou/analysis/LeakAnalysis.h"
 #include "clou/Stat.h"
 #include "clou/containers.h"
+#include "clou/CFG.h"
 
 namespace clou {
   namespace {
@@ -83,12 +85,19 @@ namespace clou {
       return os_;
     }
 
+    static void checkCut(const auto& sts, const auto& edges, llvm::Function& F) {
+      
+    }
+
     struct MitigatePass final : public llvm::FunctionPass {
       static inline char ID = 0;
     
       MitigatePass() : llvm::FunctionPass(ID) {}
-    
+
+#if 0
       using Alg = MinCutSMT_BV<Node, int>;
+      using Alg = MinCutGreedy<Node, float>;
+#endif
 
       void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
 	AU.addRequired<NonspeculativeTaint>();
@@ -303,7 +312,18 @@ namespace clou {
 	std::map<llvm::Instruction *, ISet> transmitters;
 	getTransmitters(F, ST, transmitters);
 
-	Alg A;
+	using Alg = MinCutBase<Node, int>;
+	std::unique_ptr<Alg> AP;
+	switch (MinCutAlg) {
+	case MinCutAlgKind::SMT:
+	  AP.reset(new MinCutSMT_BV<Node, int>);
+	  break;
+	case MinCutAlgKind::GREEDY:
+	  AP.reset(new MinCutGreedy<Node, int>);
+	  break;
+	default: std::abort();
+	}
+	Alg& A = *AP;
 	Alg::Graph& G = A.G;
 
 	/* Stats */
@@ -465,6 +485,41 @@ namespace clou {
 	      ++stat_ncas_ctrl;
 	    }
 	  }
+
+	  // If we have enabled PSF, create pairs for all {secret_store X public-load-dependent transmitter}.
+	  /* Iterate over all candidate pairs of (store, transmitter).
+	   * Check all intermediate instructions to see if a dependent load is defined there.
+	   */
+	  if (PSF) {
+	    std::set<std::pair<llvm::Instruction *, llvm::Instruction *>> pairs;
+	    for (llvm::Instruction& T : llvm::instructions(F)) {
+	      for (const auto& TOP : get_transmitter_sensitive_operands(&T)) {
+		auto public_loads = get_incoming_loads(TOP.V);
+		std::erase_if(public_loads, [&] (llvm::Value *V) {
+		  bool keep;
+		  if (auto *I = llvm::dyn_cast<llvm::LoadInst>(V))
+		    keep = !(NST.secret(I) || ST.secret(I));
+		  else
+		    keep = false;
+		  return !keep;
+		});
+		for (llvm::StoreInst& SI : util::instructions<llvm::StoreInst>(F)) {
+		  const auto SIV = SI.getValueOperand();
+		  if (NST.secret(SIV) || ST.secret(SIV)) {
+		    const auto btw = getInstructionsBetween(&SI, &T);
+		    if (llvm::any_of(public_loads, [&btw] (llvm::Value *V) {
+		      return btw.contains(llvm::dyn_cast<llvm::Instruction>(V));
+		    })) {
+		      pairs.emplace(&SI, &T);
+		    }
+		  }
+		}
+	      }
+	    }
+	    
+	    for (const auto& [src, dst] : pairs)
+	      A.add_st({.s = src, .t = dst});
+	  }
 	
 	}
 
@@ -485,7 +540,7 @@ namespace clou {
 	  }
 	  
 	}
-	
+
 	// Add CFG to graph
 	for (auto& B : F) {
 	  for (auto& dst : B) {
@@ -496,6 +551,7 @@ namespace clou {
 	}
 
 
+#if 0
 	/* Add edge connecting return instructions to entry instructions. 
 	 * This allows us to capture aliases across invocations of the same function.
 	 */
@@ -507,13 +563,47 @@ namespace clou {
 	    }
 	  }
 	}
+#endif
 
 	// Run algorithm to obtain min-cut
 	const clock_t solve_start = clock();
+	llvm::errs() << "running min-cut alg for " << F.getName() << " with " << F.getInstructionCount() << "\n";
+	llvm::sort(A.sts);
 	A.run();
 	const clock_t solve_stop = clock();
 	const float solve_duration = (static_cast<float>(solve_stop) - static_cast<float>(solve_start)) / CLOCKS_PER_SEC;
 	auto& cut_edges = A.cut_edges;
+
+	// double-check cut: make sure that no source can reach its sink
+	{
+	  std::set<MinCutBase<Node, int>::Edge> cutset;
+	  llvm::copy(cut_edges, std::inserter(cutset, cutset.end()));
+	  for (const auto& st : A.sts) {
+	    std::set<llvm::Instruction *> seen;
+	    std::queue<llvm::Instruction *> todo;
+	    todo.push(llvm::cast<llvm::Instruction>(st.s.V));
+	    while (!todo.empty()) {
+	      llvm::Instruction *I = todo.front();
+	      todo.pop();
+	      if (seen.insert(I).second) {
+		for (llvm::Instruction *succ : llvm::successors_inst(I)) {
+		  if (!cutset.contains({.src = I, .dst = succ})) {
+		    if (succ == st.t) {
+		      llvm::WithColor::error() << " source-sink path found!\n";
+		      llvm::errs() << F << "\n";
+		      llvm::errs() << "source: " << *st.s.V << "\n";
+		      llvm::errs() << "sink:   " << *st.t.V << "\n";
+		      for (const auto& e : cut_edges)
+			llvm::errs() << "cut edge: " << e.src.V << " -----> " << e.dst.V << "\n";
+		      std::exit(EXIT_FAILURE);
+		    }
+		    todo.push(succ);
+		  }
+		}
+	      }
+	    }
+	  }
+	}
 
 	// Output DOT graph, color cut edges
 	if (ClouLog) {

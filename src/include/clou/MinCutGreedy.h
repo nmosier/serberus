@@ -16,6 +16,13 @@ namespace clou {
     using ST = typename Super::ST;
 
     void run() override {
+      // sort and de-duplicate sts
+      {
+	const std::set<ST> st_set(this->sts.begin(), this->sts.end());
+	this->sts.resize(st_set.size());
+	llvm::copy(st_set, this->sts.begin());
+      }
+      
       unsigned i = 0;
       while (true) {
 	++i;
@@ -23,7 +30,7 @@ namespace clou {
 
 	auto reaching_sts = computeReaching();
       
-	Weight maxw = 0;
+	float maxw = 0;
 	Edge maxe;
 	for (const auto& [e, cost] : getEdges()) {
 	  const unsigned paths = reaching_sts[e].size();
@@ -31,14 +38,17 @@ namespace clou {
 	  if (w > maxw) {
 	    maxw = w;
 	    maxe = e;
+	    llvm::errs() << "found new max weight " << w << "\n";
 	  }
 	}
 
 	llvm::errs() << "stop " << i << "\n";
 
 	// if no weights were > 0, we're done
-	if (maxw == 0)
+	if (maxw == 0) {
+	  llvm::errs() << "finished: " << maxw << "\n";
 	  break;
+	}
 
 	// cut the max edge and continue
 	cutEdge(maxe);
@@ -48,6 +58,18 @@ namespace clou {
     
   private:
     using EdgeSet = std::set<Edge>;
+
+    static llvm::BitVector bvand(const llvm::BitVector& a, const llvm::BitVector& b) {
+      llvm::BitVector res = a;
+      res &= b;
+      return res;
+    }
+
+    static llvm::BitVector bvnot(const llvm::BitVector& a) {
+      llvm::BitVector res = a;
+      res.flip();
+      return res;
+    }
 
     void cutEdge(const Edge& e) {
       this->cut_edges.push_back(e);
@@ -70,48 +92,89 @@ namespace clou {
       auto& sts = this->sts;
       assert(llvm::is_sorted(sts));
 
+      const auto getIndex = [&sts] (const ST& st) -> unsigned {
+	const auto it = std::lower_bound(sts.begin(), sts.end(), st);
+	assert(it != sts.end());
+	assert(*it == st);
+	return it - sts.begin();
+      };
+
+      const auto getST = [&sts] (unsigned idx) -> const ST& {
+	assert(idx < sts.size());
+	return sts[idx];
+      };
+
+      const llvm::BitVector emptyset(sts.size());
       
-      
-      std::map<Node, llvm::SmallSet<ST, 8>> fwd, bwd, both;
+      std::map<Node, llvm::BitVector> fwd, bwd, both;
       bool changed;
-      
-      for (const ST& st : this->sts)
-	fwd[st.s].insert(st);
+
+      std::set<Node> nodes;
+      for (const auto& [src, dsts] : this->G) {
+	nodes.insert(src);
+	for (const auto& [dst, _] : dsts) {
+	  nodes.insert(dst);
+	}
+      }
+
+      for (const Node& v : nodes) {
+	fwd[v] = bwd[v] = both[v] = emptyset;
+      }
+
+      for (const ST& st : sts) {
+	fwd[st.s].set(getIndex(st));
+	bwd[st.t].set(getIndex(st));
+      }
+
       changed = true;
       while (changed) {
+	const auto bak = fwd;
 	changed = false;
 	for (const auto& [src, dsts] : this->G) {
 	  for (const auto& [dst, _] : dsts) {
 	    const auto& in = fwd[src];
 	    auto& out = fwd[dst];
-	    for (const auto& x : in)
-	      changed |= out.insert(x).second;
+	    changed |= bvand(in, bvnot(out)).any();
+	    out |= in;
 	  }
 	}
+	changed = (bak != fwd);
       }
 
-      for (const ST& st : this->sts)
-	bwd[st.t].insert(st);
       changed = true;
       while (changed) {
+	const auto bak = bwd;
 	changed = false;
 	for (const auto& [src, dsts] : this->G) {
 	  for (const auto& [dst, _] : dsts) {
 	    const auto& in = bwd[dst];
 	    auto& out = bwd[src];
-	    for (const auto& x : in)
-	      changed |= out.insert(x).second;
+	    changed |= bvand(in, bvnot(out)).any();
+	    out |= in;
 	  }
 	}
+	changed = (bak != bwd);
       }
-      
-      for (const auto& [node, _] : this->G) {
+
+      for (const ST& st : sts) {
+	assert(fwd[st.s].test(getIndex(st)));
+	assert(bwd[st.t].test(getIndex(st)));
+      }
+
+      for (const Node& node : nodes) {
 	const auto& sources = fwd[node];
 	const auto& sinks = bwd[node];
-	auto& out = both[node];
-	std::vector<ST> out_(std::min(sources.size(), sinks.size()));
-	std::set_intersection(sources.begin(), sources.end(), sinks.begin(), sinks.end(), out_.begin());
-	out.insert(out_.begin(), out_.end());
+	both[node] = bvand(sources, sinks);
+
+	if (this->G[node].empty()) {
+	  // print out preds
+	  llvm::errs() << "terminator: " << node << "\n";
+	  llvm::errs() << "sts:\n";
+	  for (const auto& bit : both[node].set_bits()) {
+	    getST(bit).print(llvm::errs());
+	    llvm::errs() << "\n";
+	  }
+	}
       }
 
       // finally, get edges
@@ -121,9 +184,15 @@ namespace clou {
 	  const auto& a = both[src];
 	  const auto& b = both[dst];
 	  auto& out = results[{.src = src, .dst = dst}];
-	  std::set_intersection(a.begin(), a.end(), b.begin(), b.end(), std::inserter(out, out.end()));
+	  llvm::BitVector out_bv = bvand(a, b);
+	  for (unsigned bit : out_bv.set_bits())
+	    out.insert(getST(bit));
 	}
       }
+
+      for (const auto& [e, sts] : results)
+	if (!sts.empty())
+	  llvm::errs() << "nonempty sts!\n";
 
       return results;
     }

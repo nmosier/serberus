@@ -1,5 +1,7 @@
 include(RegisterLLVMPass)
 
+add_compile_options(-UNDEBUG -UNASSERT)
+
 include_directories(include)
 
 add_compile_options(-fno-rtti -Wall -Wextra)
@@ -38,7 +40,6 @@ target_include_directories(MinCut INTERFACE ${Z3_INCLUDE_DIRS})
 
 add_library(Mitigation SHARED
   Mitigation.cc
-  include/clou/Mitigation.h
 )
 target_link_libraries(Mitigation PRIVATE Metadata)
 
@@ -107,7 +108,7 @@ add_library(MitigatePass SHARED
   MitigatePass.cc
 )
 register_llvm_pass(MitigatePass)
-target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaintAnalysis SpeculativeTaintAnalysis CommandLine LeakAnalysis ${Z3_LIBRARIES} MinCut)
+target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaintAnalysis SpeculativeTaintAnalysis CommandLine LeakAnalysis ${Z3_LIBRARIES} MinCut cfg)
 
 add_library(FunctionLocalStacks SHARED
   FunctionLocalStacks.cc
@@ -141,6 +142,6 @@ target_link_libraries(InlinePass PRIVATE util NonspeculativeTaintAnalysis Specul
 # target_link_libraries(StatsPass PRIVATE util)
 
 
-
-add_library(Bundles SHARED Bundles.cc)
-register_llvm_pass(Bundles)
+add_library(cfg SHARED
+  CFG.cc
+)

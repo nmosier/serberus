@@ -8,6 +8,7 @@
 #include <cassert>
 
 #include <llvm/ADT/iterator_range.h>
+#include <llvm/Support/raw_ostream.h>
 
 namespace clou {
 
@@ -25,6 +26,10 @@ public:
     bool operator==(const ST& o) const { return pair() == o.pair(); }
     bool operator!=(const ST& o) const { return !(*this == o); }
     bool operator<(const ST& o) const { return pair() < o.pair(); }
+
+    void print(llvm::raw_ostream& os) const {
+      os << "{.src = " << s << ", .dst = " << t << "}";
+    }
   };
   
   using Graph = std::map<Node, std::map<Node, Weight>>;
@@ -68,6 +73,13 @@ public:
   
 private:
 };
+
+  template <class Node, class Weight>
+  llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const typename MinCutBase<Node, Weight>::ST& st) {
+    st.print(os);
+    return os;
+  }
+  
 
   // TODO: Move this to source file.
   extern bool optimized_min_cut;
