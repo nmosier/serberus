@@ -4,6 +4,8 @@
 
 #include <queue>
 
+#include <llvm/ADT/SmallSet.h>
+
 namespace clou {
 
   template <class Node, class Weight>
@@ -63,37 +65,14 @@ namespace clou {
       return es;
     }
 
-#if 0
-    // want to check if path exists between two nodes.
-    bool pathExists(const Node& u, const Node& v) const {
-      std::set<Node> seen;
-      std::queue<Node> todo;
-      todo.push(u);
-
-      while (!todo.empty()) {
-	const Node w = todo.front();
-	todo.pop();
-
-	if (w == v)
-	  return true;
-
-	if (seen.insert(w).second)
-	  for (const auto& [dst, _] : this->G[w])
-	    todo.push(dst);
-      }
-
-      return false;
-    }
-    
-    unsigned computePaths(const Edge& e) const {
-      return llvm::count_if(this->sts, [&] (const ST& st) {
-	return pathExists(st.s, e.src) && pathExists(e.dst, st.t);
-      });
-    }
-#endif
 
     std::map<Edge, std::set<ST>> computeReaching() const {
-      std::map<Node, std::set<ST>> fwd, bwd, both;
+      auto& sts = this->sts;
+      assert(llvm::is_sorted(sts));
+
+      
+      
+      std::map<Node, llvm::SmallSet<ST, 8>> fwd, bwd, both;
       bool changed;
       
       for (const ST& st : this->sts)
@@ -130,7 +109,9 @@ namespace clou {
 	const auto& sources = fwd[node];
 	const auto& sinks = bwd[node];
 	auto& out = both[node];
-	std::set_intersection(sources.begin(), sources.end(), sinks.begin(), sinks.end(), std::inserter(out, out.end()));
+	std::vector<ST> out_(std::min(sources.size(), sinks.size()));
+	std::set_intersection(sources.begin(), sources.end(), sinks.begin(), sinks.end(), out_.begin());
+	out.insert(out_.begin(), out_.end());
       }
 
       // finally, get edges
