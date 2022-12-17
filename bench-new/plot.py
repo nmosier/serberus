@@ -69,6 +69,9 @@ def mitigation_displayname(mitigation):
 def benchmark_displayname(lib, name, size):
     return f'{lib}\n{name}\n({size})'
 
+# TODO: have option for absolute-number style barcharts, not just overhead-style.
+is_absolute = (metric == 'mitigation')
+
 for benchmark in benchmarks:
     results = benchmarks[benchmark]
     baseline = results['baseline_none']
@@ -77,14 +80,17 @@ for benchmark in benchmarks:
         if mitigation == 'baseline_none':
             continue
         mitigation_metric = result[metric_key]
-        overhead = (mitigation_metric - baseline_metric) / max(baseline_metric, 1) * 100
+
+        if is_absolute:
+            overhead = mitigation_metric
+        else:
+            overhead = (mitigation_metric - baseline_metric) / baseline_metric * 100
         data['benchmark'].append(benchmark_displayname(*benchmark))
         data['overhead'].append(overhead)
         data['mitigation'].append(mitigation_displayname(mitigation))
 
         geomean_in[mitigation].append(overhead)
 
-# TODO: add the geometric mean
 for mitigation, l in geomean_in.items():
     data['benchmark'].append('geomean')
     l1 = [x / 100 + 1 for x in l]
@@ -106,6 +112,27 @@ g = seaborn.catplot(
 g.set_xticklabels(rotation = 45, horizontalalignment = 'center')
 plt.tight_layout()
 
+ax = g.facet_axis(0, 0)
+
+# TODO: make it proportional, not fixed
+ymax = 1500
+if ax.get_ybound()[1] >= ymax: 
+    ax.set_ybound(upper = ymax)
+
+# fix up bars
+for c in ax.containers:
+    labels = []
+    for v in c:
+        val = v.get_height()
+        if int(val) == val:
+            s = str(int(val))
+        else:
+            s = f'{val:.1f}'
+        labels.append(s)
+        v.set_height(min(v.get_height(), ymax))
+    texts = ax.bar_label(c, labels = labels, label_type = 'edge', rotation = 90, fontsize = 'small')
+
+    
 plt.legend(
     loc = 'upper center',
 )
