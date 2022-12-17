@@ -7,7 +7,6 @@ function(libsodium_benchmark_library NAME)
   libsodium_library(${NAME}
     CFLAGS -O3 -fno-stack-protector
     ${ARGN}
-    LLVMFLAGS -clou-mitigation-trap
   )
   libsodium_library(${NAME}_marked
     CFLAGS -O3 -fno-stack-protector
@@ -89,3 +88,17 @@ libsodium_cloucc_library(libsodium_cloucc_nofps
   LLVMFLAGS -clou=udt,oobs,prech
 )
   
+libsodium_cloucc_library(libsodium_cloucc_psf
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou -clou-min-cut-alg=greedy -clou-psf
+)
+
+libsodium_cloucc_library(libsodium_cloucc_psfmem
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou -clou-min-cut-alg=greedy -clou-psf -clou-restricted-psf=0
+)
+ 
+libsodium_cloucc_library(libsodium_cloucc_greedy
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou -clou-min-cut-alg=greedy
+)

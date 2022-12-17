@@ -137,6 +137,8 @@ namespace clou {
 	    case llvm::Intrinsic::fmuladd:
 	    case llvm::Intrinsic::annotation:
 	    case llvm::Intrinsic::x86_sse2_mfence:
+	    case llvm::Intrinsic::fabs:
+	    case llvm::Intrinsic::floor:
 	      return true;
 
 	    case llvm::Intrinsic::memset:
@@ -503,16 +505,22 @@ namespace clou {
 		    keep = false;
 		  return !keep;
 		});
-		for (llvm::StoreInst& SI : util::instructions<llvm::StoreInst>(F)) {
-		  const auto SIV = SI.getValueOperand();
-		  if (NST.secret(SIV) || ST.secret(SIV)) {
-		    const auto btw = getInstructionsBetween(&SI, &T);
-		    if (llvm::any_of(public_loads, [&btw] (llvm::Value *V) {
-		      return btw.contains(llvm::dyn_cast<llvm::Instruction>(V));
-		    })) {
-		      pairs.emplace(&SI, &T);
+		if (RestrictedPSF) {
+		  for (llvm::StoreInst& SI : util::instructions<llvm::StoreInst>(F)) {
+		    const auto SIV = SI.getValueOperand();
+		    if (NST.secret(SIV) || ST.secret(SIV)) {
+		      const auto btw = getInstructionsBetween(&SI, &T);
+		      if (llvm::any_of(public_loads, [&btw] (llvm::Value *V) {
+			return btw.contains(llvm::dyn_cast<llvm::Instruction>(V));
+		      })) {
+			pairs.emplace(&SI, &T);
+		      }
 		    }
 		  }
+		} else {
+		  for (llvm::Value *public_load : public_loads)
+		    if (llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(public_load))
+		      pairs.emplace(I, &T);
 		}
 	      }
 	    }

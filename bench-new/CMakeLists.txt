@@ -63,7 +63,7 @@ function(add_mitigation_benchmark)
 endfunction()
 
 function(add_benchmarks lib name arg)
-  set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc cloucc_fps cloucc_nofps)
+  set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc cloucc_greedy cloucc_psf cloucc_psfmem) # cloucc_fps cloucc_nofps)
   foreach(mode IN LISTS modes)
     add_time_benchmark(${lib} ${name} ${mode} ${arg})
     add_mem_benchmark(${lib} ${name} ${mode} ${arg})

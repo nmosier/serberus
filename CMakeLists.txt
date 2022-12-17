@@ -45,6 +45,10 @@ if(NOT DEFINED PIN_DIR)
   message(FATAL_ERROR "PIN_DIR is not defined. Please define it.")
 endif()
 
+if(NOT DEFINED LLVM_TEST_SUITE_DIR)
+  message(FATAL_ERROR "LLVM_TEST_SUITE_DIR not defined. Please define it.")
+endif()
+
 add_compile_options(-Wall -Wextra -pedantic)
 
 # For testing infrastructure
