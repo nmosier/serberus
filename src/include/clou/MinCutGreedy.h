@@ -26,7 +26,6 @@ namespace clou {
       unsigned i = 0;
       while (true) {
 	++i;
-	llvm::errs() << "start " << i << "\n";
 
 	auto reaching_sts = computeReaching();
       
@@ -38,21 +37,15 @@ namespace clou {
 	  if (w > maxw) {
 	    maxw = w;
 	    maxe = e;
-	    llvm::errs() << "found new max weight " << w << "\n";
 	  }
 	}
 
-	llvm::errs() << "stop " << i << "\n";
-
 	// if no weights were > 0, we're done
-	if (maxw == 0) {
-	  llvm::errs() << "finished: " << maxw << "\n";
+	if (maxw == 0)
 	  break;
-	}
 
 	// cut the max edge and continue
 	cutEdge(maxe);
-	llvm::errs() << "cut " << i << "\n";
       }
     }
     
@@ -165,16 +158,6 @@ namespace clou {
 	const auto& sources = fwd[node];
 	const auto& sinks = bwd[node];
 	both[node] = bvand(sources, sinks);
-
-	if (this->G[node].empty()) {
-	  // print out preds
-	  llvm::errs() << "terminator: " << node << "\n";
-	  llvm::errs() << "sts:\n";
-	  for (const auto& bit : both[node].set_bits()) {
-	    getST(bit).print(llvm::errs());
-	    llvm::errs() << "\n";
-	  }
-	}
       }
 
       // finally, get edges
@@ -189,10 +172,6 @@ namespace clou {
 	    out.insert(getST(bit));
 	}
       }
-
-      for (const auto& [e, sts] : results)
-	if (!sts.empty())
-	  llvm::errs() << "nonempty sts!\n";
 
       return results;
     }
