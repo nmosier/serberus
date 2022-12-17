@@ -111,6 +111,7 @@ namespace clou {
 	    case llvm::Intrinsic::cttz:
 	    case llvm::Intrinsic::usub_sat:
 	    case llvm::Intrinsic::fmuladd:
+	    case llvm::Intrinsic::fabs:
 	      taint_rule = Taint::Passthrough;
 	      break;
 

@@ -93,6 +93,8 @@ namespace clou {
 	    case llvm::Intrinsic::cttz:
 	    case llvm::Intrinsic::usub_sat:
 	    case llvm::Intrinsic::fmuladd:
+	    case llvm::Intrinsic::fabs:
+	    case llvm::Intrinsic::floor:
 	      // Passthrough
 	      for (llvm::Value *arg_V : II->args()) {
 		if (llvm::Instruction *arg_I = llvm::dyn_cast<llvm::Instruction>(arg_V)) {
