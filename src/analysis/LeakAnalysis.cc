@@ -80,6 +80,7 @@ namespace clou {
 	      case llvm::Intrinsic::cttz:
 	      case llvm::Intrinsic::usub_sat:
 	      case llvm::Intrinsic::fmuladd:
+	      case llvm::Intrinsic::fabs:
 		for (llvm::Value *V : II->args()) {
 		  leaks.insert(V);
 		}
