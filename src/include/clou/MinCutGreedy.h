@@ -3,6 +3,7 @@
 #include "MinCutBase.h"
 
 #include <queue>
+#include <stack>
 
 #include <llvm/ADT/SmallSet.h>
 
@@ -80,7 +81,66 @@ namespace clou {
       return es;
     }
 
+    std::set<Node> bfs(const Node& root, const Node& target, std::map<Node, std::set<Node>>& G) const {
+      std::stack<Node> todo;
+      std::set<Node> seen;
+      todo.push(root);
+      while (!todo.empty()) {
+	const Node node = todo.top();
+	todo.pop();
+	if (seen.insert(node).second && node != target) {
+	  // add successors
+	  for (const Node& dst : G[node])
+	    todo.push(dst);
+	}
+      }
+      return seen;
+    }
 
+    std::map<Edge, std::set<ST>> computeReaching() const {
+      auto& sts = this->sts;
+
+      std::map<Edge, std::set<ST>> results;
+
+      /* Approach:
+       * BFS for each s-t pair.
+       *
+       */
+
+      std::map<Node, std::set<Node>> G, Grev;
+      for (const auto& [src, dsts] : this->G) {
+	for (const auto& [dst, _] : dsts) {
+	  G[src].insert(dst);
+	  Grev[dst].insert(src);
+	}
+      }
+
+      if (G.empty())
+	return {};
+      
+      for (const ST& st : sts) {
+	std::set<Node> fwd, bwd;
+	fwd = bfs(st.s, st.t, G);
+	if (fwd.contains(st.t))
+	  bwd = bfs(st.t, st.s, Grev);
+	if (fwd.empty() || bwd.empty())
+	  continue;
+	std::set<Node> both;
+	std::set_intersection(fwd.begin(), fwd.end(), bwd.begin(), bwd.end(), std::inserter(both, both.end()));
+	for (const Node& src : both) {
+	  for (const Node& dst : G[src]) {
+	    if (both.contains(dst)) {
+	      const Edge edge = {.src = src, .dst = dst};
+	      results[edge].insert(st);
+	    }
+	  }
+	}
+      }
+
+      return results;
+    }
+    
+#if 0
     std::map<Edge, std::set<ST>> computeReaching() const {
       auto& sts = this->sts;
       assert(llvm::is_sorted(sts));
@@ -119,35 +179,38 @@ namespace clou {
 	bwd[st.t].set(getIndex(st));
       }
 
-      changed = true;
-      while (changed) {
-	const auto bak = fwd;
+      std::map<Node, std::set<Node>> Grev;
+      for (const auto& [src, dsts] : this->G)
+	for (const auto& [dst, _] : dsts)
+	  Grev[dst].insert(src);
+      
+      auto order = topological_order();
+      do {
 	changed = false;
-	for (const auto& [src, dsts] : this->G) {
-	  for (const auto& [dst, _] : dsts) {
+	for (const Node& dst : order) {
+	  auto& out = fwd[dst];
+	  const auto bak = out;
+	  for (const Node& src : Grev[dst]) {
 	    const auto& in = fwd[src];
-	    auto& out = fwd[dst];
-	    changed |= bvand(in, bvnot(out)).any();
 	    out |= in;
 	  }
+	  changed |= (out != bak);
 	}
-	changed = (bak != fwd);
-      }
+      } while (changed);
 
-      changed = true;
-      while (changed) {
-	const auto bak = bwd;
+      llvm::reverse(order);
+      do {
 	changed = false;
-	for (const auto& [src, dsts] : this->G) {
-	  for (const auto& [dst, _] : dsts) {
+	for (const Node& src : order) {
+	  auto& out = bwd[src];
+	  const auto bak = out;
+	  for (const auto& [dst, _] : this->G[src]) {
 	    const auto& in = bwd[dst];
-	    auto& out = bwd[src];
-	    changed |= bvand(in, bvnot(out)).any();
 	    out |= in;
 	  }
+	  changed |= (out != bak);
 	}
-	changed = (bak != bwd);
-      }
+      } while (changed);
 
       for (const ST& st : sts) {
 	assert(fwd[st.s].test(getIndex(st)));
@@ -175,6 +238,81 @@ namespace clou {
 
       return results;
     }
+#endif
+
+    template <class Func>
+    void for_each_edge(Func func) const {
+      for_each_edge_order(getNodes(), func);
+    }
+
+    template <class Func>
+    void for_each_edge_order(const auto& order, Func func) const {
+      for (const Node& src : order)
+	for (const auto& [dst, _] : this->G[src])
+	  func(src, dst);
+    }
+
+    std::set<Node> getNodes() const {
+      std::set<Node> nodes;
+      for (const auto& [src, dsts] : this->G) {
+	nodes.insert(src);
+	for (const auto& [dst, _] : dsts)
+	  nodes.insert(dst);
+      }
+      return nodes;
+    }
+
+
+    std::vector<Node> postorder() const {
+      std::stack<Node> stack;
+      std::set<Node> seen;
+      std::vector<Node> order;
+
+      // try to find a good start node
+      {
+	// get degrees
+	std::map<Node, unsigned> degrees;
+	for (const Node& node : getNodes())
+	  degrees[node] = 0;
+	for_each_edge([&degrees] (const Node&, const Node& dst) {
+	  degrees[dst]++;
+	});
+
+	if (degrees.empty())
+	  return {};
+
+	std::map<unsigned, std::set<Node>> degrees_r;
+	for (const auto& [node, deg] : degrees)
+	  degrees_r[deg].insert(node);
+
+	for (const auto& node : degrees_r.begin()->second)
+	  stack.push(node);
+      }
+
+      while (!stack.empty()) {
+	const Node node = stack.top();
+	if (seen.insert(node).second) {
+	  for (const auto& [dst, _] : this->G[node]) {
+	    if (!seen.contains(dst))
+	      stack.push(dst);
+	  }
+	} else {
+	  order.push_back(node);
+	  stack.pop();
+	}
+      }
+
+      assert(llvm::equal(getNodes(), std::set<Node>(order.begin(), order.end())));
+
+      return order;
+    }
+
+    std::vector<Node> topological_order() const {
+      auto order = postorder();
+      llvm::reverse(order);
+      return order;
+    }
+    
   };
 
 }
