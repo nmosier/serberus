@@ -60,7 +60,6 @@ namespace clou {
 	std::set<llvm::Value *> mem, mem_bak; // public memory
 	std::set<llvm::Value *> vals, vals_bak; // public values
 
-	auto& AA = getAnalysis<llvm::AAResultsWrapperPass>().getAAResults();
 	auto& MD = getAnalysis<llvm::MemoryDependenceWrapperPass>().getMemDep();
 
 	const auto is_pub = [&vals] (llvm::Value *V) -> bool {

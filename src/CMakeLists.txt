@@ -1,10 +1,8 @@
 include(RegisterLLVMPass)
 
-add_compile_options(-UNDEBUG -UNASSERT)
+add_compile_options(-UNDEBUG -UNASSERT -fno-rtti -Wall -Wextra -fcf-protection=full)
 
 include_directories(include)
-
-add_compile_options(-fno-rtti -Wall -Wextra)
 
 add_link_options(-pthread)
 include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
@@ -145,3 +143,13 @@ target_link_libraries(InlinePass PRIVATE util NonspeculativeTaintAnalysis Specul
 add_library(cfg SHARED
   CFG.cc
 )
+
+
+pkg_check_modules(Libprofiler REQUIRED libprofiler)
+
+add_library(Profiler SHARED
+  Profiler.cc
+)
+target_include_directories(Profiler PRIVATE ${Libprofiler_INCLUDE_DIRS})
+target_link_directories(Profiler PRIVATE ${Libprofiler_LIBRARY_DIRS})
+target_link_libraries(Profiler PRIVATE ${Libprofiler_LIBRARIES})

@@ -25,31 +25,22 @@ hacl_benchmark_library(hacl_cloucc ${cloucc_base_args}
   LLVMFLAGS -clou
 )
 
-hacl_benchmark_library(hacl_cloucc_greedy ${cloucc_base_args}
+hacl_benchmark_library(hacl_cloucc_ncal_xmit ${cloucc_base_args}
   PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -clou -clou-min-cut-alg=greedy
+  LLVMFLAGS -clou=ncal_xmit
 )
 
-hacl_benchmark_library(hacl_cloucc_psf ${cloucc_base_args}
+hacl_benchmark_library(hacl_cloucc_ncas_xmit ${cloucc_base_args}
   PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -clou -clou-min-cut-alg=greedy -clou-psf
+  LLVMFLAGS -clou=ncas_xmit
 )
 
-hacl_benchmark_library(hacl_cloucc_psfmem ${cloucc_base_args}
+hacl_benchmark_library(hacl_cloucc_ncas_ctrl ${cloucc_base_args}
   PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -clou -clou-min-cut-alg=greedy -clou-psf -clou-restricted-psf=0
+  LLVMFLAGS -clou=ncas_ctrl
 )
 
-hacl_benchmark_library(hacl_cloucc_ncas ${cloucc_base_args}
-  PASS InlinePass MitigatePass Attributes
-  LLVMFLAGS -clou=oobs
-)
 hacl_benchmark_library(hacl_cloucc_fps ${cloucc_base_args}
   PASS InlinePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=fps,postch
-)
-
-hacl_benchmark_library(hacl_cloucc_nofps ${cloucc_base_args}
-  PASS InlinePass MitigatePass Attributes
-  LLVMFLAGS -clou=udt,oobs,prech
 )

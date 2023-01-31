@@ -33,28 +33,10 @@ set(cloucc_base_args
   CFLAGS -fno-jump-tables
 
   # CET
-  LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:cet> -L$<TARGET_FILE_DIR:cet> -lcet
-  DEPENDS cet
-  LDFLAGS -Wl,-z,force-ibt
+  # LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:cet> -L$<TARGET_FILE_DIR:cet> -lcet
+  # DEPENDS cet
+  # LDFLAGS -Wl,-z,force-ibt
 )
-
-if(0)
-set(cloucc_args
-  PASSES InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -clou -no-stack-slot-sharing
-)
-
-set(cloucc_udt_args
-  PASSES MitigatePass
-  LLVMFLAGS -clou=udt
-)
-
-set(cloucc_ncas_args
-  PASSES MitigatePass
-  LLVMFLAGS -clou=oobs
-)
-endif()
-
 
 # Google Benchmark Flags
 set(benchmark_runtime_flags --benchmark_repetitions=5 --benchmark_min_warmup_time=1 --benchmark_display_aggregates_only=true

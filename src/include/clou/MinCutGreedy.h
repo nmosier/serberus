@@ -4,17 +4,30 @@
 
 #include <queue>
 #include <stack>
+#include <unordered_map>
+#include <map>
+#include <set>
 
 #include <llvm/ADT/SmallSet.h>
 
+#define DEBUG(...) ;
+
 namespace clou {
 
-  template <class Node, class Weight>
+  template <class Node, class Weight, class NodeHash>
   class MinCutGreedy final : public MinCutBase<Node, Weight> {
   public:
     using Super = MinCutBase<Node, Weight>;
     using Edge = typename Super::Edge;
     using ST = typename Super::ST;
+
+    struct EdgeHash {
+      NodeHash node_hash;
+      EdgeHash(NodeHash node_hash = NodeHash()): node_hash(node_hash) {}
+      auto operator()(const Edge& e) const {
+	return llvm::hash_combine(node_hash(e.src), node_hash(e.dst));
+      }
+    };
 
     void run() override {
       // sort and de-duplicate sts
@@ -24,59 +37,34 @@ namespace clou {
 	llvm::copy(st_set, this->sts.begin());
       }
 
-#if 0
-      if (this->sts.size() > 50000) {
-	this->fallback = true;
-	for (const ST& st : this->sts) {
-	  for (const auto& [dst, _] : this->G[st.s]) {
-	    const Edge e = {.src = st.s, .dst = dst};
-	    this->cut_edges.push_back(e);
-	  }
-	}
-	return;
-      }
-#endif
-
-      llvm::errs() << "min-cut on " << getNodes().size() << " nodes\n";
+      DEBUG(llvm::errs() << "min-cut on " << getNodes().size() << " nodes\n");
       
       unsigned i = 0;
       while (true) {
 	++i;
-	llvm::errs() << "\titeration " << i << "\n";
+	DEBUG(llvm::errs() << "\titeration " << i << "\n");
 
 	auto reaching_sts = computeReaching();
       
 	float maxw = 0;
 	Edge maxe;
 	llvm::BitVector maxbv;
-#if 1
+
 	for (const auto& [e, cost] : getEdges()) {
-	  const unsigned paths = reaching_sts[e].size();
+	  const unsigned paths = reaching_sts[e];
 	  const float w = paths * (1.f / static_cast<float>(cost));
 	  if (w > maxw) {
 	    maxw = w;
 	    maxe = e;
 	  }
 	}
-#else
-	for (const auto& [e, sts] : reaching_sts) {
-	  const unsigned paths = sts.count();
-	  const auto cost = this->G.at(e.src).at(e.dst);
-	  const float w = paths * (1.f / static_cast<float>(cost));
-	  if (w > maxw) {
-	    maxw = w;
-	    maxe = e;
-	    maxbv = sts;
-	  }
-	}
-#endif
 
 	// if no weights were > 0, we're done
 	if (maxw == 0)
 	  break;
 
 	// cut the max edge and continue
-	cutEdge(maxe, maxbv);
+	cutEdge(maxe);
       }
     }
     
@@ -95,21 +83,10 @@ namespace clou {
       return res;
     }
 
-    void cutEdge(const Edge& e, const llvm::BitVector& maxbv) {
+    void cutEdge(const Edge& e) {
       this->cut_edges.push_back(e);
       this->G[e.src].erase(e.dst);
       this->G[e.dst].erase(e.src);
-
-#if 0
-      for (auto& [node, io] : fwd) {
-	io.in.reset(maxbv);
-	io.out.reset(maxbv);
-      }
-      for (auto& [node, io] : bwd) {
-	io.in.reset(maxbv);
-	io.out.reset(maxbv);
-      }
-#endif
     }
 
     std::set<std::pair<Edge, Weight>> getEdges() const {
@@ -120,6 +97,23 @@ namespace clou {
 	  es.emplace(e, w);
 	}
       return es;
+    }
+
+    llvm::BitVector bfs(unsigned root, unsigned target, const std::vector<llvm::SmallSet<unsigned, 4>>& G, const llvm::BitVector& empty) const {
+      std::stack<unsigned> todo;
+      llvm::BitVector seen = empty;
+      todo.push(root);
+      while (!todo.empty()) {
+	const unsigned node = todo.top();
+	todo.pop();
+	if (seen.test(node))
+	  continue;
+	seen.set(node);
+	if (root == target || node != target)
+	  for (const unsigned dst : G[node])
+	    todo.push(dst);
+      }
+      return seen;
     }
 
     std::set<Node> bfs(const Node& root, const Node& target, std::map<Node, llvm::SmallSet<Node, 4>>& G) const {
@@ -176,309 +170,117 @@ namespace clou {
 
       return entries.size();
     }
-    
-#if 0
+
     mutable std::set<ST> disconnected_sts;
-    std::map<Edge, std::set<ST>> computeReaching() {
-      auto& sts = this->sts;
+    std::map<Edge, unsigned> computeReaching() {
+      std::vector<Node> nodevec;
+      llvm::copy(getNodes(), std::back_inserter(nodevec));
+      const auto n = nodevec.size();
+      assert(llvm::is_sorted(nodevec));
+      const auto node_to_idx = [&nodevec] (const Node& n) {
+	const auto it = llvm::lower_bound(nodevec, n);
+	assert(it != nodevec.end() && *it == n);
+	return it - nodevec.begin();
+      };
+      const auto idx_to_node = [&nodevec] (auto idx) -> const Node& {
+	assert(idx >= 0 && idx < nodevec.size());
+	return nodevec[idx];
+      };      
 
-      std::map<Edge, std::set<ST>> results;
+      
+      struct IdxST {
+	unsigned s, t;
+      };
+      std::vector<IdxST> sts;
+      for (const ST& st : this->sts) {
+	IdxST st_;
+	st_.s = node_to_idx(st.s);
+	st_.t = node_to_idx(st.t);
+	sts.push_back(st_);
+      }
 
-      std::map<Node, llvm::SmallSet<Node, 4>> G, Grev;
+      std::vector<std::map<unsigned, unsigned>> results(n); // src_idx -> dst_idx -> count
+
+      /* Approach:
+       * BFS for each s-t pair.
+       
+       */
+
+      const llvm::BitVector empty(n, false);
+
+      std::vector<llvm::SmallSet<unsigned, 4>> G(n), Grev(n);
       for (const auto& [src, dsts] : this->G) {
+	const auto src_idx = node_to_idx(src);
 	for (const auto& [dst, _] : dsts) {
-	  G[src].insert(dst);
-	  Grev[dst].insert(src);
+	  const auto dst_idx = node_to_idx(dst);
+	  G[src_idx].insert(dst_idx);
+	  Grev[dst_idx].insert(src_idx);
 	}
       }
 
       if (G.empty())
-	return {};
-
-      /* Approach:
-       * BFS for each s-t pair.
-       */
-
-      // We're recomputing a lot of information that we don't need to recompute.
-      // What if for each unique source, we compute the set of nodes it reaches.
-      // And do the same of each unique sink.
-      // Then for each ST, we take the intersection 
-
-      for (int i = 0; const ST& st : sts) {
-	llvm::errs() << "\r\t\tsts processed: " << i++ << "/" << sts.size();
-	if (disconnected_sts.contains(st))
-	  continue;
-	std::set<Node> fwd, bwd;
-	fwd = bfs(st.s, st.t, G);
-	if (fwd.contains(st.t))
-	  bwd = bfs(st.t, st.s, Grev);
-	std::set<Node> both;
-	std::set_intersection(fwd.begin(), fwd.end(), bwd.begin(), bwd.end(), std::inserter(both, both.end()));
-	if (both.size() < 2)
-	  disconnected_sts.insert(st);
-	for (const Node& src : both) {
-	  for (const Node& dst : G[src]) {
-	    if (both.contains(dst)) {
-	      const Edge edge = {.src = src, .dst = dst};
-	      results[edge].insert(st);
-	    }
-	  }
-	}
-      }
-
-      llvm::errs() << "\n";
-
-      return results;
-    }
-#elif 1
-    mutable std::set<ST> disconnected_sts;
-    std::map<Edge, std::set<ST>> computeReaching() {
-      auto& sts = this->sts;
-
-      std::map<Edge, std::set<ST>> results;
-
-      std::map<Node, llvm::SmallSet<Node, 4>> G, Grev;
-      for (const auto& [src, dsts] : this->G) {
-	for (const auto& [dst, _] : dsts) {
-	  G[src].insert(dst);
-	  Grev[dst].insert(src);
-	}
-      }
-
-      if (G.empty())
-	return {};
-
-      /* Approach:
-       * BFS for each s-t pair.
-       */
+	return {};      
 
       // We're recomputing a lot of information that we don't need to recompute.
       // What if for each unique source, we compute the set of nodes it reaches.
       // And do the same of each unique sink.
       // Then for each ST, we take the intersection
 
-      std::set<Node> ss, ts;
-      for (const ST& st : sts) {
-	ss.insert(st.s);
-	ts.insert(st.t);
-      }
-	
-      std::map<Node, std::set<Node>> s_reach, t_reach;
-      for (const Node& s : ss) {
-	auto reach = bfs(s, s, G);
-	s_reach.emplace(s, std::move(reach));
+      llvm::BitVector ss = empty, ts = empty;
+      for (const auto& st : sts) {
+	ss.set(st.s);
+	ts.set(st.t);
       }
 
-      for (const Node& t : ts) {
-	auto reach = bfs(t, t, Grev);
-	t_reach.emplace(t, std::move(reach));
+      std::vector<llvm::BitVector> s_reach(n, empty), t_reach(n, empty);
+      for (unsigned s : ss.set_bits()) {
+	s_reach.at(s) = bfs(s, s, G, empty);
+      }
+      for (unsigned t : ts.set_bits()) {
+	t_reach.at(t) = bfs(t, t, Grev, empty);
       }
 
-      for (int i = 0; const ST& st : sts) {
-	llvm::errs() << "\r\t\tsts processed: " << i++ << "/" << sts.size();
+      for ([[maybe_unused]] int i = 0; const auto& st : sts) {
+	DEBUG(llvm::errs() << "\r\t\tsts processed: " << i++ << "/" << sts.size());
+#if 0
 	if (disconnected_sts.contains(st))
 	  continue;
+#endif
 	const auto& fwd = s_reach.at(st.s);
 	const auto& bwd = t_reach.at(st.t);
-	std::set<Node> both;
-	std::set_intersection(fwd.begin(), fwd.end(), bwd.begin(), bwd.end(), std::inserter(both, both.end()));
-	if (both.size() < 2)
+	llvm::BitVector both = fwd;
+	both &= bwd;
+	if (both.count() < 2) {
+#if 0
 	  disconnected_sts.insert(st);
-	for (const Node& src : both) {
-	  for (const Node& dst : G[src]) {
-	    if (both.contains(dst)) {
-	      const Edge edge = {.src = src, .dst = dst};
-	      results[edge].insert(st);
-	    }
-	  }
-	}
-      }
-
-      llvm::errs() << "\n";
-
-      return results;
-    }
-#elif 1
-    std::map<Edge, std::set<ST>> computeReaching() {
-      std::set<ST> sts;
-      llvm::copy(this->sts, std::inserter(sts, sts.end()));
-      std::map<Edge, std::set<ST>> results;
-      std::map<Node, llvm::SmallSet<Node, 2>> G, Grev;
-      for (const auto& [src, dsts] : this->G) {
-	for (const auto& [dst, _] : dsts) {
-	  G[src].insert(dst);
-	  Grev[dst].insert(src);
-	}
-      }
-
-      if (G.empty())
-	return {};
-
-      std::set<Node> fwd_filter, bwd_filter;
-      for (const ST& st : sts) {
-	fwd_filter.insert(st.s);
-	bwd_filter.insert(st.t);
-      }
-
-      std::map<Node, std::set<Node>> fwd, bwd, fwd_bak, bwd_bak;
-      const auto fwd_order = topological_order(G);
-      const auto bwd_order = topological_order(Grev);
-      int i = 0;
-      do {
-	fwd_bak = fwd;
-	bwd_bak = bwd;
-
-	llvm::errs() << "\r\t\tdata-flow iteration " << ++i;
-
-	for (const Node& dst : fwd_order) {
-	  auto& v = fwd[dst];
-	  // meet
-	  for (const Node& src : G[dst])
-	    llvm::copy(fwd[src], std::inserter(v, v.end()));
-	  // transfer
-	  if (fwd_filter.contains(dst))
-	    v.insert(dst);
-	}
-
-	for (const Node& dst : bwd_order) {
-	  auto& v = bwd[dst];
-	  // meet
-	  for (const Node& src : Grev[dst])
-	    llvm::copy(bwd[src], std::inserter(v, v.end()));
-	  // transfer
-	  if (bwd_filter.contains(dst))
-	    v.insert(dst);
-	}
-	
-      } while (fwd != fwd_bak || bwd != bwd_bak);
-      llvm::errs() << "\n";
-
-      std::map<Node, std::set<Node>> stmap;
-      for (const ST& st : sts)
-	stmap[st.s].insert(st.t);
-
-      // now find edges for which there is a source in the src and sink in the dst
-      int j = 0;
-      for (const auto& [src, dsts] : G) {
-	const auto& ss = fwd[src];
-	for (const Node& dst : dsts) {
-	  const auto& ts = bwd[dst];
-	  for (const ST& st : sts) {
-	      llvm::errs() << "\r" << ++j;
-	    if (ss.contains(st.s) && ts.contains(st.t)) {
-	      const Edge e = {.src = src, .dst = dst};
-	      results[e].insert(st);
-	    }
-	  }
-	}
-      }
-      llvm::errs() << "\n";
-
-      return results;
-      
-    }
-
-    
-#else
-    struct InOut {
-      llvm::BitVector in;
-      llvm::BitVector out;
-
-      bool operator==(const InOut& o) const {
-	return in == o.in && out == o.out;
-      }
-      bool operator!=(const InOut& o) const {
-	return !(*this == o);
-      }
-    };
-
-    static void computeReachingInit(const std::vector<Node>& nodes,
-				    const llvm::BitVector& empty,
-				    std::map<Node, InOut>& map) {
-      for (const Node& node : nodes) {
-	InOut& v = map[node];
-	v.out = v.in = empty;
-      }
-    }
-
-    static void computeReachingStep(std::map<Node, llvm::SmallSet<Node, 2>>& G,
-				    const std::map<Node, llvm::BitVector>& addins,
-				    const std::vector<Node>& order,
-				    std::map<Node, InOut>& map) {
-      std::map<Node, InOut> bak;
-      do {
-	bak = map;
-	for (const Node& dst : order) {
-	  InOut& v = map.at(dst);
-	  for (const Node& src : G[dst])
-	    v.in |= map.at(src).out;
-	  v.out = v.in;
-	  v.out |= addins.at(dst);
-	}
-      } while (map != bak);
-    }
-
-    std::map<Node, InOut> fwd, bwd;
-    std::vector<Node> fwd_order, bwd_order;
-    std::vector<std::pair<Edge, llvm::BitVector>> computeReaching() {
-      auto& sts = this->sts;
-      
-      std::map<ST, size_t> sts_map;
-      for (const ST& st : sts)
-	sts_map.emplace(st, sts_map.size());
-
-      std::vector<std::pair<Edge, llvm::BitVector>> results; // really, can just return count.
-
-      std::map<Node, llvm::SmallSet<Node, 2>> G, Grev;
-      for (const auto& [src, dsts] : this->G) {
-	for (const auto& [dst, _] : dsts) {
-	  G[src].insert(dst);
-	  Grev[dst].insert(src);
-	}
-      }
-
-      if (G.empty())
-	return {};
-      
-      const auto st_to_idx = [&] (const ST& st) {
-	return sts_map.at(st);
-      };
-      const auto num_sts = sts.size();
-
-      std::map<Node, llvm::BitVector> sts_to_set;
-      for (const Node& node : getNodes())
-	sts_to_set.emplace(node, llvm::BitVector(num_sts, false));
-      for (const ST& st : sts) {
-	const auto st_idx = st_to_idx(st);
-	sts_to_set[st.s].set(st_idx);
-	sts_to_set[st.t].set(st_idx);
-      }
-
-      const llvm::BitVector empty(num_sts, false);
-      if (bwd_order.empty() || true)
-	bwd_order = topological_order(Grev);
-      if (fwd_order.empty() || true)
-	fwd_order = topological_order(G);
-      if (fwd.empty() || bwd.empty() || true) {
-	computeReachingInit(fwd_order, empty, fwd);
-	computeReachingInit(bwd_order, empty, bwd);
-      }
-      computeReachingStep(G, sts_to_set, fwd_order, fwd);
-      computeReachingStep(Grev, sts_to_set, bwd_order, bwd);
-
-      // Find shared sts between edges
-      for (const auto& [src, dsts] : G) {
-	const llvm::BitVector& src_bv = fwd[src].out;
-	for (const Node& dst : dsts) {
-	  llvm::BitVector dst_bv = bwd[dst].out;
-	  dst_bv &= src_bv;
-	  const Edge e = {.src = src, .dst = dst};
-	  results.emplace_back(e, std::move(dst_bv));
-	}
-      }
-      return results;
-    }
 #endif
+	  continue;
+	}
+	for (auto src_idx : both.set_bits()) {
+	  for (auto dst_idx : G[src_idx]) {
+	    if (both.test(dst_idx)) {
+	      auto& result = results[src_idx][dst_idx];
+	      ++result;
+	    }
+	  }
+	}
+      }
+
+      DEBUG(llvm::errs() << "\n");
+
+      std::map<Edge, unsigned> results_;
+      for (unsigned src_idx = 0; src_idx < n; ++src_idx) {
+	const Node& src = idx_to_node(src_idx);
+	Edge e;
+	e.src = src;
+	for (const auto& [dst_idx, count] : results[src_idx]) {
+	  e.dst = idx_to_node(dst_idx);
+	  results_[e] = count;
+	}
+      }
+
+      return results_;
+    }
     
     template <class Func>
     void for_each_edge(Func func) const {

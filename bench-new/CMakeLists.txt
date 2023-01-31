@@ -10,6 +10,7 @@ function(add_benchmark_shared lib name mode arg metric libsuffix)
   target_link_libraries(${exe} PRIVATE ${lib}_${mode}${libsuffix})
   target_compile_definitions(${exe} PRIVATE BENCH_${LIB} BENCH_${METRIC} BENCH_METRIC=${metric}
     BENCH_NAME=${lib}_${name} BENCH_ARG=${arg})
+  target_compile_options(${exe} PRIVATE -Wno-unused-parameter)
   set(exe ${exe} PARENT_SCOPE)
 
   # add rule for generating jsons
@@ -63,7 +64,7 @@ function(add_mitigation_benchmark)
 endfunction()
 
 function(add_benchmarks lib name arg)
-  set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc cloucc_greedy cloucc_psf cloucc_psfmem) # cloucc_fps cloucc_nofps)
+  set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc cloucc_ncal_xmit cloucc_ncas_xmit cloucc_ncas_ctrl)
   foreach(mode IN LISTS modes)
     add_time_benchmark(${lib} ${name} ${mode} ${arg})
     add_mem_benchmark(${lib} ${name} ${mode} ${arg})
@@ -85,6 +86,11 @@ add_benchmarks(libsodium sha256     8192)
 add_benchmarks(hacl      chacha20   8192)
 add_benchmarks(hacl      poly1305   1024)
 add_benchmarks(hacl      curve25519 64)
+add_benchmarks(openssl   sha256     64)
+add_benchmarks(openssl   sha256     8192)
+add_benchmarks(openssl   sha256     1048576)
+add_benchmarks(openssl   chacha20   8192)
+add_benchmarks(openssl   curve25519 64)
 
 
 function(add_breakdowns)

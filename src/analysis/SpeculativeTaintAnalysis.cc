@@ -13,6 +13,7 @@
 
 #include "clou/util.h"
 #include "clou/Mitigation.h"
+#include "clou/analysis/NonspeculativeTaintAnalysis.h"
 
 namespace clou {
 
@@ -21,6 +22,7 @@ namespace clou {
 
   void SpeculativeTaint::getAnalysisUsage(llvm::AnalysisUsage& AU) const {
     AU.addRequired<llvm::AAResultsWrapperPass>();
+    AU.addRequired<NonspeculativeTaint>();
     AU.setPreservesAll();    
   }
 
@@ -48,15 +50,21 @@ namespace clou {
       for (llvm::Instruction& I : llvm::instructions(F)) {
 	  
 	if (llvm::LoadInst *LI = llvm::dyn_cast<llvm::LoadInst>(&I)) {
-	  if (!util::isConstantAddress(LI->getPointerOperand())) {
-	    taints[LI][LI] = ORIGIN;
-	  } else {
-	    // check if it may overlap with a secret store
+	  if (util::isConstantAddress(LI->getPointerOperand()) && (!PSF || RestrictedPSF)) {
 	    for (const auto& [SI, origins] : mem) {
-	      if (!isDefinitelyNoAlias(AA.alias(SI->getPointerOperand(), LI->getPointerOperand()))) {
-		taints[LI].insert(origins.begin(), origins.end());
+	      if (PSF && RestrictedPSF) {
+		NonspeculativeTaint& NST = getAnalysis<NonspeculativeTaint>();
+		if (NST.secret(SI->getValueOperand())) {
+		  taints[LI].emplace(SI, ORIGIN);
+		  continue;
+		}
 	      }
+	      if ((PSF && RestrictedPSF) ||
+		  !isDefinitelyNoAlias(AA.alias(SI->getPointerOperand(), LI->getPointerOperand())))
+		taints[LI].insert(origins.begin(), origins.end());
 	    }
+	  } else { // NCA load
+	    taints[LI].emplace(LI, ORIGIN);
 	  }
 	  continue;
 	}

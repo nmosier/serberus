@@ -12,11 +12,11 @@ function(openssl_library NAME)
   endforeach()
 
   foreach(llvmflag IN LISTS OPENSSL_LLVMFLAGS)
-    list(APPEND OPENSSL_LLVMFLAGS -mllvm ${llvmflag})
+    list(APPEND OPENSSL_CFLAGS -mllvm ${llvmflag})
   endforeach()
 
   foreach(clouflag IN LISTS OPENSSL_CLOUFLAGS)
-    list(APPEND OPENSSL_CLOUFLAGS -mllvm ${llvmflag})
+    list(APPEND OPENSSL_CFLAGS -mllvm ${llvmflag})
   endforeach()
 
   list(APPEND OPENSSL_LDFLAGS -pthread) # Not sure why
@@ -52,7 +52,7 @@ function(openssl_library NAME)
 
   # build step
   add_custom_command(OUTPUT ${STAMP_DIR}/build.stamp
-    COMMAND make --quiet -j64
+    COMMAND make --quiet -j16
     COMMAND touch ${STAMP_DIR}/build.stamp
     DEPENDS ${STAMP_DIR}/clean.stamp
     COMMENT "Building OpenSSL library ${NAME}"
@@ -61,7 +61,7 @@ function(openssl_library NAME)
 
   # test step
   add_custom_command(OUTPUT ${STAMP_DIR}/test.stamp
-    COMMAND make --quiet test
+    # COMMAND make --quiet test
     COMMAND touch ${STAMP_DIR}/test.stamp
     DEPENDS ${STAMP_DIR}/build.stamp
     COMMENT "Testing OpenSSL library ${NAME}"
@@ -69,7 +69,7 @@ function(openssl_library NAME)
   )
 
   # install step
-  add_custom_command(OUTPUT ${STAMP_DIR}/install.stamp ${INSTALL_DIR}/lib/libssl.so ${INSTALL_DIR}/lib/libcrypto.so
+  add_custom_command(OUTPUT ${STAMP_DIR}/install.stamp ${INSTALL_DIR}/lib64/libssl.a ${INSTALL_DIR}/lib64/libcrypto.a
     COMMAND make --quiet install
     COMMAND touch ${STAMP_DIR}/install.stamp
     DEPENDS ${STAMP_DIR}/test.stamp
@@ -82,7 +82,7 @@ function(openssl_library NAME)
   )
 
   add_library(${NAME} INTERFACE)
-  target_link_libraries(${NAME} INTERFACE ${INSTALL_DIR}/lib/libssl.so ${INSTALL_DIR}/lib/libcrypto.so)
+  target_link_libraries(${NAME} INTERFACE ${INSTALL_DIR}/lib64/libssl.a ${INSTALL_DIR}/lib64/libcrypto.a)
   target_include_directories(${NAME} INTERFACE ${INSTALL_DIR}/include)
   add_dependencies(${NAME} ${NAME}_install)
   

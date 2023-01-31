@@ -6,7 +6,15 @@ make_directory(${CMAKE_CURRENT_BINARY_DIR}/logs)
 function(openssl_base_library NAME)
   openssl_library(${NAME}
     CFLAGS -O3 -fno-stack-protector
+    CONFIGURE_OPTIONS no-asm
     ${ARGN}
+  )
+  openssl_library(${NAME}_marked
+    CFLAGS -O3 -fno-stack-protector
+    CONFIGURE_OPTIONS no-asm
+    ${ARGN}
+    LLVMFLAGS -clou-mitigation-trap
+    LDFLAGS -Wl,-z,trace-mitigations
   )
 endfunction()
 
@@ -15,28 +23,39 @@ function(openssl_baseline_library NAME)
 endfunction()
 
 function(openssl_cloucc_library NAME)
-  openssl_base_library(${NAME} ${cloucc_base_args})
+  openssl_base_library(${NAME} ${cloucc_base_args} ${ARGN})
 endfunction()
 
-openssl_baseline_library(openssl_baseline_none
-  CFLAGS -O3 -fno-stack-protector
-)
+# Component Mitigations
+openssl_baseline_library(openssl_baseline_none)
+openssl_baseline_library(openssl_baseline_lfence ${baseline_lfence_args})
+openssl_baseline_library(openssl_baseline_slh ${baseline_slh_args})
+openssl_baseline_library(openssl_baseline_retpoline ${baseline_retpoline_args})
+openssl_baseline_library(openssl_baseline_ssbd ${baseline_ssbd_args})
 
-openssl_baseline_library(openssl_baseline_lfence
-  CFLAGS -mretpoline
-  LDFLAGS -Wl,-z,retpolineplt
-  LLVMFLAGS -x86-speculative-load-hardening -x86-slh-lfence -x86-slh-fence-call-and-ret
-)
+# Composite Mitigations
+openssl_baseline_library(openssl_baseline_lfence+retpoline+ssbd ${baseline_lfence_args} ${baseline_retpoline_args} ${baseline_ssbd_args})
+openssl_baseline_library(openssl_baseline_slh+retpoline+ssbd ${baseline_slh_args} ${baseline_retpoline_args} ${baseline_ssbd_args})
 
-openssl_baseline_library(openssl_baseline_slh
-  CFLAGS -O3 -fno-stack-protector -mretpoline
-  LDFLAGS -Wl,-z,retpolineplt
-  LLVMFLAGS -x86-speculative-load-hardening
-)
 
 openssl_cloucc_library(openssl_cloucc
   PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   # LDFLAGS -Wl,--no-relax
   LLVMFLAGS -clou
-  CLOUFLAGS -clou-log=${CMAKE_CURRENT_BINARY_DIR}/logs
+  # CLOUFLAGS -clou-log=${CMAKE_CURRENT_BINARY_DIR}/logs
+)
+
+openssl_cloucc_library(openssl_cloucc_ncal_xmit
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=ncal_xmit
+)
+
+openssl_cloucc_library(openssl_cloucc_ncas_xmit
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=ncas_xmit
+)
+
+openssl_cloucc_library(openssl_cloucc_ncas_ctrl
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=ncas_ctrl
 )

@@ -9,6 +9,7 @@
 
 #include <llvm/ADT/iterator_range.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/WithColor.h>
 
 namespace clou {
 
@@ -50,13 +51,19 @@ public:
   mutable Graph G;
   std::vector<ST> sts;
   std::vector<Edge> cut_edges;
+  bool fallback = false;
 
   void add_st(const ST& st) {
     sts.push_back(st);
+#if 0
+    if (st.s == st.t)
+      llvm::WithColor::warning() << ": st-pair with identical source/sink: " << *st.s.V << "\n";
+#endif
   }
 
   void add_st(const Node& s, const Node& t) {
-    sts.push_back({.s = s, .t = t});
+    const ST st = {.s = s, .t = t};
+    add_st(st);
   }
  
   template <class IteratorT1, class IteratorT2>

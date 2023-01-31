@@ -128,7 +128,7 @@ namespace util {
       return false;
     } else if (llvm::isa<llvm::Constant, llvm::AllocaInst>(V)) {
       return true;
-    } else if (llvm::isa<llvm::GetElementPtrInst, llvm::CastInst, llvm::BinaryOperator, llvm::SelectInst, llvm::CmpInst>(V)) {
+    } else if (llvm::isa<llvm::GetElementPtrInst, llvm::CastInst, llvm::BinaryOperator, llvm::SelectInst, llvm::CmpInst, llvm::ExtractElementInst, llvm::InsertElementInst>(V)) {
       return llvm::all_of(llvm::cast<llvm::Instruction>(V)->operands(), isConstantAddress);
     } else {
       unhandled_value(*V);

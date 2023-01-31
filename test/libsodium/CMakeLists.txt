@@ -36,69 +36,27 @@ libsodium_baseline_library(libsodium_baseline_lfence+retpoline+ssbd ${baseline_l
 libsodium_baseline_library(libsodium_baseline_slh+retpoline+ssbd ${baseline_slh_args} ${baseline_retpoline_args} ${baseline_ssbd_args})
 
 # ClouCC Mitigation
-libsodium_cloucc_library(libsodium_cloucc_udt
-  # PASS InlinePass MitigatePass Attributes
-  PASS MitigatePass Attributes # InlinePass causes it to time out...
-  LLVMFLAGS -clou=udt
-)
-
-libsodium_cloucc_library(libsodium_cloucc_ncas
-  PASS InlinePass MitigatePass Attributes
-  LLVMFLAGS -clou=oobs
-)
-
-libsodium_cloucc_library(libsodium_cloucc_fps
-  PASS InlinePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -clou=fps,postch
-)
-
-libsodium_cloucc_library(libsodium_cloucc_prech
-  PASS InlinePass Attributes
-  LLVMFLAGS -clou=prech
-)
-
 libsodium_cloucc_library(libsodium_cloucc
   PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou
 )
 
-libsodium_cloucc_library(libsodium_cloucc_dbg
+libsodium_cloucc_library(libsodium_cloucc_ncal_xmit
   PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -clou
-  CFLAGS -g
+  LLVMFLAGS -clou=ncal_xmit
 )
 
-libsodium_benchmark_library(libsodium_cloucc_unsafeaa
+libsodium_cloucc_library(libsodium_cloucc_ncas_xmit
   PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -clou -clou-unsafe-aa
+  LLVMFLAGS -clou=ncal_xmit
 )
 
-libsodium_cloucc_library(libsodium_cloucc_unweighted
+libsodium_cloucc_library(libsodium_cloucc_ncas_ctrl
   PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -clou -clou-weight=0
+  LLVMFLAGS -clou=ncas_ctrl
 )
 
-libsodium_cloucc_library(libsodium_cloucc_check
-  PASS ContractChecker
-  CFLAGS -g -Werror
-)
-
-libsodium_cloucc_library(libsodium_cloucc_nofps
-  PASS InlinePass MitigatePass Attributes
-  LLVMFLAGS -clou=udt,oobs,prech
-)
-  
-libsodium_cloucc_library(libsodium_cloucc_psf
-  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -clou -clou-min-cut-alg=greedy -clou-psf
-)
-
-libsodium_cloucc_library(libsodium_cloucc_psfmem
-  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -clou -clou-min-cut-alg=greedy -clou-psf -clou-restricted-psf=0
-)
- 
-libsodium_cloucc_library(libsodium_cloucc_greedy
-  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -clou -clou-min-cut-alg=greedy
+libsodium_cloucc_library(libsodium_cloucc_fps
+  PASS InlinePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=fps,postch
 )

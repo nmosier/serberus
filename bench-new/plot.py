@@ -99,6 +99,8 @@ for mitigation, l in geomean_in.items():
     data['overhead'].append(y)
     data['mitigation'].append(mitigation_displayname(mitigation))
 
+aspect = 2
+    
 df = pandas.DataFrame(data = data)
 g = seaborn.catplot(
     data = df,
@@ -106,10 +108,11 @@ g = seaborn.catplot(
     x = 'benchmark',
     y = 'overhead',
     hue = 'mitigation',
-    legend = None
+    legend = None,
+    aspect = aspect,
 )
 
-g.set_xticklabels(rotation = 45, horizontalalignment = 'center')
+g.set_xticklabels(rotation = 45, horizontalalignment = 'center', fontsize = 'small')
 plt.tight_layout()
 
 ax = g.facet_axis(0, 0)
@@ -134,7 +137,7 @@ for c in ax.containers:
 
     
 plt.legend(
-    loc = 'upper center',
+#    loc = 'upper center',
 )
 
 if args.out:

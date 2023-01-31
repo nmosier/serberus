@@ -17,11 +17,4 @@ add_library(SpeculativeTaintAnalysis SHARED
   ../include/clou/analysis/SpeculativeTaintAnalysis.h
 )
 register_llvm_pass(SpeculativeTaintAnalysis)
-target_link_libraries(SpeculativeTaintAnalysis PRIVATE util Mitigation)
-
-add_library(StackInitAnalysis SHARED
-  StackInitAnalysis.cc
-  ../include/clou/analysis/StackInitAnalysis.h
-)
-register_llvm_pass(StackInitAnalysis)
-target_link_libraries(StackInitAnalysis PRIVATE util LeakAnalysis SpeculativeTaintAnalysis Frontier)
+target_link_libraries(SpeculativeTaintAnalysis PRIVATE util Mitigation NonspeculativeTaintAnalysis)

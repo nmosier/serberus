@@ -24,6 +24,9 @@ extern "C" {
 # include <Hacl_Poly1305_32.h>
 # include <Hacl_Curve25519_51.h>
 }
+#elif defined(BENCH_OPENSSL)
+# define BENCH_LIB "openssl"
+# include <openssl/sha.h>
 #else
 # error "No library defined"
 #endif

@@ -9,6 +9,7 @@
 #include <vector>
 #include <variant>
 #include <iomanip>
+#include <csignal>
 
 #include <llvm/Analysis/AliasAnalysis.h>
 #include <llvm/Analysis/CallGraph.h>
@@ -27,6 +28,10 @@
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 #include <llvm/Clou/Clou.h>
 #include <llvm/ADT/STLExtras.h>
+#include <llvm/IR/Intrinsics.h>
+#include <llvm/IR/IntrinsicInst.h>
+
+#include <err.h>
 
 #include "clou/MinCutSMT.h"
 #include "clou/MinCutGreedy.h"
@@ -48,6 +53,25 @@ namespace clou {
     llvm::cl::opt<bool> log_times {
       "clou-times",
       llvm::cl::desc("Log execution times of Mitigate Pass"),
+    };
+
+    static void handle_timeout(int sig) {
+      (void) sig;
+      assert(sig == SIGALRM);
+      dprintf(STDERR_FILENO, "COMPILATION TIME EXCEEDED\n");
+      std::exit(EXIT_FAILURE);
+    }
+
+    llvm::cl::opt<unsigned> Timeout {
+      "clou-mitigation-pass-timeout",
+      llvm::cl::Hidden,
+      llvm::cl::init(0),
+      llvm::cl::callback([] (const unsigned& t) {
+	if (t > 0) {
+	  signal(SIGALRM, handle_timeout);
+	  alarm(t);
+	}
+      }),
     };
 
     void print_debugloc(llvm::raw_ostream& os, const llvm::Value *V) {
@@ -74,6 +98,12 @@ namespace clou {
       bool operator<(const Node& o) const { return V < o.V; }
       bool operator==(const Node& o) const { return V == o.V; }
       bool operator!=(const Node& o) const { return V != o.V; }
+    };
+
+    struct NodeHash {
+      auto operator()(const Node& n) const {
+	return llvm::hash_value(n.V);
+      }
     };
 
     llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const Node& node) {
@@ -283,11 +313,12 @@ namespace clou {
 	llvm::raw_os_ostream os_llvm(os_cxx);
 	os_llvm << llvm::json::Value(std::move(j));
       }
-    
+
       bool runOnFunction(llvm::Function &F) override {
+		
 	if (whitelisted(F))
 	  return false;
-	
+
 	clock_t t_start = clock();
 	
 	auto& NST = getAnalysis<NonspeculativeTaint>();
@@ -321,13 +352,56 @@ namespace clou {
 	  AP.reset(new MinCutSMT_BV<Node, int>);
 	  break;
 	case MinCutAlgKind::GREEDY:
-	  AP.reset(new MinCutGreedy<Node, int>);
+	  AP.reset(new MinCutGreedy<Node, int, NodeHash>);
 	  break;
 	default: std::abort();
 	}
 	Alg& A = *AP;
 	Alg::Graph& G = A.G;
+	std::vector<Alg::ST> sts;
 
+	const auto cull_sts = [] (std::vector<Alg::ST>& stvec) {
+	  return;
+	  unsigned culled = 0;
+
+	  std::set<Alg::ST> sts(stvec.begin(), stvec.end());
+	  
+	  std::map<std::pair<llvm::BasicBlock *, llvm::BasicBlock *>, std::set<Alg::ST>> groups;
+	  for (const auto& st : sts)
+	    groups[std::make_pair(st.s.V->getParent(), st.t.V->getParent())].insert(st);
+
+	  // Approach: replace s-t pairs. 
+	  for (const auto& [bbs, set] : groups) {
+	    if (bbs.first != bbs.second) {
+	      for (const Alg::ST& st : set) {
+		sts.erase(st);
+		++culled;
+	      }
+	      const Alg::ST newst = {
+		.s = Node(&bbs.first->back()),
+		.t = Node(&bbs.second->front())
+	      };
+	      sts.insert(newst);
+	      --culled;
+	    }
+	  }
+
+	  // Now find (s1, t1), (s2, t2) such that s2 postdominates s1 and t2 dominates t1.
+	  {
+	    std::set<Node> sources, sinks;
+	    for (const Alg::ST& st : sts) {
+	      sources.insert(st.s);
+	      sinks.insert(st.t); 
+	    }
+	      
+	  }
+	  
+	  llvm::errs() << "culled " << culled << "\n";
+
+	  stvec.clear();
+	  llvm::copy(sts, std::back_inserter(stvec));
+	};
+	
 	/* Stats */
 	llvm::json::Object log;
 
@@ -439,7 +513,7 @@ namespace clou {
 	}
 
 	
-	if (enabled.oobs) {
+	if (enabled.ncas_xmit) {
 
 	  // Create ST-pairs for {oob_sec_stores X spec_pub_loads}
 	  CountStat stat_spec_pub_loads(log, "spec_pub_loads", spec_pub_loads.size());
@@ -453,7 +527,7 @@ namespace clou {
 		    for (const auto& [transmitter, transmit_ops] : transmitters) {
 		      for (auto *op_I : transmit_ops) {
 			if (ST.taints[op_I].contains(&LI)) {
-			  A.add_st({.s = SI, .t = transmitter});
+			  sts.push_back({.s = SI, .t = transmitter});
 			  ++stat_ncas_load;
 			}
 		      }
@@ -463,84 +537,36 @@ namespace clou {
 		  }
 		} else {
 		  // Speculatively Public Constant-Address Store
-		  A.add_st({.s = SI, .t = &LI});
+		  sts.push_back({.s = SI, .t = &LI});
 		  ++stat_ncas_load;	  
 		}
 	      }
 	    }
 	  }
 
+	}
 
-#if 0
-	  for (auto *LI : spec_pub_loads) {
-	    for (auto *SI : oob_sec_stores) {
-	      A.add_st({.s = SI, .t = LI});
-	      ++stat_ncas_load;
-	    }
-	  }
-#endif
 
+	if (enabled.ncas_ctrl) {
+	  
 	  // Create ST-pairs for {oob_sec_stores X ctrls}
 	  for (auto *ctrl : ctrls) {
 	    for (auto *SI : oob_sec_stores) {
-	      A.add_st({.s = SI, .t = ctrl});
+	      sts.push_back({.s = SI, .t = ctrl});
 	      ++stat_ncas_ctrl;
 	    }
 	  }
 
-	  // If we have enabled PSF, create pairs for all {secret_store X public-load-dependent transmitter}.
-	  /* Iterate over all candidate pairs of (store, transmitter).
-	   * Check all intermediate instructions to see if a dependent load is defined there.
-	   */
-	  if (PSF) {
-	    std::set<std::pair<llvm::Instruction *, llvm::Instruction *>> pairs;
-	    for (llvm::Instruction& T : llvm::instructions(F)) {
-	      for (const auto& TOP : get_transmitter_sensitive_operands(&T)) {
-		auto public_loads = get_incoming_loads(TOP.V);
-		std::erase_if(public_loads, [&] (llvm::Value *V) {
-		  bool keep;
-		  if (auto *I = llvm::dyn_cast<llvm::LoadInst>(V))
-		    keep = !(NST.secret(I) || ST.secret(I));
-		  else
-		    keep = false;
-		  return !keep;
-		});
-		if (RestrictedPSF) {
-		  for (llvm::StoreInst& SI : util::instructions<llvm::StoreInst>(F)) {
-		    const auto SIV = SI.getValueOperand();
-		    if (NST.secret(SIV) || ST.secret(SIV)) {
-		      const auto btw = getInstructionsBetween(&SI, &T);
-		      if (llvm::any_of(public_loads, [&btw] (llvm::Value *V) {
-			return btw.contains(llvm::dyn_cast<llvm::Instruction>(V));
-		      })) {
-			pairs.emplace(&SI, &T);
-		      }
-		    }
-		  }
-		} else {
-		  for (llvm::Value *public_load : public_loads)
-		    if (llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(public_load))
-		      pairs.emplace(I, &T);
-		}
-	      }
-	    }
-	    
-	    for (const auto& [src, dst] : pairs)
-	      A.add_st({.s = src, .t = dst});
-	  }
-	
 	}
 
-	if (enabled.udt) {
+	if (enabled.ncal_xmit) {
 
 	  // Create ST-pairs for {source X transmitter}
 	  for (const auto& [transmitter, transmit_ops] : transmitters) {
 	    for (auto *op_I : transmit_ops) {
 	      for (const auto& [source, kind] : ST.taints.at(op_I)) {
 		if (kind == SpeculativeTaint::ORIGIN) {
-		  assert(llvm::isa<llvm::LoadInst>(source));
-		  assert(!util::isConstantAddress(llvm::cast<llvm::LoadInst>(source)));
-		  A.add_st({.s = source, .t = transmitter});
+		  sts.push_back({.s = source, .t = transmitter});
 		  ++stat_st_udts;
 		}
 	      }
@@ -575,8 +601,10 @@ namespace clou {
 
 	// Run algorithm to obtain min-cut
 	const clock_t solve_start = clock();
-	llvm::errs() << "running min-cut alg for " << F.getName() << " with " << F.getInstructionCount() << "\n";
-	llvm::sort(A.sts);
+	cull_sts(sts);
+	llvm::sort(sts);
+	A.sts = std::move(sts);
+	llvm::errs() << F.getName() << "\n";
 	A.run();
 	const clock_t solve_stop = clock();
 	const float solve_duration = (static_cast<float>(solve_stop) - static_cast<float>(solve_start)) / CLOCKS_PER_SEC;
@@ -722,15 +750,22 @@ namespace clou {
 	// Mitigations
 	auto& lfence_srclocs = log["lfence_srclocs"] = llvm::json::Array();
 	for (const auto& [src, dst] : cut_edges) {
-	  CreateMitigation(getMitigationPoint(src.V, dst.V), "clou-mitigate-pass");
-
-	  // Print out mitigation info
-	  if (ClouLog) {
-	    lfence_srclocs.getAsArray()->push_back(llvm::json::Object({
-		  {.K = "src", .V = str_debugloc(src.V)},
-		  {.K = "dst", .V = str_debugloc(dst.V)},
-		}));
+	  if (llvm::Instruction *mitigation_point = getMitigationPoint(src.V, dst.V)) {
+	    CreateMitigation(mitigation_point, "clou-mitigate-pass");
+	    
+	    // Print out mitigation info
+	    if (ClouLog) {
+	      lfence_srclocs.getAsArray()->push_back(llvm::json::Object({
+		    {.K = "src", .V = str_debugloc(src.V)},
+		    {.K = "dst", .V = str_debugloc(dst.V)},
+		  }));
+	    }
 	  }
+	}
+
+	if (A.fallback) {
+	  llvm::IRBuilder<> IRB(&F.front().front());
+	  IRB.CreateIntrinsic(llvm::Intrinsic::trap, {}, {});
 	}
 
 #if 0
@@ -753,7 +788,7 @@ namespace clou {
 
 	staticStats(log, F);
 	saveLog(std::move(log), F);
-	
+
         return true;
       }
 
@@ -763,7 +798,11 @@ namespace clou {
 
       static llvm::Instruction *getMitigationPoint(llvm::Instruction *src, llvm::Instruction *dst) {
 	if (shouldCutEdge(src, dst)) {
-	  assert(src->isTerminator() && dst == &dst->getParent()->front());
+	  assert(src->isTerminator());
+	  for (const llvm::Instruction *I = dst->getPrevNode(); I != nullptr; I = I->getPrevNode())
+	    assert(llvm::isa<MitigationInst>(I));
+	  if (dst != &dst->getParent()->front())
+	    return nullptr;
 	  llvm::BasicBlock *B = llvm::SplitEdge(src->getParent(), dst->getParent());
 	  return &B->front();
 	} else {

@@ -22,6 +22,6 @@ int main(int argc, char *argv[]) {
   }
 
   execvp(argv[1], &argv[1]);
-  perror("execvp");
+  err("excvp: %s", argv[1]);
   return EXIT_FAILURE;
 }
