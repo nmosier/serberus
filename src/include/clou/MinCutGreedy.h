@@ -9,6 +9,7 @@
 #include <set>
 
 #include <llvm/ADT/SmallSet.h>
+#include <llvm/Clou/Clou.h>
 
 #define DEBUG(...) ;
 
@@ -51,8 +52,8 @@ namespace clou {
 	llvm::BitVector maxbv;
 
 	for (const auto& [e, cost] : getEdges()) {
-	  const unsigned paths = reaching_sts[e];
-	  const float w = paths * (1.f / static_cast<float>(cost));
+	  const float paths = static_cast<float>(reaching_sts[e]);
+	  const float w = (STWeight * paths) / static_cast<float>(cost);
 	  if (w > maxw) {
 	    maxw = w;
 	    maxe = e;
@@ -132,49 +133,12 @@ namespace clou {
       return seen;
     }
 
-    static bool existsPathAvoiding(const Node& src, const Node& dst, const Node& avoid, std::map<Node, std::set<Node>>& G) {
-      std::stack<Node> todo;
-      todo.push(src);
-      std::set<Node> seen;
-      while (!todo.empty()) {
-	const Node node = todo.top();
-	todo.pop();
-	if (!seen.insert(node).second)
-	  continue;
-	if (node == avoid)
-	  continue;
-	if (node == dst)
-	  return true;
-	for (const Node& succ : G[node])
-	  todo.push(succ);
-      }
-      return false;
-    }
-
-    static unsigned countBasicBlocks(std::map<Node, std::set<Node>>& G, std::map<Node, std::set<Node>>& Grev) {
-      /* The start of a basic block is a node that has no predecessors or exactly one predecessor,
-       * which must have more than one successor.
-       *
-       */
-      std::set<Node> entries;
-      for (const auto& [dst, srcs] : Grev) {
-	if (srcs.empty()) {
-	  entries.insert(dst);
-	} else if (srcs.size() == 1) {
-	  if (G[*srcs.begin()].size() > 1)
-	    entries.insert(dst);
-	} else {
-	  entries.insert(dst);
-	}
-      }
-
-      return entries.size();
-    }
-
     mutable std::set<ST> disconnected_sts;
+    mutable std::set<Node> disconnected_nodes;
     std::map<Edge, unsigned> computeReaching() {
       std::vector<Node> nodevec;
       llvm::copy(getNodes(), std::back_inserter(nodevec));
+      llvm::erase_if(nodevec, [&] (const Node& u) { return disconnected_nodes.contains(u); });
       const auto n = nodevec.size();
       assert(llvm::is_sorted(nodevec));
       const auto node_to_idx = [&nodevec] (const Node& n) {
@@ -193,6 +157,8 @@ namespace clou {
       };
       std::vector<IdxST> sts;
       for (const ST& st : this->sts) {
+	if (disconnected_sts.contains(st))
+	  continue;
 	IdxST st_;
 	st_.s = node_to_idx(st.s);
 	st_.t = node_to_idx(st.t);
@@ -210,8 +176,12 @@ namespace clou {
 
       std::vector<llvm::SmallSet<unsigned, 4>> G(n), Grev(n);
       for (const auto& [src, dsts] : this->G) {
+	if (disconnected_nodes.contains(src))
+	  continue;
 	const auto src_idx = node_to_idx(src);
 	for (const auto& [dst, _] : dsts) {
+	  if (disconnected_nodes.contains(dst))
+	    continue;
 	  const auto dst_idx = node_to_idx(dst);
 	  G[src_idx].insert(dst_idx);
 	  Grev[dst_idx].insert(src_idx);
@@ -231,7 +201,7 @@ namespace clou {
 	ss.set(st.s);
 	ts.set(st.t);
       }
-
+      
       std::vector<llvm::BitVector> s_reach(n, empty), t_reach(n, empty);
       for (unsigned s : ss.set_bits()) {
 	s_reach.at(s) = bfs(s, s, G, empty);
@@ -240,22 +210,18 @@ namespace clou {
 	t_reach.at(t) = bfs(t, t, Grev, empty);
       }
 
+      llvm::BitVector connected_nodes_bv;
       for ([[maybe_unused]] int i = 0; const auto& st : sts) {
 	DEBUG(llvm::errs() << "\r\t\tsts processed: " << i++ << "/" << sts.size());
-#if 0
-	if (disconnected_sts.contains(st))
-	  continue;
-#endif
 	const auto& fwd = s_reach.at(st.s);
 	const auto& bwd = t_reach.at(st.t);
 	llvm::BitVector both = fwd;
 	both &= bwd;
 	if (both.count() < 2) {
-#if 0
-	  disconnected_sts.insert(st);
-#endif
+	  disconnected_sts.insert({.s = idx_to_node(st.s), .t = idx_to_node(st.t)});
 	  continue;
 	}
+	connected_nodes_bv |= both;
 	for (auto src_idx : both.set_bits()) {
 	  for (auto dst_idx : G[src_idx]) {
 	    if (both.test(dst_idx)) {
@@ -265,6 +231,10 @@ namespace clou {
 	  }
 	}
       }
+
+      llvm::BitVector disconnected_nodes_bv = connected_nodes_bv; disconnected_nodes_bv.flip();
+      for (unsigned disconnected_node_idx : disconnected_nodes_bv.set_bits())
+	disconnected_nodes.insert(idx_to_node(disconnected_node_idx));
 
       DEBUG(llvm::errs() << "\n");
 
