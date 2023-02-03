@@ -41,6 +41,8 @@ namespace clou {
 	    if (auto *CB = llvm::dyn_cast<llvm::CallBase>(I)) {
 	      if (!skip.contains(CB)) {
 		return CB;
+	      } else if (llvm::isa<llvm::IntrinsicInst>(CB)) {
+		// Do nothing
 	      } else {
 		continue;
 	      }
@@ -59,7 +61,7 @@ namespace clou {
 	return nullptr;
       }
 
-      llvm::CallBase *getCallToInline(llvm::Function& F, const CBSet& skip) {
+      llvm::CallBase *getCallToInline(llvm::Function& F, CBSet& skip) {
 	auto& ST = getAnalysis<SpeculativeTaint>();
 	auto& NST = getAnalysis<NonspeculativeTaint>();
 
@@ -71,7 +73,11 @@ namespace clou {
 	    llvm::Value *V = SI->getValueOperand();
 	    if (!util::isSpeculativeInbounds(SI) && (NST.secret(V) || ST.secret(V))) {
 	      if (llvm::CallBase *CB = handleSecretStore(SI, skip)) {
-		return CB;
+		const llvm::Function *callee = util::getCalledFunction(CB);
+		if (callee == &F)
+		  skip.insert(CB);
+		else
+		  return CB;
 	      }
 	    }
 	  }
