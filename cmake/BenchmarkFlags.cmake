@@ -32,6 +32,9 @@ set(cloucc_base_args
   LLVMFLAGS -no-stack-slot-sharing -no-promote-arguments
   CFLAGS -fno-jump-tables
 
+  # Weights
+  LLVMFLAGS -clou-loop-weight=${LLSCT_LOOP_WEIGHT} -clou-dom-weight=${LLSCT_DOM_WEIGHT} -clou-st-weight=${LLSCT_ST_WEIGHT}
+  
   # CET
   # LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:cet> -L$<TARGET_FILE_DIR:cet> -lcet
   # DEPENDS cet

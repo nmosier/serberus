@@ -91,6 +91,8 @@ for benchmark in benchmarks:
 
         geomean_in[mitigation].append(overhead)
 
+scores = {}
+        
 for mitigation, l in geomean_in.items():
     data['benchmark'].append('geomean')
     l1 = [x / 100 + 1 for x in l]
@@ -98,6 +100,12 @@ for mitigation, l in geomean_in.items():
     y = (x - 1) * 100
     data['overhead'].append(y)
     data['mitigation'].append(mitigation_displayname(mitigation))
+    scores[mitigation_displayname(mitigation)] = y
+
+    data['benchmark'].append('arithmean')
+    data['overhead'].append(sum(l) / len(l))
+    data['mitigation'].append(mitigation_displayname(mitigation))
+
 
 aspect = 2
     
@@ -142,3 +150,9 @@ plt.legend(
 
 if args.out:
     plt.savefig(f'{args.out}')
+
+
+# also write file
+with open(args.out + '.txt', 'w') as f:
+    for mitigation, score in scores.items():
+        print(f'{mitigation} {score:.2f}', file = f)

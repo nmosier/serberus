@@ -40,7 +40,7 @@ namespace clou {
     llvm::DominatorTree DT(F);
     llvm::LoopInfo LI(DT);
 
-    std::map<llvm::StoreInst *, std::map<llvm::Instruction *, Kind>> mem, mem_bak;
+    std::map<llvm::StoreInst *, std::set<llvm::Instruction *>> mem, mem_bak;
     TaintMap taints_bak;
     taints.clear();
     do {
@@ -55,7 +55,7 @@ namespace clou {
 	      if (PSF && RestrictedPSF) {
 		NonspeculativeTaint& NST = getAnalysis<NonspeculativeTaint>();
 		if (NST.secret(SI->getValueOperand())) {
-		  taints[LI].emplace(SI, ORIGIN);
+		  taints[LI].insert(SI);
 		  continue;
 		}
 	      }
@@ -64,7 +64,7 @@ namespace clou {
 		taints[LI].insert(origins.begin(), origins.end());
 	    }
 	  } else { // NCA load
-	    taints[LI].emplace(LI, ORIGIN);
+	    taints[LI].insert(LI);
 	  }
 	  continue;
 	}
@@ -148,25 +148,7 @@ namespace clou {
 	  
       }
 
-      for (auto& [I, sources] : taints) {
-	if (!sources.empty() && !sources.contains(I)) {
-	  sources[I] = DERIVED;
-	}
-      }
-      
     } while (taints != taints_bak || mem != mem_bak);
-
-
-    for (llvm::LoadInst& LI : util::instructions<llvm::LoadInst>(F)) {
-      if (!util::isConstantAddress(LI.getPointerOperand())) {
-	for (const auto& [dst, srcs] : taints) {
-	  const auto it = srcs.find(&LI);
-	  if (it != srcs.end()) {
-	    assert(it->second == ORIGIN);
-	  }
-	}
-      }
-    }
 
     return false;
   }

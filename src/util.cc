@@ -7,6 +7,7 @@
 #include <set>
 #include <sstream>
 #include <algorithm>
+#include <stack>
 
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Operator.h>
@@ -56,6 +57,8 @@ namespace util {
       } else if (llvm::BitCastOperator *BCO = llvm::dyn_cast<llvm::BitCastOperator>(V)) {
 	assert(BCO->getNumOperands() == 1);
 	return getCalledFunctionRec(BCO->getOperand(0));
+      } else if (llvm::isa<llvm::Instruction, llvm::Argument, llvm::InlineAsm>(V)) {
+	return nullptr;
       } else {
 	unhandled_value(*V);
       }
@@ -123,7 +126,7 @@ namespace util {
     }
   }
 
-  bool isConstantValue(const llvm::Value *V) {
+  static bool isConstantValue(const llvm::Value *V) {
     if (llvm::isa<llvm::Argument, llvm::PHINode, llvm::CallBase, llvm::LoadInst>(V)) {
       return false;
     } else if (llvm::isa<llvm::Constant, llvm::AllocaInst>(V)) {
@@ -133,6 +136,18 @@ namespace util {
     } else {
       unhandled_value(*V);
     }
+  }
+
+  bool isConstantAddress(const llvm::Value *V) {
+    return isConstantValue(V);
+  }  
+
+  bool isConstantAddressLoad(const llvm::LoadInst *LI) {
+    return isConstantAddress(LI);
+  }
+
+  bool isConstantAddressStore(const llvm::StoreInst *SI) {
+    return isConstantAddress(SI->getPointerOperand());
   }
 }
 
@@ -302,6 +317,31 @@ namespace clou {
 	return classof(C);
       } else {
 	return false;
+      }
+    }
+
+    void getFrontierBwd(llvm::Instruction *root, const std::set<llvm::Value *>& targets, std::set<llvm::Instruction *>& out) {
+      const bool hasArg = llvm::any_of(targets, [] (const llvm::Value *V) { return llvm::isa<llvm::Argument>(V); });
+      std::stack<llvm::Instruction *> todo;
+      std::set<llvm::Instruction *> seen;
+      todo.push(root);
+
+      while (!todo.empty()) {
+	llvm::Instruction *I = todo.top();
+	todo.pop();
+	if (!seen.insert(I).second)
+	  continue;
+	if (I != root && targets.contains(I)) {
+	  out.insert(I);
+	  continue;
+	}
+	const auto preds = llvm::predecessors(I);
+	if (preds.empty() && hasArg) {
+	  out.insert(I);
+	  continue;
+	}
+	for (llvm::Instruction *pred : preds)
+	  todo.push(pred);
       }
     }
 

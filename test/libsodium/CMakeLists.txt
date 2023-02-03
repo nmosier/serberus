@@ -41,6 +41,12 @@ libsodium_cloucc_library(libsodium_cloucc
   LLVMFLAGS -clou
 )
 
+libsodium_cloucc_library(libsodium_cloucc_logs
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  CFLAGS -g
+  LLVMFLAGS -clou -clou-log=${CMAKE_CURRENT_BINARY_DIR}/logs
+)
+
 libsodium_cloucc_library(libsodium_cloucc_ncal_xmit
   PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=ncal_xmit
@@ -56,7 +62,19 @@ libsodium_cloucc_library(libsodium_cloucc_ncas_ctrl
   LLVMFLAGS -clou=ncas_ctrl
 )
 
+libsodium_cloucc_library(libsodium_cloucc_sts
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=ncal_xmit,ncas_xmit,ncas_ctrl
+)
+
+
 libsodium_cloucc_library(libsodium_cloucc_fps
   PASS InlinePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=fps,postch
 )
+
+libsodium_cloucc_library(libsodium_cloucc_ncas
+  PASS InlinePass NCAStorePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou
+)
+

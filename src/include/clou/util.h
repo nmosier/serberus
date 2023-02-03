@@ -438,8 +438,8 @@ namespace clou {
       return s;
     }
 
-    bool isConstantValue(const llvm::Value *V);
-    inline bool isConstantAddress(const llvm::Value *V) { return isConstantValue(V); }
+    bool isConstantAddress(const llvm::Value *V);
+    bool isConstantAddressStore(const llvm::StoreInst *SI);
 
     class ExtCallBase : public llvm::CallBase {
     public:
@@ -447,6 +447,10 @@ namespace clou {
       static bool classof(const llvm::Value *V);
     };
 
+    void getFrontierBwd(llvm::Instruction *I, const std::set<llvm::Value *>& targets, std::set<llvm::Instruction *>& out);
+    
   }
+
+#define assert_implies(p, q) assert(!(p) || (q))
 }
 

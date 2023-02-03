@@ -113,6 +113,7 @@ add_library(FunctionLocalStacks SHARED
 )
 register_llvm_pass(FunctionLocalStacks)
 target_link_libraries(FunctionLocalStacks PRIVATE util)
+target_compile_options(FunctionLocalStacks PRIVATE -Wno-mismatched-new-delete)
 
 add_library(Attributes SHARED
   Attributes.cc
@@ -153,3 +154,16 @@ add_library(Profiler SHARED
 target_include_directories(Profiler PRIVATE ${Libprofiler_INCLUDE_DIRS})
 target_link_directories(Profiler PRIVATE ${Libprofiler_LIBRARY_DIRS})
 target_link_libraries(Profiler PRIVATE ${Libprofiler_LIBRARIES})
+
+
+add_library(FordFulkerson SHARED
+  FordFulkerson.cc
+)
+register_llvm_pass(FordFulkerson)
+  
+add_library(NCAStorePass SHARED
+  NCAStorePass.cc
+)
+register_llvm_pass(NCAStorePass)
+target_link_libraries(NCAStorePass PRIVATE FordFulkerson util Mitigation Transmitter)
+

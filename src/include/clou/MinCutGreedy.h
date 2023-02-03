@@ -53,7 +53,7 @@ namespace clou {
 
 	for (const auto& [e, cost] : getEdges()) {
 	  const float paths = static_cast<float>(reaching_sts[e]);
-	  const float w = (STWeight * paths) / static_cast<float>(cost);
+	  const float w = pow(paths, STWeight) / static_cast<float>(cost);
 	  if (w > maxw) {
 	    maxw = w;
 	    maxe = e;
@@ -136,6 +136,7 @@ namespace clou {
     mutable std::set<ST> disconnected_sts;
     mutable std::set<Node> disconnected_nodes;
     std::map<Edge, unsigned> computeReaching() {
+      disconnected_nodes.clear();
       std::vector<Node> nodevec;
       llvm::copy(getNodes(), std::back_inserter(nodevec));
       llvm::erase_if(nodevec, [&] (const Node& u) { return disconnected_nodes.contains(u); });

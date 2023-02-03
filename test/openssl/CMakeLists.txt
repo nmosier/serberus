@@ -59,3 +59,14 @@ openssl_cloucc_library(openssl_cloucc_ncas_ctrl
   PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=ncas_ctrl
 )
+
+openssl_cloucc_library(openssl_cloucc_sts
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=ncal_xmit,ncas_xmit,ncas_ctrl
+)
+
+openssl_cloucc_library(openssl_cloucc_logs
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou -clou-log=${CMAKE_CURRENT_BINARY_DIR}/logs
+  CFLAGS -g
+)

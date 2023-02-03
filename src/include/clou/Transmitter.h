@@ -85,28 +85,28 @@ namespace clou {
 	  case llvm::Intrinsic::usub_sat:
 	  case llvm::Intrinsic::fmuladd:
 	  case llvm::Intrinsic::fabs:
+	  case llvm::Intrinsic::ctlz:
 	    leaked_args = none;
 	    break;
 	  default:
 	    warn_unhandled_intrinsic(II);
 	  }
 	  
-	  for (unsigned leaked_arg : leaked_args) {
+	  for (unsigned leaked_arg : leaked_args)
 	    *out++ = TransmitterOperand(TransmitterOperand::PSEUDO, II->getArgOperand(leaked_arg));
-	  }
-
 	}
 	
       } else {
 	*out++ = TransmitterOperand(TransmitterOperand::TRUE, C->getCalledOperand());
-	for (llvm::Value *op : C->args()) {
+	for (llvm::Value *op : C->args())
 	  *out++ = TransmitterOperand(TransmitterOperand::PSEUDO, op);
-	}	
       }
     } else if (llvm::ReturnInst *RI = llvm::dyn_cast<llvm::ReturnInst>(I)) {
-      if (llvm::Value *RV = RI->getReturnValue()) {
+      if (llvm::Value *RV = RI->getReturnValue())
 	*out++ = TransmitterOperand(TransmitterOperand::PSEUDO, RV);
-      }
+    } else if (llvm::ResumeInst *RI = llvm::dyn_cast<llvm::ResumeInst>(I)) {
+      if (llvm::Value *RV = RI->getValue())
+	*out++ = TransmitterOperand(TransmitterOperand::PSEUDO, RV);
     } else if (auto *BO = llvm::dyn_cast<llvm::BinaryOperator>(I)) {
       switch (BO->getOpcode()) {
       case llvm::BinaryOperator::BinaryOps::UDiv:
@@ -118,7 +118,8 @@ namespace clou {
       }
     } else if (llvm::isa<llvm::CmpInst, llvm::CastInst, llvm::PHINode, llvm::AllocaInst,
 	       llvm::GetElementPtrInst, llvm::ShuffleVectorInst, llvm::InsertElementInst, llvm::SelectInst,
-	       llvm::ExtractElementInst, llvm::ExtractValueInst, llvm::FreezeInst, llvm::UnaryOperator>(I)) {
+	       llvm::ExtractElementInst, llvm::ExtractValueInst, llvm::FreezeInst, llvm::UnaryOperator,
+	       llvm::LandingPadInst>(I)) {
       // no leaked operands
     } else {
       unhandled_instruction(*I);

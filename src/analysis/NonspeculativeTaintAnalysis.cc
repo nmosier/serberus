@@ -62,11 +62,14 @@ namespace clou {
     // Add public non-instruction operands (arguments are handled later for simplicity)
     for (llvm::Instruction& I : llvm::instructions(F)) {
       for (llvm::Value *op_V : I.operands()) {
-	if (llvm::isa<llvm::Argument, llvm::BasicBlock, llvm::InlineAsm, llvm::Constant>(op_V)) {
+	if (llvm::isa<llvm::Argument, llvm::BasicBlock, llvm::InlineAsm, llvm::Constant, llvm::LandingPadInst>(op_V)) {
 	  pub_vals.insert(op_V);
 	}
       }
     }
+
+    for (auto& A : F.args())
+      pub_vals.insert(&A);
 
     VSet pub_vals_bak;
     do {
@@ -183,9 +186,11 @@ namespace clou {
 	  if (pub_vals.contains(&I)) {
 	    addAllOperands(&I);
 	  }
-	} else if (llvm::isa<llvm::CallBase, llvm::LoadInst, llvm::AllocaInst, llvm::AtomicRMWInst, llvm::AtomicCmpXchgInst>(&I)) {
+	} else if (llvm::isa<llvm::CallBase, llvm::LoadInst, llvm::AllocaInst, llvm::AtomicRMWInst, llvm::AtomicCmpXchgInst,
+		   llvm::LandingPadInst>(&I)) {
 	  // ignore: already handled
-	} else if (llvm::isa<llvm::InsertElementInst, llvm::ShuffleVectorInst, llvm::ExtractElementInst, llvm::ExtractValueInst>(&I)) {
+	} else if (llvm::isa<llvm::InsertElementInst, llvm::ShuffleVectorInst, llvm::ExtractElementInst,
+		   llvm::ExtractValueInst>(&I)) {
 	  // ignore: make more precise later
 	} else {
 	  unhandled_instruction(I);

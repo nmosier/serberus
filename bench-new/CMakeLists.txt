@@ -2,6 +2,12 @@ include(BenchmarkFlags)
 
 add_link_options(-fPIE -fPIC -pthread)
 
+set(metrics time mem cache stall inst serial perf mitigation)
+
+foreach(metric IN LISTS metrics)
+  add_custom_target(${metric}_compile)
+endforeach()
+
 function(add_benchmark_shared lib name mode arg metric libsuffix)
   string(TOUPPER ${lib} LIB)
   string(TOUPPER ${metric} METRIC)
@@ -24,6 +30,8 @@ function(add_benchmark_shared lib name mode arg metric libsuffix)
   )
   get_directory_property(jsons ${metric}_jsons)
   set_property(DIRECTORY PROPERTY ${metric}_jsons ${jsons} ${json})
+
+  add_dependencies(${metric}_compile ${exe})
 endfunction()
 
 function(add_mem_benchmark)
@@ -64,7 +72,11 @@ function(add_mitigation_benchmark)
 endfunction()
 
 function(add_benchmarks lib name arg)
-  set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc cloucc_ncal_xmit cloucc_ncas_xmit cloucc_ncas_ctrl)
+  # set(modes baseline_none cloucc)
+  set(modes baseline_none cloucc_sts cloucc_ncal_xmit cloucc_ncas_xmit cloucc_ncas_ctrl)
+  # set(modes baseline_none baseline_slh+retpoline+ssbd cloucc)
+  # set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc cloucc_ncal_xmit cloucc_ncas_xmit cloucc_ncas_ctrl)
+  # set(modes baseline_none baseline_slh+retpoline+ssbd cloucc_ncas)
   foreach(mode IN LISTS modes)
     add_time_benchmark(${lib} ${name} ${mode} ${arg})
     add_mem_benchmark(${lib} ${name} ${mode} ${arg})
@@ -78,8 +90,6 @@ function(add_benchmarks lib name arg)
 endfunction()
 
 
-# add_time_benchmark(libsodium salsa20 baseline_none 6# 4)
-# add_mem_benchmark(libsodium salsa20 baseline_none 64)
 add_benchmarks(libsodium salsa20    64)
 add_benchmarks(libsodium sha256     64)
 add_benchmarks(libsodium sha256     8192)
@@ -106,14 +116,14 @@ endfunction()
 add_breakdowns(breakdown.cc libsodium_sha256.cc)
 
 # Generate timing plot
-foreach(metric IN ITEMS time mem cache stall inst serial perf mitigation)
+foreach(metric IN LISTS metrics)
   get_directory_property(metric_jsons ${metric}_jsons)
   get_directory_property(bench_clean bench_clean)
   set_property(DIRECTORY PROPERTY bench_clean ${bench_clean} ${metric_jsons} ${metric}.pdf)
   
   add_custom_target(${metric}_jsons DEPENDS ${metric_jsons})
   
-  add_custom_command(OUTPUT ${metric}.pdf
+  add_custom_command(OUTPUT ${metric}.pdf ${metric}.pdf.txt
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/plot.py ${metric_jsons} -o ${metric}.pdf
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/plot.py ${metric_jsons} ${Python3_EXECUTABLE}
   )

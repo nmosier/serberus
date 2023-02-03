@@ -92,9 +92,10 @@ namespace clou {
     }
 
     struct Node {
-      llvm::Instruction *V;
+      llvm::Value *V;
       Node() {}
       Node(llvm::Instruction *V): V(V) {}
+      Node(llvm::BasicBlock *V): V(V) {} 
       bool operator<(const Node& o) const { return V < o.V; }
       bool operator==(const Node& o) const { return V == o.V; }
       bool operator!=(const Node& o) const { return V != o.V; }
@@ -115,19 +116,10 @@ namespace clou {
       return os_;
     }
 
-    static void checkCut(const auto& sts, const auto& edges, llvm::Function& F) {
-      
-    }
-
     struct MitigatePass final : public llvm::FunctionPass {
       static inline char ID = 0;
     
       MitigatePass() : llvm::FunctionPass(ID) {}
-
-#if 0
-      using Alg = MinCutSMT_BV<Node, int>;
-      using Alg = MinCutGreedy<Node, float>;
-#endif
 
       void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
 	AU.addRequired<NonspeculativeTaint>();
@@ -186,12 +178,14 @@ namespace clou {
 	}	
       }
 
-      static unsigned compute_edge_weight(llvm::Instruction *I, const llvm::DominatorTree& DT, const llvm::LoopInfo& LI) {
+      static unsigned compute_edge_weight(llvm::Instruction *src, llvm::Instruction *dst, const llvm::DominatorTree& DT, const llvm::LoopInfo& LI) {
 	if (WeightGraph) {
 	  float score = 1.;
-	  score *= instruction_loop_nest_depth(I, LI) + 1;
-	  score *= 1. / (instruction_dominator_depth(I, DT) + 1);
-	  return score * 100;
+	  const unsigned LoopDepth = std::min(instruction_loop_nest_depth(src, LI), instruction_loop_nest_depth(dst, LI));
+	  const unsigned DomDepth = std::max(instruction_dominator_depth(src, DT), instruction_dominator_depth(dst, DT));
+	  score *= pow(LoopDepth + 1, LoopWeight);
+	  score *= 1. / pow(DomDepth + 1, DominatorWeight);
+	  return score * 1000;
 	} else {
 	  return 1;
 	}
@@ -211,22 +205,95 @@ namespace clou {
 	return out;
       }
 
-      template <class OutputIt>
-      static OutputIt getSecretStores(llvm::Function& F, NonspeculativeTaint& NST, SpeculativeTaint& ST, OutputIt out) {
-	for (auto& B : F) {
-	  for (auto& I : B) {
-	    if (auto *SI = llvm::dyn_cast<llvm::StoreInst>(&I)) {
-	      if (!util::isSpeculativeInbounds(SI)) {
-		llvm::Value *V = SI->getValueOperand();
-		if (NST.secret(V) || ST.secret(V)) {
-		  *out++ = SI;
+      static void getNonConstantAddressSecretStores(llvm::Function& F, NonspeculativeTaint& NST, SpeculativeTaint& ST,
+						    std::set<llvm::StoreInst *>& nca_nt_sec_stores, std::set<llvm::StoreInst *>& nca_t_sec_stores,
+						    std::set<llvm::StoreInst *>& nca_pub_stores) {
+	for (llvm::Instruction& I : llvm::instructions(F)) {
+	  if (auto *SI = llvm::dyn_cast<llvm::StoreInst>(&I)) {
+	    if (!util::isConstantAddressStore(SI)) {
+	      if (llvm::Instruction *V = llvm::dyn_cast<llvm::Instruction>(SI->getValueOperand())) {
+		bool nt_sec = false;
+		bool t_sec = false;
+		for (auto *op_V : get_incoming_loads(V)) {
+		  if (auto *op_I = llvm::dyn_cast<llvm::Instruction>(op_V))
+		    if (auto *op_LI = llvm::dyn_cast<llvm::LoadInst>(op_I))
+		      if (op_LI->getPointerOperand() == SI->getPointerOperand())
+			continue;
+		  if (NST.secret(op_V)) {
+		    nt_sec = true;
+		    break;
+		  }
+		  if (ST.secret(op_V))
+		    t_sec = true;
 		}
+
+		if (nt_sec && !NST.secret(V)) {
+		  llvm::WithColor::warning() << "mismatch in nt-secret labels\n";
+		  continue;
+		}
+		if (t_sec && !ST.secret(V)) {
+		  llvm::WithColor::warning() << "mismatch in t-secret labels\n";
+		  continue;
+		}
+
+		if (nt_sec)
+		  nca_nt_sec_stores.insert(SI);
+		else if (t_sec)
+		  nca_t_sec_stores.insert(SI);
+		else
+		  nca_pub_stores.insert(SI);
 	      }
 	    }
 	  }
 	}
-	return out;
       }
+
+#if 0
+      static std::set<llvm::Instruction *> getSourcesForNCAAccess(llvm::Instruction *I,
+								 const std::set<llvm::StoreInst *>& nca_pub_stores) {
+	std::set<llvm::Value *> all_sources;
+	std::set<llvm::Instruction *> sources;
+	auto *PointerOp = util::getPointerOperand(I);
+	all_sources = get_incoming_loads(PointerOp);
+	all_sources.insert(nca_pub_stores.begin(), nca_pub_stores.end());
+	util::getFrontierBwd(I, all_sources, sources);
+	return sources;
+      }
+#else
+      static std::set<llvm::Instruction *> getSourcesForNCAAccess(llvm::Instruction *I,
+								  [[maybe_unused]] const std::set<llvm::StoreInst *>& nca_pub_stores) {
+	// compute reach set
+	std::set<llvm::Instruction *> reach;
+	{
+	  std::stack<llvm::Instruction *> todo;
+	  todo.push(I);
+	  while (!todo.empty()) {
+	    auto *I = todo.top();
+	    todo.pop();
+	    if (!reach.insert(I).second)
+	      continue;
+	    for (auto *pred : llvm::predecessors(I))
+	      todo.push(pred);
+	  }
+	}
+
+	// compute candidate sourecs
+	std::set<llvm::Value *> candidate_sources = get_incoming_loads(util::getPointerOperand(I));
+	for (auto *T : reach) {
+	  if (T->isTerminator()) {
+	    const bool unreachable_succ = llvm::any_of(llvm::successors_inst(T), [&reach] (auto *succ) {
+	      return !reach.contains(succ);
+	    });
+	    if (unreachable_succ)
+	      candidate_sources.insert(T);
+	  }
+	}
+
+	std::set<llvm::Instruction *> actual_sources;
+	util::getFrontierBwd(I, candidate_sources, actual_sources);
+	return actual_sources;
+      }
+#endif
 
       template <class OutputIt>
       static OutputIt getCtrls(llvm::Function& F, OutputIt out) {
@@ -334,8 +401,9 @@ namespace clou {
 	getPublicLoads(F, std::inserter(spec_pub_loads, spec_pub_loads.end()));
 	
 	// Set of secret, speculatively out-of-bounds stores (speculative or nonspeculative)
-	std::set<llvm::StoreInst *> oob_sec_stores;
-	getSecretStores(F, NST, ST, std::inserter(oob_sec_stores, oob_sec_stores.end()));
+	std::set<llvm::StoreInst *> nca_nt_sec_stores, nca_t_sec_stores, nca_pub_stores;
+	getNonConstantAddressSecretStores(F, NST, ST, nca_nt_sec_stores, nca_t_sec_stores,
+					  nca_pub_stores);
 
 	// Set of control-transfer instructions that require all previous OOB stores to have resolved
 	ISet ctrls;
@@ -360,6 +428,7 @@ namespace clou {
 	Alg::Graph& G = A.G;
 	std::vector<Alg::ST> sts;
 
+#if 0
 	const auto cull_sts = [] (std::vector<Alg::ST>& stvec) {
 	  return;
 	  unsigned culled = 0;
@@ -401,6 +470,7 @@ namespace clou {
 	  stvec.clear();
 	  llvm::copy(sts, std::back_inserter(stvec));
 	};
+#endif
 	
 	/* Stats */
 	llvm::json::Object log;
@@ -518,29 +588,51 @@ namespace clou {
 	  // Create ST-pairs for {oob_sec_stores X spec_pub_loads}
 	  CountStat stat_spec_pub_loads(log, "spec_pub_loads", spec_pub_loads.size());
 
-	  for (auto *SI : oob_sec_stores) {
-	    for (auto& LI : util::instructions<llvm::LoadInst>(F)) {
-	      if (LA.mayLeak(&LI)) {
-		if (ST.secret(&LI)) {
-		  if (util::isConstantAddress(LI.getPointerOperand())) {
-		    // Add pair from this load to all subsequent
-		    for (const auto& [transmitter, transmit_ops] : transmitters) {
-		      for (auto *op_I : transmit_ops) {
-			if (ST.taints[op_I].contains(&LI)) {
-			  sts.push_back({.s = SI, .t = transmitter});
-			  ++stat_ncas_load;
-			}
-		      }
-		    }
-		  } else {
-		    // we're already mitigating this as UDT
-		  }
-		} else {
-		  // Speculatively Public Constant-Address Store
-		  sts.push_back({.s = SI, .t = &LI});
-		  ++stat_ncas_load;	  
-		}
-	      }
+	  for (auto *SI : llvm::concat<llvm::StoreInst * const>(nca_nt_sec_stores, nca_t_sec_stores)) {
+#if 0
+	    // Compute source(s)
+	    std::set<llvm::Instruction *> sources;
+	    {
+	      // initial sources: deps + nca pub stores
+	      std::set<llvm::Value *> all_sources = get_incoming_loads(SI->getPointerOperand());
+	      llvm::copy(nca_pub_stores, std::inserter(sources, sources.end()));
+	      util::getFrontierBwd(SI, all_sources, sources);
+	    }
+#elif 0
+	    const auto sources = getSourcesForNCAAccess(SI, nca_pub_stores);
+#endif
+	    
+	    // Find instructions that the store may reach.
+	    std::stack<llvm::Instruction *> todo;
+	    todo.push(SI);
+	    std::set<llvm::Instruction *> seen;
+	    while (!todo.empty()) {
+	      llvm::Instruction *I = todo.top();
+	      todo.pop();
+	      if (!seen.insert(I).second)
+		continue;
+	      for (llvm::Instruction *succ : llvm::successors_inst(I))
+		todo.push(succ);
+	    }
+
+	    for (llvm::Instruction *T : seen) {
+	      const auto sensitive_operands = get_transmitter_sensitive_operands(T);
+	      const bool vulnerable = llvm::any_of(sensitive_operands, [&] (const TransmitterOperand& TO) -> bool {
+		const auto loads = get_incoming_loads(TO.V);
+		return llvm::any_of(loads, [&] (auto *V) {
+		  if (llvm::LoadInst *LI = llvm::dyn_cast<llvm::LoadInst>(V))
+		    return seen.contains(LI);
+		  else
+		    return false;
+		});
+	      });
+	      if (vulnerable)
+#if 0
+		for (llvm::Instruction *source : sources)
+		  sts.push_back({.s = source, .t = T});
+#else
+	      sts.push_back({.s = SI, .t = T});
+#endif
 	    }
 	  }
 
@@ -551,9 +643,14 @@ namespace clou {
 	  
 	  // Create ST-pairs for {oob_sec_stores X ctrls}
 	  for (auto *ctrl : ctrls) {
-	    for (auto *SI : oob_sec_stores) {
+	    for (auto *SI : llvm::concat<llvm::StoreInst * const>(nca_nt_sec_stores, nca_t_sec_stores)) {
+#if 1
 	      sts.push_back({.s = SI, .t = ctrl});
 	      ++stat_ncas_ctrl;
+#else
+	      for (auto *source : getSourcesForNCAAccess(SI, nca_pub_stores))
+		sts.push_back({.s = source, .t = ctrl});
+#endif
 	    }
 	  }
 
@@ -564,11 +661,16 @@ namespace clou {
 	  // Create ST-pairs for {source X transmitter}
 	  for (const auto& [transmitter, transmit_ops] : transmitters) {
 	    for (auto *op_I : transmit_ops) {
-	      for (const auto& [source, kind] : ST.taints.at(op_I)) {
-		if (kind == SpeculativeTaint::ORIGIN) {
+	      for (auto *source : ST.taints.at(op_I)) {
+#if 1
+		sts.push_back({.s = source, .t = transmitter});
+		++stat_st_udts;
+#else
+		auto *LI = llvm::cast<llvm::LoadInst>(source);
+		for (auto *source : getSourcesForNCAAccess(LI, nca_pub_stores)) {
 		  sts.push_back({.s = source, .t = transmitter});
-		  ++stat_st_udts;
 		}
+#endif
 	      }
 	    }
 	  }
@@ -576,13 +678,39 @@ namespace clou {
 	}
 
 	// Add CFG to graph
+#if 1	
 	for (auto& B : F) {
 	  for (auto& dst : B) {
 	    for (auto *src : llvm::predecessors(&dst)) {
-	      G[src][&dst] = compute_edge_weight(&dst, DT, LI);
+	      G[src][&dst] = compute_edge_weight(src, &dst, DT, LI);
 	    }
 	  }
 	}
+#else
+	for (llvm::BasicBlock& B : F) {
+	  for (llvm::Instruction *I_src : llvm::predecessors(&B.front()))
+	    G[I_src][&B] = compute_edge_weight(I_src, &B.front(), DT, LI);
+	  G[&B][&B.front()] = compute_edge_weight(&B.front(), &B.front(), DT, LI);
+	  for (auto it_src = B.begin(), it_dst = std::next(it_src); it_dst != B.end(); ++it_src, ++it_dst)
+	    G[&*it_src][&*it_dst] = compute_edge_weight(&*it_src, &*it_dst, DT, LI);
+	}
+#endif
+
+#if 0
+	// EXPERIMENTAL OPTIMIZATION
+	// Remove nodes that aren't s/t.
+	// TODO: Maybe move this to MinCutBase.h?
+	{
+	  std::set<Node> keep;
+	  for (const auto& st : sts) {
+	    keep.insert(st.s);
+	    keep.insert(st.t);
+	  }
+	  for (auto& I : llvm::instructions(F))
+	    if (!keep.contains(&I))
+	      A.elideNode(Node(&I));
+	}
+#endif
 
 
 #if 0
@@ -601,10 +729,13 @@ namespace clou {
 
 	// Run algorithm to obtain min-cut
 	const clock_t solve_start = clock();
+#if 0
 	cull_sts(sts);
+#endif
 	llvm::sort(sts);
 	A.sts = std::move(sts);
 	llvm::errs() << F.getName() << "\n";
+	auto G_ = G;
 	A.run();
 	const clock_t solve_stop = clock();
 	const float solve_duration = (static_cast<float>(solve_stop) - static_cast<float>(solve_start)) / CLOCKS_PER_SEC;
@@ -622,19 +753,38 @@ namespace clou {
 	      llvm::Instruction *I = todo.front();
 	      todo.pop();
 	      if (seen.insert(I).second) {
+		if (&I->getParent()->front() == I && cutset.contains({.src = I->getParent(), .dst = I}))
+		  continue;
 		for (llvm::Instruction *succ : llvm::successors_inst(I)) {
-		  if (!cutset.contains({.src = I, .dst = succ})) {
-		    if (succ == st.t) {
+		  if (cutset.contains({.src = I, .dst = succ}))
+		    continue;
+		  if (&succ->getParent()->front() == succ && cutset.contains({.src = I, .dst = succ->getParent()}))
+		    continue;
+		  if (&succ->getParent()->front() == succ && cutset.contains({.src = succ->getParent(), .dst = succ}))
+		    continue;
+		  if (succ == st.t) {
 		      llvm::WithColor::error() << " source-sink path found!\n";
 		      llvm::errs() << F << "\n";
 		      llvm::errs() << "source: " << *st.s.V << "\n";
 		      llvm::errs() << "sink:   " << *st.t.V << "\n";
-		      for (const auto& e : cut_edges)
-			llvm::errs() << "cut edge: " << e.src.V << " -----> " << e.dst.V << "\n";
+		      const auto print_node = [] (const Node& u) {
+			if (auto *I = llvm::dyn_cast<llvm::Instruction>(u.V))
+			  llvm::errs() << *I;
+			else if (llvm::BasicBlock *B = llvm::dyn_cast<llvm::BasicBlock>(u.V))
+			  llvm::errs() << B->getName();
+			else
+			  llvm_unreachable("impossible");
+		      };
+		      for (const auto& e : cut_edges) {
+			llvm::errs() << "cut edge: ";
+			print_node(e.src);
+			llvm::errs() << "   ------>   ";
+			print_node(e.dst);
+			llvm::errs() << "\n";
+		      }
 		      std::exit(EXIT_FAILURE);
-		    }
-		    todo.push(succ);
 		  }
+		  todo.push(succ);
 		}
 	      }
 	    }
@@ -678,7 +828,7 @@ namespace clou {
 	    }
 	  
             
-	    for (const auto& [u, usucc] : G) {
+	    for (const auto& [u, usucc] : G_) {
 	      for (const auto& [v, weight] : usucc) {
 		if (weight > 0) {
 		  f << "node" << nodes.at(u) << " -> " << "node" << nodes.at(v) << " [label=\"" << weight << "\", penwidth=3";
@@ -708,6 +858,7 @@ namespace clou {
 	    log["distinct_sources"] = sources.size();
 	    log["distinct_sinks"] = sinks.size();
 
+#if 0
 	    /* Potential optimization:
 	     * Try to reduce to product whereever possible.
 	     */
@@ -717,6 +868,7 @@ namespace clou {
 	      log["source_groups"] = gsources.size();
 	      log["sink_groups"] = gsinks.size();
 	    }
+#endif
 
 	    auto& j_sts = log["st_pairs"] = llvm::json::Array();
 	    for (const auto& st : A.sts) {
@@ -724,6 +876,8 @@ namespace clou {
 	      llvm::raw_string_ostream source_os(source), sink_os(sink);
 	      print_debugloc(source_os, st.s.V);
 	      print_debugloc(sink_os, st.t.V);
+	      source_os << "   (" << *st.s.V << ")";
+	      sink_os   << "   (" << *st.t.V << ")";
 	      j_sts.getAsArray()->push_back(llvm::json::Object({
 		    {.K = "source", .V = source},
 		    {.K = "sink", .V = sink},
@@ -737,20 +891,31 @@ namespace clou {
 	      llvm::raw_string_ostream src_os(src), dst_os(dst);
 	      print_debugloc(src_os, cut.src.V);
 	      print_debugloc(dst_os, cut.dst.V);
+	      src_os << "   (" << *cut.src.V << ")";
+	      dst_os << "   (" << *cut.dst.V << ")";
 	      j_cuts.getAsArray()->push_back(llvm::json::Object({
 		    {.K = "src", .V = src},
 		    {.K = "dst", .V = dst},
 		  }));
 	    }
 
-	    log["lfences"] = cut_edges.size(); 
+	    
+	    log["lfences"] = cut_edges.size();
+
+	    auto& j_ncas_nt_sec = log["ncas_nt_sec"] = llvm::json::Array();
+	    for (auto *SI : nca_nt_sec_stores)
+	      j_ncas_nt_sec.getAsArray()->push_back(util::make_string_llvm(*SI));
+
+	    auto& j_ncas_t_sec = log["ncas_t_sec"] = llvm::json::Array();
+	    for (auto * SI : nca_t_sec_stores)
+	      j_ncas_t_sec.getAsArray()->push_back(util::make_string_llvm(*SI));
 	  }
 	}
 
 	// Mitigations
 	auto& lfence_srclocs = log["lfence_srclocs"] = llvm::json::Array();
 	for (const auto& [src, dst] : cut_edges) {
-	  if (llvm::Instruction *mitigation_point = getMitigationPoint(src.V, dst.V)) {
+	  if (llvm::Instruction *mitigation_point = getMitigationPoint(llvm::cast<llvm::Instruction>(src.V), llvm::cast<llvm::Instruction>(dst.V))) {
 	    CreateMitigation(mitigation_point, "clou-mitigate-pass");
 	    
 	    // Print out mitigation info
@@ -762,6 +927,15 @@ namespace clou {
 	    }
 	  }
 	}
+
+	if (ClouLog) {
+	  std::stringstream path;
+	  path << ClouLogDir << "/" << F.getName().str() << ".ll";
+	  std::ofstream f(path.str());
+	  llvm::raw_os_ostream os(f);
+	  F.print(os);
+	}
+
 
 	if (A.fallback) {
 	  llvm::IRBuilder<> IRB(&F.front().front());
@@ -792,8 +966,10 @@ namespace clou {
         return true;
       }
 
+#if 1
       static bool shouldCutEdge(llvm::Instruction *src, llvm::Instruction *dst) {
-	return llvm::predecessors(dst).size() > 1 || llvm::successors_inst(src).size() > 1;
+	// return llvm::predecessors(dst).size() > 1 || llvm::successors_inst(src).size() > 1;
+	return llvm::predecessors(dst).size() > 1;
       }
 
       static llvm::Instruction *getMitigationPoint(llvm::Instruction *src, llvm::Instruction *dst) {
@@ -809,6 +985,26 @@ namespace clou {
 	  return dst;
 	}
       }
+#else
+      static llvm::Instruction *getMitigationPoint(llvm::Value *src, llvm::Value *dst) {
+	if (auto *dst_B = llvm::dyn_cast<llvm::BasicBlock>(dst)) {
+	  // Check if we should cut the edge.
+	  if (llvm::pred_size(dst_B) > 1) {
+	    // Split theedge.
+	    auto *src_I = llvm::cast<llvm::Instruction>(src);
+	    llvm::BasicBlock *B = llvm::SplitEdge(src_I->getParent(), dst_B);
+	    return &B->front();
+	  } else {
+	    // We can just insert at the front of the existing block.
+	    return &dst_B->front();
+	  }
+	} else if (auto *I = llvm::dyn_cast<llvm::Instruction>(dst)) {
+	  return I;
+	} else {
+	  llvm_unreachable("this is impossible");
+	}
+      }
+#endif
 
       template <class STs>
       static void collapseOptimization(const STs& sts, VSetSet& src_out, VSetSet& sink_out) {

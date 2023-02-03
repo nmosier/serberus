@@ -40,7 +40,17 @@ hacl_benchmark_library(hacl_cloucc_ncas_ctrl ${cloucc_base_args}
   LLVMFLAGS -clou=ncas_ctrl
 )
 
+hacl_benchmark_library(hacl_cloucc_sts ${cloucc_base_args}
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=ncal_xmit,ncas_xmit,ncas_ctrl
+)
+
 hacl_benchmark_library(hacl_cloucc_fps ${cloucc_base_args}
   PASS InlinePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=fps,postch
+)
+
+hacl_benchmark_library(hacl_cloucc_ncas ${cloucc_base_args}
+  PASS InlinePass NCAStorePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou
 )
