@@ -49,8 +49,3 @@ hacl_benchmark_library(hacl_cloucc_fps ${cloucc_base_args}
   PASS InlinePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=fps,postch
 )
-
-hacl_benchmark_library(hacl_cloucc_ncas ${cloucc_base_args}
-  PASS InlinePass NCAStorePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -clou
-)

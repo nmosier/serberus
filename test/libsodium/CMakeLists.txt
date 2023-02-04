@@ -72,9 +72,3 @@ libsodium_cloucc_library(libsodium_cloucc_fps
   PASS InlinePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=fps,postch
 )
-
-libsodium_cloucc_library(libsodium_cloucc_ncas
-  PASS InlinePass NCAStorePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -clou
-)
-

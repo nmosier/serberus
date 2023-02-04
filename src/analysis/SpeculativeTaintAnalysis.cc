@@ -10,6 +10,7 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/IntrinsicsX86.h>
 #include <llvm/Clou/Clou.h>
+#include <llvm/ADT/SparseBitVector.h>
 
 #include "clou/util.h"
 #include "clou/Mitigation.h"
@@ -40,39 +41,49 @@ namespace clou {
     llvm::DominatorTree DT(F);
     llvm::LoopInfo LI(DT);
 
-    std::map<llvm::StoreInst *, std::set<llvm::Instruction *>> mem, mem_bak;
-    TaintMap taints_bak;
-    taints.clear();
+    std::vector<llvm::LoadInst *> ncals;
+    for (llvm::LoadInst& LI : util::instructions<llvm::LoadInst>(F))
+      if (!util::isConstantAddress(LI.getPointerOperand()))
+	ncals.push_back(&LI);
+    llvm::sort(ncals);
+    using Idx = unsigned;
+    const auto ncal_to_idx = [&ncals] (llvm::LoadInst *LI) -> Idx {
+      const auto it = llvm::lower_bound(ncals, LI);
+      assert(it != ncals.end() && *it == LI);
+      return it - ncals.begin();
+    };
+    const auto idx_to_ncal = [&ncals] (Idx idx) -> llvm::LoadInst * {
+      assert(idx < ncals.size());
+      return ncals[idx];
+    };
+    
+    std::map<llvm::StoreInst *, std::set<llvm::LoadInst *>> rfs; // only to CALs though
+    for (llvm::StoreInst& SI : util::instructions<llvm::StoreInst>(F)) {
+      auto& loads = rfs[&SI];
+      for (llvm::LoadInst& LI : util::instructions<llvm::LoadInst>(F))
+	if (util::isConstantAddress(LI.getPointerOperand()) &&
+	    !isDefinitelyNoAlias(AA.alias(SI.getPointerOperand(), LI.getPointerOperand())))
+	  loads.insert(&LI);
+    }
+
+    std::map<llvm::Instruction *, llvm::SparseBitVector<>> taints, taints_bak;
     do {
       taints_bak = taints;
-      mem_bak = mem;
-
+      
       for (llvm::Instruction& I : llvm::instructions(F)) {
-	  
+	
 	if (llvm::LoadInst *LI = llvm::dyn_cast<llvm::LoadInst>(&I)) {
-	  if (util::isConstantAddress(LI->getPointerOperand()) && (!PSF || RestrictedPSF)) {
-	    for (const auto& [SI, origins] : mem) {
-	      if (PSF && RestrictedPSF) {
-		NonspeculativeTaint& NST = getAnalysis<NonspeculativeTaint>();
-		if (NST.secret(SI->getValueOperand())) {
-		  taints[LI].insert(SI);
-		  continue;
-		}
-	      }
-	      if ((PSF && RestrictedPSF) ||
-		  !isDefinitelyNoAlias(AA.alias(SI->getPointerOperand(), LI->getPointerOperand())))
-		taints[LI].insert(origins.begin(), origins.end());
-	    }
-	  } else { // NCA load
-	    taints[LI].insert(LI);
-	  }
+	  if (!util::isConstantAddress(LI->getPointerOperand()))
+	    taints[LI].set(ncal_to_idx(LI));
 	  continue;
 	}
 
 	if (llvm::StoreInst *SI = llvm::dyn_cast<llvm::StoreInst>(&I)) {
 	  if (auto *value_I = llvm::dyn_cast<llvm::Instruction>(SI->getValueOperand())) {
 	    const auto& orgs = taints[value_I];
-	    mem[SI].insert(orgs.begin(), orgs.end());
+	    if (orgs != taints_bak[value_I])  // TODO: This is sound, right?
+	      for (llvm::LoadInst *LI : rfs[SI])
+		taints[LI] |= orgs;
 	  }
 	  continue;
 	}
@@ -104,17 +115,14 @@ namespace clou {
 	    case llvm::Intrinsic::fabs:
 	    case llvm::Intrinsic::floor:
 	      // Passthrough
-	      for (llvm::Value *arg_V : II->args()) {
-		if (llvm::Instruction *arg_I = llvm::dyn_cast<llvm::Instruction>(arg_V)) {
-		  llvm::copy(taints[arg_I], std::inserter(taints[II], taints[II].end()));
-		}
-	      }
+	      for (llvm::Value *arg_V : II->args())
+		if (llvm::Instruction *arg_I = llvm::dyn_cast<llvm::Instruction>(arg_V))
+		  taints[II] |= taints[arg_I];
 	      break;
 
 	    case llvm::Intrinsic::annotation:
-	      if (auto *arg = llvm::dyn_cast<llvm::Instruction>(II->getArgOperand(0))) {
-		llvm::copy(taints[arg], std::inserter(taints[II], taints[II].end()));
-	      }
+	      if (auto *arg = llvm::dyn_cast<llvm::Instruction>(II->getArgOperand(0)))
+		taints[II] |= taints[arg];
 	      break;
 	      
 	    default:
@@ -140,7 +148,7 @@ namespace clou {
 	  for (llvm::Value *op_V : I.operands()) {
 	    if (auto *op_I = llvm::dyn_cast<llvm::Instruction>(op_V)) {
 	      const auto& in = taints[op_I];
-	      out.insert(in.begin(), in.end());
+	      out |= in;
 	    }
 	  }
 	  continue;
@@ -148,7 +156,15 @@ namespace clou {
 	  
       }
 
-    } while (taints != taints_bak || mem != mem_bak);
+    } while (taints != taints_bak);
+
+    // Convert back to easy-to-process results.
+    this->taints.clear();
+    for (const auto& [I, iorgs] : taints) {
+      auto& orgs = this->taints[I];
+      for (Idx idx : iorgs)
+	orgs.insert(idx_to_ncal(idx));
+    }
 
     return false;
   }

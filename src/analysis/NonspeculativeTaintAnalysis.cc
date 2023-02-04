@@ -72,6 +72,7 @@ namespace clou {
       pub_vals.insert(&A);
 
     VSet pub_vals_bak;
+    std::set<llvm::Instruction *> seen_mem_taint_prop;
     do {
       pub_vals_bak = pub_vals;
 
@@ -157,12 +158,14 @@ namespace clou {
 
       // Propagate taint through all memory access instructions.
       for (llvm::Instruction& src : llvm::instructions(F)) {
+	if (seen_mem_taint_prop.contains(&src))
+	  continue;
 	llvm::Value *src_ptr = util::getPointerOperand(&src);
 	const auto src_vals = util::getAccessOperands(&src);
-	const auto src_vals_tainted = llvm::any_of(src_vals, [&] (llvm::Value *access) {
-	  return pub_vals.contains(access);
-	});
+	const bool src_vals_tainted = llvm::isa<llvm::LoadInst, llvm::AtomicRMWInst, llvm::AtomicCmpXchgInst>(&src) &&
+	  pub_vals.contains(&src);
 	if (src_ptr && src_vals_tainted) {
+	  seen_mem_taint_prop.insert(&src);
 	  llvm::copy(src_vals, std::inserter(pub_vals, pub_vals.end())); // all source values are tainted
 	  for (llvm::Instruction& dst : llvm::instructions(F)) {
 	    if (llvm::Value *dst_ptr = util::getPointerOperand(&dst)) {

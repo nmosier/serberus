@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MinCutBase.h"
+#include "clou/FordFulkerson.h"
 
 #include <queue>
 #include <stack>
@@ -10,25 +11,19 @@
 
 #include <llvm/ADT/SmallSet.h>
 #include <llvm/Clou/Clou.h>
+#include <llvm/ADT/STLExtras.h>
 
 #define DEBUG(...) ;
 
 namespace clou {
 
-  template <class Node, class Weight, class NodeHash>
-  class MinCutGreedy final : public MinCutBase<Node, Weight> {
+  template <class Node>
+  class MinCutGreedy final : public MinCutBase<Node, unsigned> {
   public:
+    using Weight = unsigned;
     using Super = MinCutBase<Node, Weight>;
     using Edge = typename Super::Edge;
     using ST = typename Super::ST;
-
-    struct EdgeHash {
-      NodeHash node_hash;
-      EdgeHash(NodeHash node_hash = NodeHash()): node_hash(node_hash) {}
-      auto operator()(const Edge& e) const {
-	return llvm::hash_combine(node_hash(e.src), node_hash(e.dst));
-      }
-    };
 
     void run() override {
       // sort and de-duplicate sts
@@ -39,34 +34,111 @@ namespace clou {
       }
 
       DEBUG(llvm::errs() << "min-cut on " << getNodes().size() << " nodes\n");
-      
-      unsigned i = 0;
-      while (true) {
-	++i;
-	DEBUG(llvm::errs() << "\titeration " << i << "\n");
 
-	auto reaching_sts = computeReaching();
-      
-	float maxw = 0;
-	Edge maxe;
-	llvm::BitVector maxbv;
+      /* New algorithm:
+       * Maintain a set of LFENCE insertion points.
+       * For each ST pair:
+       *   Perform the optimal min cut.
+       */
 
-	for (const auto& [e, cost] : getEdges()) {
-	  const float paths = static_cast<float>(reaching_sts[e]);
-	  const float w = pow(paths, STWeight) / static_cast<float>(cost);
-	  if (w > maxw) {
-	    maxw = w;
-	    maxe = e;
+      // Convert everything into efficient representation.
+      using Idx = unsigned;
+
+      // Get nodes.
+      std::vector<Node> nodes;
+      llvm::copy(getNodes(), std::back_inserter(nodes));
+      const auto node_to_idx = [&nodes] (const Node& node) -> Idx {
+	const auto it = llvm::lower_bound(nodes, node);
+	assert(it != nodes.end() && *it == node);
+	return it - nodes.begin();
+      };
+      const auto idx_to_node = [&nodes] (Idx idx) -> const Node& {
+	assert(idx < nodes.size());
+	return nodes[idx];
+      };
+      using IdxGraph = std::vector<std::map<Idx, Weight>>;
+
+      // Get index graph.
+      IdxGraph G(nodes.size());
+      for (const auto& [src, dsts] : this->G) {
+	const Idx isrc = node_to_idx(src);
+	auto& idsts = G[isrc];
+	for (const auto& [dst, w] : dsts) {
+	  const Idx idst = node_to_idx(dst);
+	  idsts[idst] = w;
+	}
+      }
+
+      // Get index sts.
+      struct IdxST {
+	Idx s, t;
+      };
+      std::vector<IdxST> sts;
+      for (const ST& st : this->sts)
+	sts.push_back({.s = node_to_idx(st.s), .t = node_to_idx(st.t)});
+
+      struct IdxEdge {
+	Idx src, dst;
+	bool operator==(const IdxEdge& o) const = default;
+	auto operator<=>(const IdxEdge& o) const = default;
+      };
+
+      bool changed;
+      using Cuts = std::vector<std::vector<IdxEdge>>;
+      using CutsHistory = std::set<Cuts>;
+      Cuts cuts(sts.size());
+      CutsHistory cuts_hist;
+      const IdxGraph OrigG = G; // mainly for checking weights
+      int num_iterations = 0;
+      do {
+	llvm::errs() << "\rnum_iterations: " << ++num_iterations;
+	
+	changed = false;
+
+	for (const auto& [st, cut] : llvm::zip(sts, cuts)) {
+	  // Add old cut edges back in to graph.
+	  const std::vector<IdxEdge> oldcut = std::move(cut);
+	  for (const IdxEdge& e : oldcut) {
+	    const Weight w = OrigG[e.src].at(e.dst);
+	    [[maybe_unused]] const bool inserted = G[e.src].emplace(e.dst, w).second;
+	    assert(inserted && "Cut edge still in graph G!");
 	  }
+
+	  // Compute new local min cut.
+	  std::vector<IdxEdge> newcut;
+	  {
+	    const auto newcut_tmp = ford_fulkerson(nodes.size(), G, st.s, st.t);
+	    llvm::transform(newcut_tmp, std::back_inserter(newcut), [] (const auto& p) -> IdxEdge {
+	      assert(p.first >= 0 && p.second >= 0);
+	      return {.src = static_cast<unsigned>(p.first), .dst = static_cast<unsigned>(p.second)};
+	    });
+	  }
+
+	  // Remove new cut edges from G.
+	  for (const IdxEdge& e : newcut) {
+	    assert(G.at(e.src).contains(e.dst));
+	    [[maybe_unused]] const auto erased = G[e.src].erase(e.dst);
+	    assert(erased > 0);
+	  }
+
+	  // Check if changed.
+	  if (oldcut != newcut)
+	    changed = true;
+
+	  // Update cut.
+	  cut = std::move(newcut);
 	}
 
-	// if no weights were > 0, we're done
-	if (maxw == 0)
-	  break;
+	if (changed)
+	  changed = cuts_hist.insert(cuts).second;
+	
+      } while (changed);
+      llvm::errs() << "\n";
 
-	// cut the max edge and continue
-	cutEdge(maxe);
-      }
+      // Now add all cut edges to master copy.
+      for (const auto& cut : cuts)
+	for (const IdxEdge& e : cut)
+	  this->cut_edges.push_back({.src = idx_to_node(e.src), .dst = idx_to_node(e.dst)});
     }
     
   private:

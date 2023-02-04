@@ -5,6 +5,7 @@
 
 #include <llvm/Pass.h>
 #include <llvm/Analysis/AliasAnalysis.h>
+#include <llvm/ADT/BitVector.h>
 
 namespace clou {
 
@@ -22,6 +23,9 @@ namespace clou {
     void print(llvm::raw_ostream& os, const llvm::Module *M) const override;
 
     bool secret(llvm::Value *V);
+
+  private:
+    // using IdxTaintMap = std::map<llvm::Instruction *, llvm::BitVector>;
   };
   
 }

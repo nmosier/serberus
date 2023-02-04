@@ -413,18 +413,8 @@ namespace clou {
 	std::map<llvm::Instruction *, ISet> transmitters;
 	getTransmitters(F, ST, transmitters);
 
-	using Alg = MinCutBase<Node, int>;
-	std::unique_ptr<Alg> AP;
-	switch (MinCutAlg) {
-	case MinCutAlgKind::SMT:
-	  AP.reset(new MinCutSMT_BV<Node, int>);
-	  break;
-	case MinCutAlgKind::GREEDY:
-	  AP.reset(new MinCutGreedy<Node, int, NodeHash>);
-	  break;
-	default: std::abort();
-	}
-	Alg& A = *AP;
+	using Alg = MinCutGreedy<Node>;
+	Alg A;
 	Alg::Graph& G = A.G;
 	std::vector<Alg::ST> sts;
 
@@ -743,7 +733,7 @@ namespace clou {
 
 	// double-check cut: make sure that no source can reach its sink
 	{
-	  std::set<MinCutBase<Node, int>::Edge> cutset;
+	  std::set<MinCutBase<Node, unsigned>::Edge> cutset;
 	  llvm::copy(cut_edges, std::inserter(cutset, cutset.end()));
 	  for (const auto& st : A.sts) {
 	    std::set<llvm::Instruction *> seen;
@@ -782,6 +772,8 @@ namespace clou {
 			print_node(e.dst);
 			llvm::errs() << "\n";
 		      }
+		      if (cut_edges.empty())
+			llvm::errs() << "no cut edges\n";
 		      std::exit(EXIT_FAILURE);
 		  }
 		  todo.push(succ);
@@ -967,7 +959,7 @@ namespace clou {
       }
 
 #if 1
-      static bool shouldCutEdge(llvm::Instruction *src, llvm::Instruction *dst) {
+      static bool shouldCutEdge([[maybe_unused]] llvm::Instruction *src, llvm::Instruction *dst) {
 	// return llvm::predecessors(dst).size() > 1 || llvm::successors_inst(src).size() > 1;
 	return llvm::predecessors(dst).size() > 1;
       }

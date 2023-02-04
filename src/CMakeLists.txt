@@ -15,6 +15,12 @@ link_libraries(${Libprofiler_LIBRARIES})
 
 add_subdirectory(analysis)
 
+add_library(FordFulkerson STATIC
+  FordFulkerson.cc
+)
+register_llvm_pass(FordFulkerson)
+
+
 add_library(Metadata SHARED
   Metadata.cc
   include/clou/Metadata.h
@@ -32,7 +38,7 @@ add_library(MinCut SHARED
   include/clou/MinCutSMT.h
 )
 target_link_libraries(MinCut INTERFACE ${Z3_LIBRARIES})
-target_link_libraries(MinCut PUBLIC util)
+target_link_libraries(MinCut PUBLIC util FordFulkerson)
 target_link_directories(MinCut INTERFACE ${Z3_LIBRARY_DIRS})
 target_include_directories(MinCut INTERFACE ${Z3_INCLUDE_DIRS})
 
@@ -155,15 +161,10 @@ target_include_directories(Profiler PRIVATE ${Libprofiler_INCLUDE_DIRS})
 target_link_directories(Profiler PRIVATE ${Libprofiler_LIBRARY_DIRS})
 target_link_libraries(Profiler PRIVATE ${Libprofiler_LIBRARIES})
 
-
-add_library(FordFulkerson SHARED
-  FordFulkerson.cc
-)
-register_llvm_pass(FordFulkerson)
-  
-add_library(NCAStorePass SHARED
-  NCAStorePass.cc
-)
-register_llvm_pass(NCAStorePass)
-target_link_libraries(NCAStorePass PRIVATE FordFulkerson util Mitigation Transmitter)
-
+if(0)
+  add_library(NCAStorePass SHARED
+    NCAStorePass.cc
+  )
+  register_llvm_pass(NCAStorePass)
+  target_link_libraries(NCAStorePass PRIVATE FordFulkerson util Mitigation Transmitter)
+endif()

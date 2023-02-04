@@ -9,7 +9,7 @@
 
 namespace clou {
 
-  static bool find_st_path(int n, const std::vector<std::map<int, int>>& G, int s, int t, std::vector<int>& path) {
+  static bool find_st_path(int n, const std::vector<std::map<unsigned, unsigned>>& G, int s, int t, std::vector<int>& path) {
     std::vector<int> parent(n, -1);
     llvm::BitVector visited(n, false);
     std::queue<int> queue;
@@ -51,7 +51,7 @@ namespace clou {
     return true;
   }
 
-  static llvm::BitVector find_reachable(int n, const std::vector<std::map<int, int>>& G, int s) {
+  static llvm::BitVector find_reachable(int n, const std::vector<std::map<unsigned, unsigned>>& G, int s) {
     llvm::BitVector reach(n, false);
     std::stack<int> stack;
     stack.push(s);
@@ -68,24 +68,48 @@ namespace clou {
     return reach;
   }
   
-  std::vector<std::pair<int, int>> ford_fulkerson(int n, const std::vector<std::map<int, int>>& G, int s, int t) {
-    assert(n >= 0);
+  std::vector<std::pair<int, int>> ford_fulkerson(unsigned n, const std::vector<std::map<unsigned, unsigned>>& G_,
+						  unsigned s, unsigned t) {
+    auto G = G_;
+    if (s == t) {
+      // Duplicate node so that we guarantee s != t.
+      const unsigned t_new = n++;
+
+      // All edges into s/t now go into t_new.
+      for (auto& dsts : G) {
+	const auto it = dsts.find(t);
+	if (it != dsts.end()) {
+	  const unsigned w = it->second;
+	  dsts.erase(it);
+	  dsts[t_new] = w;
+	}
+      }
+
+      // Add edge from t_new to s.
+      G.push_back({{s, std::numeric_limits<unsigned>::max()}});
+
+      // Replace t with t_new.
+      t = t_new;
+    }
+
+      
     assert(static_cast<size_t>(n) == G.size());
+    assert(s != t);
 
     if (n == 0)
       return {};
 
-    std::vector<std::map<int, int>> ResG = G;
+    auto ResG = G;
 
     std::vector<int> path;
     while (find_st_path(n, ResG, s, t, path)) {
-      assert(llvm::all_of(G, [] (const std::map<int, int>& x) {
+      assert(llvm::all_of(G, [] (const std::map<unsigned, unsigned>& x) {
 	return llvm::all_of(x, [] (const auto& p) {
 	  return p.second >= 0;
 	});
       }));
       
-      int path_flow = INT_MAX;
+      unsigned path_flow = std::numeric_limits<unsigned>::max();
       assert(path.size() >= 2);
       for (auto it1 = path.begin(), it2 = std::next(it1); it2 != path.end(); ++it1, ++it2)
 	path_flow = std::min(path_flow, ResG[*it1][*it2]);
@@ -100,11 +124,24 @@ namespace clou {
 
     const llvm::BitVector reach = find_reachable(n, ResG, s);
     std::vector<std::pair<int, int>> results;
-    for (int u = 0; u < n; ++u)
-      if (reach.test(u))
-	for (const auto& [v, w] : ResG[u])
-	  if (reach.test(v) && w > 0)
+    for (unsigned u = 0; u < n; ++u) {
+      if (reach.test(u)) {
+	for (const auto& [v, w] : G[u]) {
+	  assert(w > 0);
+	  if (!reach.test(v)) {
+	    assert(G.at(u).contains(v));
 	    results.emplace_back(u, v);
+	  }
+	}
+      }
+    }
+
+#ifndef NDEBUG
+    if (results.empty()) {
+      const llvm::BitVector reach2 = find_reachable(n, G, s);
+      assert(s == t || !reach2.test(t));
+    }
+#endif
 
     return results;
   }
