@@ -33,7 +33,7 @@ namespace clou {
 	llvm::copy(st_set, this->sts.begin());
       }
 
-      DEBUG(llvm::errs() << "min-cut on " << getNodes().size() << " nodes\n");
+      llvm::errs() << "min-cut on " << getNodes().size() << " nodes\n";
 
       /* New algorithm:
        * Maintain a set of LFENCE insertion points.
@@ -79,7 +79,6 @@ namespace clou {
 
       struct IdxEdge {
 	Idx src, dst;
-	bool operator==(const IdxEdge& o) const = default;
 	auto operator<=>(const IdxEdge& o) const = default;
       };
 
@@ -100,7 +99,7 @@ namespace clou {
 	  const std::vector<IdxEdge> oldcut = std::move(cut);
 	  for (const IdxEdge& e : oldcut) {
 	    const Weight w = OrigG[e.src].at(e.dst);
-	    [[maybe_unused]] const bool inserted = G[e.src].emplace(e.dst, w).second;
+	    [[maybe_unused]] const bool inserted = G[e.src].insert(std::make_pair(e.dst, w)).second;
 	    assert(inserted && "Cut edge still in graph G!");
 	  }
 
@@ -116,7 +115,7 @@ namespace clou {
 
 	  // Remove new cut edges from G.
 	  for (const IdxEdge& e : newcut) {
-	    assert(G.at(e.src).contains(e.dst));
+	    assert(G.at(e.src).find(e.dst) != G.at(e.src).end());
 	    [[maybe_unused]] const auto erased = G[e.src].erase(e.dst);
 	    assert(erased > 0);
 	  }

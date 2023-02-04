@@ -50,6 +50,17 @@
 namespace clou {
   namespace {
 
+    extern "C" void ProfilerStart(const char *);
+    extern "C" void ProfilerStop(void);
+    __attribute__((constructor)) static void profile_start(void) {
+      ProfilerStart("tmp.prof");
+    }
+
+    __attribute__((destructor)) static void profile_stop(void) {
+      ProfilerStop();
+    }
+    
+
     llvm::cl::opt<bool> log_times {
       "clou-times",
       llvm::cl::desc("Log execution times of Mitigate Pass"),

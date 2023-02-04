@@ -8,7 +8,7 @@
 
 namespace clou {
 
-  std::vector<std::pair<int, int>> ford_fulkerson(unsigned n, const std::vector<std::map<unsigned, unsigned>>& G,
+  std::vector<std::pair<int, int>> ford_fulkerson(unsigned n, std::vector<std::map<unsigned, unsigned>>& G,
 						  unsigned s, unsigned t);
   
 }

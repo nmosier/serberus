@@ -3,13 +3,17 @@
 #include <cassert>
 #include <queue>
 #include <stack>
+#include <numeric>
 
 #include <llvm/ADT/BitVector.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/ADT/Hashing.h>
 
 namespace clou {
 
-  static bool find_st_path(int n, const std::vector<std::map<unsigned, unsigned>>& G, int s, int t, std::vector<int>& path) {
+  using Graph = std::vector<std::map<unsigned, unsigned>>;
+
+  static bool find_st_path(int n, const Graph& G, int s, int t, std::vector<int>& path) {
     std::vector<int> parent(n, -1);
     llvm::BitVector visited(n, false);
     std::queue<int> queue;
@@ -51,7 +55,7 @@ namespace clou {
     return true;
   }
 
-  static llvm::BitVector find_reachable(int n, const std::vector<std::map<unsigned, unsigned>>& G, int s) {
+  static llvm::BitVector find_reachable(int n, const Graph& G, int s) {
     llvm::BitVector reach(n, false);
     std::stack<int> stack;
     stack.push(s);
@@ -68,9 +72,11 @@ namespace clou {
     return reach;
   }
   
-  std::vector<std::pair<int, int>> ford_fulkerson(unsigned n, const std::vector<std::map<unsigned, unsigned>>& G_,
-						  unsigned s, unsigned t) {
-    auto G = G_;
+  std::vector<std::pair<int, int>> ford_fulkerson(unsigned n, Graph& G, unsigned s, unsigned t) {
+    if (n == 0)
+      return {};
+    
+    const unsigned orig_n = n;
     if (s == t) {
       // Duplicate node so that we guarantee s != t.
       const unsigned t_new = n++;
@@ -95,9 +101,6 @@ namespace clou {
       
     assert(static_cast<size_t>(n) == G.size());
     assert(s != t);
-
-    if (n == 0)
-      return {};
 
     auto ResG = G;
 
@@ -126,10 +129,16 @@ namespace clou {
     std::vector<std::pair<int, int>> results;
     for (unsigned u = 0; u < n; ++u) {
       if (reach.test(u)) {
-	for (const auto& [v, w] : G[u]) {
+	for (const auto& [v_, w] : G[u]) {
+	  auto v = v_;
 	  assert(w > 0);
 	  if (!reach.test(v)) {
-	    assert(G.at(u).contains(v));
+	    assert(G.at(u).find(v) != G.at(u).end());
+	    if (orig_n != n) {
+	      assert(u != t);
+	      if (v == t)
+		v = s;
+	    }
 	    results.emplace_back(u, v);
 	  }
 	}
@@ -143,6 +152,26 @@ namespace clou {
     }
 #endif
 
+    // Revert to original graph
+    if (orig_n != n) {
+      G.pop_back();
+      for (auto& dsts : G) {
+	const auto it = dsts.find(t);
+	if (it != dsts.end()) {
+	  const auto w = it->second;
+	  dsts.erase(it);
+	  dsts[s] = w;
+	}
+      }
+    }
+
+    assert(orig_n == G.size());
+    assert(llvm::all_of(G, [orig_n] (const auto& dsts) -> bool {
+      return llvm::all_of(dsts, [orig_n] (const auto& p) -> bool {
+	return p.first < orig_n;
+      });
+    }));
+    
     return results;
   }
   
