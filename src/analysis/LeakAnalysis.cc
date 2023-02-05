@@ -36,6 +36,42 @@ namespace clou {
     }
   }
 
+  class AliasingStores {
+  public:
+    AliasingStores(llvm::AliasAnalysis& AA): AA(AA) {}
+
+    const ISet& getAliasingStores(llvm::Instruction *Load) {
+      Map::const_iterator it = aliases.find(Load);
+      if (it == aliases.end())
+	it = computeAliases(Load);
+      return it->second; 
+    }
+    
+  private:
+    llvm::AliasAnalysis& AA;
+    using Map = std::map<llvm::Instruction *, ISet>;
+    Map aliases;
+
+    Map::const_iterator computeAliases(llvm::Instruction *Load) {
+      llvm::Function& F = *Load->getParent()->getParent();
+      assert(!aliases.contains(Load));
+      ISet Stores;
+      for (llvm::Instruction& Store : llvm::instructions(F)) {
+	if (!Store.mayWriteToMemory())
+	  continue;
+	if (llvm::isa<llvm::CallBase, llvm::FenceInst>(&Store))
+	  continue;
+	const auto AR = AA.alias(util::getPointerOperand(Load), util::getPointerOperand(&Store));
+	if (isDefinitelyNoAlias(AR))
+	  continue;
+	Stores.insert(&Store);
+      }
+      const auto result = aliases.emplace(Load, std::move(Stores));
+      assert(result.second && "Alias set already computed for this load!");
+      return result.first;
+    }
+  };
+
   bool LeakAnalysis::runOnFunction(llvm::Function& F) {
     this->F = &F;
     leaks.clear();
@@ -49,6 +85,8 @@ namespace clou {
 	leaks.insert(op.V);
       }
     }
+
+    AliasingStores Aliases(AA);
 
     VSet leaks_bak;
     do {
@@ -113,24 +151,11 @@ namespace clou {
 	    }
 	    
 	    // Find all potentially overlapping stores.
-	    for (llvm::Instruction& store : llvm::instructions(F)) {
-	      if (store.mayWriteToMemory()) {
-		if (llvm::isa<llvm::CallBase, llvm::FenceInst>(&store)) {
-		  // ignore
-		} else {
-		  const auto AR = AA.alias(util::getPointerOperand(load), util::getPointerOperand(&store));
-		  if (!isDefinitelyNoAlias(AR)) {
-		    if ([[maybe_unused]] const auto *store_LI = llvm::dyn_cast<llvm::LoadInst>(&store)) {
-		      assert(store_LI->isAtomic() || store_LI->isVolatile());
-		      // ignore
-		    } else {
-		      for (llvm::Value *store_V : util::getValueOperands(&store)) {
-			leaks.insert(store_V);
-		      }
-		    }
-		  }
-		}
-	      }
+	    for (llvm::Instruction *Store : Aliases.getAliasingStores(load)) {
+	      if ([[maybe_unused]] const auto *store_LI = llvm::dyn_cast<llvm::LoadInst>(Store))
+		assert(store_LI->isAtomic() || store_LI->isVolatile());
+	      else
+		llvm::copy(util::getValueOperands(Store), std::inserter(leaks, leaks.end()));
 	    }
 
 	  } else if (llvm::isa<llvm::CmpInst, llvm::GetElementPtrInst, llvm::BinaryOperator, llvm::PHINode, llvm::CastInst, llvm::SelectInst, llvm::ExtractValueInst, llvm::ExtractElementInst, llvm::InsertElementInst, llvm::ShuffleVectorInst, llvm::FreezeInst>(I)
