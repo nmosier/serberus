@@ -106,10 +106,7 @@ namespace clou {
       llvm::Value *V;
       Node() {}
       Node(llvm::Instruction *V): V(V) {}
-      Node(llvm::BasicBlock *V): V(V) {} 
-      bool operator<(const Node& o) const { return V < o.V; }
-      bool operator==(const Node& o) const { return V == o.V; }
-      bool operator!=(const Node& o) const { return V != o.V; }
+      auto operator<=>(const Node&) const = default;
     };
 
     struct NodeHash {
@@ -125,6 +122,57 @@ namespace clou {
       llvm::raw_os_ostream os(os_);
       os << node;
       return os_;
+    }
+
+    using Alg = MinCutGreedy<Node>;
+    using Edge = Alg::Edge;
+    using ST = Alg::ST;
+    
+    static void checkCutST(llvm::ArrayRef<std::set<Node>> st, const std::set<Edge>& cutset) {
+      assert(st.size() >= 2);
+      const auto succs = [&cutset] (const Node& u) {
+	std::set<Node> succs;
+	for (llvm::Instruction *I : llvm::successors_inst(llvm::cast<llvm::Instruction>(u.V))) {
+	  const Node v(I);
+	  const Edge e = {.src = u, .dst = v};
+	  if (!cutset.contains(e))
+	    succs.insert(v);
+	}
+	return succs;
+      };
+      std::set<Node> S = st.front();
+      for (const std::set<Node>& T : st.drop_front()) {
+	// Find all nodes reachable from S.
+	std::set<Node> reach;
+	std::stack<Node> todo;
+
+	// Add all the successors of sources but not sources themselves in order to be able to capture cases where s = t.
+	for (const Node& u : S)
+	  for (const Node& v : succs(u))
+	    todo.push(v);
+
+	while (!todo.empty()) {
+	  const Node u = todo.top();
+	  todo.pop();
+	  if (!reach.insert(u).second)
+	    continue;
+	  for (const Node v : succs(u))
+	    todo.push(v);
+	}
+
+	S.clear();
+	std::set_intersection(T.begin(), T.end(), reach.begin(), reach.end(), std::inserter(S, S.end()));
+      }
+
+      if (!S.empty()) {
+	llvm::WithColor::error() << "found -st path!\n";
+	std::abort();
+      }
+    }
+    
+    static void checkCut(llvm::ArrayRef<ST> sts, const std::set<Edge>& cutset) {
+      for (const ST& st : sts)
+	checkCutST(st.waypoints, cutset);
     }
 
     struct MitigatePass final : public llvm::FunctionPass {
@@ -427,7 +475,6 @@ namespace clou {
 	using Alg = MinCutGreedy<Node>;
 	Alg A;
 	Alg::Graph& G = A.G;
-	std::vector<Alg::ST> sts;
 
 #if 0
 	const auto cull_sts = [] (std::vector<Alg::ST>& stvec) {
@@ -632,7 +679,7 @@ namespace clou {
 		for (llvm::Instruction *source : sources)
 		  sts.push_back({.s = source, .t = T});
 #else
-	      sts.push_back({.s = SI, .t = T});
+	      A.add_st({{SI}, {T}});
 #endif
 	    }
 	  }
@@ -646,7 +693,7 @@ namespace clou {
 	  for (auto *ctrl : ctrls) {
 	    for (auto *SI : llvm::concat<llvm::StoreInst * const>(nca_nt_sec_stores, nca_t_sec_stores)) {
 #if 1
-	      sts.push_back({.s = SI, .t = ctrl});
+	      A.add_st({{SI}, {ctrl}});
 	      ++stat_ncas_ctrl;
 #else
 	      for (auto *source : getSourcesForNCAAccess(SI, nca_pub_stores))
@@ -664,7 +711,7 @@ namespace clou {
 	    for (auto *op_I : transmit_ops) {
 	      for (auto *source : ST.taints.at(op_I)) {
 #if 1
-		sts.push_back({.s = source, .t = transmitter});
+		A.add_st({{source}, {transmitter}});
 		++stat_st_udts;
 #else
 		auto *LI = llvm::cast<llvm::LoadInst>(source);
@@ -733,70 +780,27 @@ namespace clou {
 #if 0
 	cull_sts(sts);
 #endif
-	llvm::sort(sts);
-	A.sts = std::move(sts);
 	llvm::errs() << F.getName() << "\n";
 	auto G_ = G;
 	A.run();
 	const clock_t solve_stop = clock();
 	const float solve_duration = (static_cast<float>(solve_stop) - static_cast<float>(solve_start)) / CLOCKS_PER_SEC;
 	auto& cut_edges = A.cut_edges;
+	llvm::errs() << "num sts: " << A.get_sts().size() << "\n";
+	llvm::errs() << "cut edges: " << cut_edges.size() << "\n";
 
 	// double-check cut: make sure that no source can reach its sink
 	{
-	  std::set<MinCutBase<Node, unsigned>::Edge> cutset;
+	  std::set<Edge> cutset;
 	  llvm::copy(cut_edges, std::inserter(cutset, cutset.end()));
-	  for (const auto& st : A.sts) {
-	    std::set<llvm::Instruction *> seen;
-	    std::queue<llvm::Instruction *> todo;
-	    todo.push(llvm::cast<llvm::Instruction>(st.s.V));
-	    while (!todo.empty()) {
-	      llvm::Instruction *I = todo.front();
-	      todo.pop();
-	      if (seen.insert(I).second) {
-		if (&I->getParent()->front() == I && cutset.contains({.src = I->getParent(), .dst = I}))
-		  continue;
-		for (llvm::Instruction *succ : llvm::successors_inst(I)) {
-		  if (cutset.contains({.src = I, .dst = succ}))
-		    continue;
-		  if (&succ->getParent()->front() == succ && cutset.contains({.src = I, .dst = succ->getParent()}))
-		    continue;
-		  if (&succ->getParent()->front() == succ && cutset.contains({.src = succ->getParent(), .dst = succ}))
-		    continue;
-		  if (succ == st.t) {
-		      llvm::WithColor::error() << " source-sink path found!\n";
-		      llvm::errs() << F << "\n";
-		      llvm::errs() << "source: " << *st.s.V << "\n";
-		      llvm::errs() << "sink:   " << *st.t.V << "\n";
-		      const auto print_node = [] (const Node& u) {
-			if (auto *I = llvm::dyn_cast<llvm::Instruction>(u.V))
-			  llvm::errs() << *I;
-			else if (llvm::BasicBlock *B = llvm::dyn_cast<llvm::BasicBlock>(u.V))
-			  llvm::errs() << B->getName();
-			else
-			  llvm_unreachable("impossible");
-		      };
-		      for (const auto& e : cut_edges) {
-			llvm::errs() << "cut edge: ";
-			print_node(e.src);
-			llvm::errs() << "   ------>   ";
-			print_node(e.dst);
-			llvm::errs() << "\n";
-		      }
-		      if (cut_edges.empty())
-			llvm::errs() << "no cut edges\n";
-		      std::exit(EXIT_FAILURE);
-		  }
-		  todo.push(succ);
-		}
-	      }
-	    }
-	  }
+	  checkCut(A.get_sts(), cutset);
 	}
 
 	// Output DOT graph, color cut edges
 	if (ClouLog) {
+	  
 	  // emit dot
+#if 0
 	  {
 	    std::stringstream path;
 	    path << ClouLogDir << "/" << F.getName().str() << ".dot";
@@ -847,12 +851,14 @@ namespace clou {
             
 	    f << "}\n";
 	  }
+#endif
 
 	  // emit stats
 	  {
 	    log["function_name"] = F.getName();
 	    log["solution_time"] = util::make_string_std(std::setprecision(3), solve_duration) + "s";
-	    log["num_st_pairs"] = A.sts.size();
+	    log["num_st_pairs"] = A.get_sts().size();
+#if 0
 	    VSet sources, sinks;
 	    for (const auto& st : A.sts) {
 	      sources.insert(st.s.V);
@@ -860,19 +866,10 @@ namespace clou {
 	    }
 	    log["distinct_sources"] = sources.size();
 	    log["distinct_sinks"] = sinks.size();
-
-#if 0
-	    /* Potential optimization:
-	     * Try to reduce to product whereever possible.
-	     */
-	    {
-	      VSetSet gsources, gsinks;
-	      collapseOptimization(A.sts, gsources, gsinks);
-	      log["source_groups"] = gsources.size();
-	      log["sink_groups"] = gsinks.size();
-	    }
 #endif
 
+#if 0
+	    // TODO: Re-add support for this.
 	    auto& j_sts = log["st_pairs"] = llvm::json::Array();
 	    for (const auto& st : A.sts) {
 	      std::string source, sink;
@@ -886,6 +883,7 @@ namespace clou {
 		    {.K = "sink", .V = sink},
 		  }));
 	    }
+#endif
 
 	    // TODO: emit this to separate file?
 	    auto& j_cuts = log["cut_edges"] = llvm::json::Array();
@@ -937,12 +935,6 @@ namespace clou {
 	  std::ofstream f(path.str());
 	  llvm::raw_os_ostream os(f);
 	  F.print(os);
-	}
-
-
-	if (A.fallback) {
-	  llvm::IRBuilder<> IRB(&F.front().front());
-	  IRB.CreateIntrinsic(llvm::Intrinsic::trap, {}, {});
 	}
 
 #if 0

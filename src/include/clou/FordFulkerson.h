@@ -7,8 +7,9 @@
 #include <cstddef>
 #include <cassert>
 #include <vector>
+#include <set>
 
-#include <llvm/ADT/ScopedHashTable.h>
+#include <llvm/ADT/ArrayRef.h>
 
 namespace clou {
 
@@ -16,5 +17,7 @@ namespace clou {
 						  std::vector<std::map<unsigned, unsigned>>& G,
 						  unsigned s, unsigned t);
 
+  std::vector<std::pair<unsigned, unsigned>>
+  ford_fulkerson_multi(const std::vector<std::map<unsigned, unsigned>>& G, llvm::ArrayRef<std::set<unsigned>> waypoint_sets);
   
 }

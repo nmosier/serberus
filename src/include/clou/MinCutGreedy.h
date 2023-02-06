@@ -25,6 +25,16 @@ namespace clou {
     using Edge = typename Super::Edge;
     using ST = typename Super::ST;
 
+  private:
+    using Idx = unsigned;
+    struct IdxST {
+      std::vector<std::set<Idx>> waypoints;
+      template <typename... Ts> IdxST(Ts&&... args): waypoints(std::forward<Ts>(args)...) {}
+      auto operator<=>(const IdxST&) const = default;
+    };
+    
+  public:
+
     void run() override {
       // sort and de-duplicate sts
       {
@@ -70,12 +80,14 @@ namespace clou {
       }
 
       // Get index sts.
-      struct IdxST {
-	Idx s, t;
-      };
       std::vector<IdxST> sts;
-      for (const ST& st : this->sts)
-	sts.push_back({.s = node_to_idx(st.s), .t = node_to_idx(st.t)});
+      for (const ST& st : this->sts) {
+	auto& ist = sts.emplace_back();
+	for (const auto& way : st.waypoints) {
+	  auto& iway = ist.waypoints.emplace_back();
+	  llvm::transform(way, std::inserter(iway, iway.end()), node_to_idx);
+	}
+      }
 
       struct IdxEdge {
 	Idx src, dst;
@@ -106,7 +118,7 @@ namespace clou {
 	  // Compute new local min cut.
 	  std::vector<IdxEdge> newcut;
 	  {
-	    const auto newcut_tmp = ford_fulkerson(nodes.size(), G, st.s, st.t);
+	    const auto newcut_tmp = ford_fulkerson_multi(G, st.waypoints);
 	    llvm::transform(newcut_tmp, std::back_inserter(newcut), [] (const auto& p) -> IdxEdge {
 	      assert(p.first >= 0 && p.second >= 0);
 	      return {.src = static_cast<unsigned>(p.first), .dst = static_cast<unsigned>(p.second)};

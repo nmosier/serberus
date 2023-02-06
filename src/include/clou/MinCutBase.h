@@ -10,6 +10,7 @@
 #include <llvm/ADT/iterator_range.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/WithColor.h>
+#include <llvm/ADT/ArrayRef.h>
 
 namespace clou {
 
@@ -17,20 +18,8 @@ template <class Node, class Weight>
 class MinCutBase {
 public:
   struct ST {
-    Node s;
-    Node t;
-
-    auto pair() const {
-      return std::make_pair(s, t);
-    }
-
-    bool operator==(const ST& o) const { return pair() == o.pair(); }
-    bool operator!=(const ST& o) const { return !(*this == o); }
-    bool operator<(const ST& o) const { return pair() < o.pair(); }
-
-    void print(llvm::raw_ostream& os) const {
-      os << "{.src = " << s << ", .dst = " << t << "}";
-    }
+    std::vector<std::set<Node>> waypoints;
+    auto operator<=>(const ST& o) const = default;
   };
   
   using Graph = std::map<Node, std::map<Node, Weight>>;
@@ -38,57 +27,30 @@ public:
   struct Edge {
     Node src;
     Node dst;
-
-    auto pair() const {
-      return std::make_pair(src, dst);
-    }
-
-    bool operator==(const Edge& o) const { return pair() == o.pair(); }
-    bool operator!=(const Edge& o) const { return !(*this == o); }
-    bool operator<(const Edge& o) const { return pair() < o.pair(); }
+    auto operator<=>(const Edge&) const = default;
   };
 
   mutable Graph G;
+protected:
   std::vector<ST> sts;
+public:
   std::vector<Edge> cut_edges;
-  bool fallback = false;
 
-  void add_st(const ST& st) {
-    sts.push_back(st);
-#if 0
-    if (st.s == st.t)
-      llvm::WithColor::warning() << ": st-pair with identical source/sink: " << *st.s.V << "\n";
-#endif
-  }
+  llvm::ArrayRef<ST> get_sts() const { return sts; }
 
-  void add_st(const Node& s, const Node& t) {
-    const ST st = {.s = s, .t = t};
-    add_st(st);
-  }
- 
-  template <class IteratorT1, class IteratorT2>
-  void add_st(llvm::iterator_range<IteratorT1> sources,
-	      llvm::iterator_range<IteratorT2> transmitters) {
-    for (const Node& s : sources) {
-      for (const Node& t : transmitters) {
-	add_st(s, t);
-      }
+  void add_st(std::initializer_list<std::initializer_list<Node>> init_st) {
+    ST& st = sts.emplace_back();
+    for (std::initializer_list<Node> init_set : init_st) {
+      assert(init_set.size() >= 1);
+      st.waypoints.emplace_back(init_set);
+      assert(st.waypoints.back().size() >= 1);
     }
+    assert(st.waypoints.size() >= 2);
   }
 
   virtual void run() = 0;
   
 private:
 };
-
-  template <class Node, class Weight>
-  llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const typename MinCutBase<Node, Weight>::ST& st) {
-    st.print(os);
-    return os;
-  }
-  
-
-  // TODO: Move this to source file.
-  extern bool optimized_min_cut;
 
 }
