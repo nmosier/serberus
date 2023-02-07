@@ -4,6 +4,7 @@
 #include <queue>
 #include <stack>
 #include <numeric>
+#include <variant>
 
 #include <llvm/ADT/BitVector.h>
 #include <llvm/Support/raw_ostream.h>
@@ -16,7 +17,6 @@ namespace clou {
     using Node = unsigned;
     using Weight = unsigned;
     using Dsts = std::map<Node, Weight>;
-    virtual const Dsts operator[](Node src) const = 0;
     virtual Weight get_weight(Node src, Node dst) const = 0; // Returns 0 if no edge exists.
     virtual unsigned nodes() const = 0;
   };
@@ -39,11 +39,18 @@ namespace clou {
       }));
     }
 
-    const Dsts operator[](Node src) const override {
+    using iterator = Dsts::const_iterator;
+    using range_type = llvm::iterator_range<iterator>;
+    range_type operator[](Node src) const {
       assert(llvm::all_of(G.at(src), [] (const auto& p) { return p.second > 0; }));
-      return G.at(src);
+      return range_type(G.at(src));
     }
 
+    range_type empty_range() const {
+      static Dsts dummy;
+      return range_type(dummy);
+    }
+    
     Weight get_weight(Node src, Node dst) const override {
       const auto& dsts = G.at(src);
       const auto it = dsts.find(dst);
@@ -61,26 +68,76 @@ namespace clou {
     const std::vector<Dsts>& G;
   };
 
+  template <class BaseGraph>
   class DupGraph final : public ImmutableGraph {
+    static_assert(std::is_base_of_v<Graph, BaseGraph>, "Base graph must be derived from Graph class");
   public:
-    DupGraph(const Graph *orig): G(*orig) {}
+    DupGraph(const BaseGraph *orig): G(*orig) {}
 
     unsigned nodes() const override {
       return G.nodes() * 2;
     }
 
-    const Dsts operator[](Node src) const override {
-      // Shadow nodes never have any successors.
-      if (src >= G.nodes())
-	return {};
-      
-      Dsts dsts;
-      for (const auto& [dst, w] : G[src]) {
-	assert(w > 0);
-	dsts[dst] = w;
-	dsts[dst + G.nodes()] = w;
+  private:
+    using base_iterator = typename BaseGraph::iterator;
+    using base_range_type = typename BaseGraph::range_type;
+  public:
+    class iterator {
+    public:
+      iterator(): real(base_iterator(), base_iterator()) {}
+      iterator(const llvm::iterator_range<base_iterator>& real, base_iterator it, bool shadow, unsigned n): real(real), it(it), shadow(shadow), n(n) {}
+
+      const std::pair<const Node, Weight> operator*() const {
+	if (shadow)
+	  return {it->first + n, it->second};
+	else
+	  return *it;
       }
-      return dsts;
+      
+      iterator& operator++() {
+	assert(it != real.end());
+	++it;
+	if (it == real.end() && !shadow) {
+	  shadow = true;
+	  it = real.begin();
+	}
+	return *this;
+      }
+
+      iterator& operator++(int) {
+	return operator++();
+      }
+
+      bool operator==(const iterator& o) const {
+	assert(real.begin() == o.real.begin() && real.end() == o.real.end() && n == o.n);
+	if (it == real.end())
+	  return o.it == real.end();
+	else
+	  return it == o.it && shadow == o.shadow;
+      }
+
+      bool operator!=(const iterator& o) const {
+	return !operator==(o);
+      }
+      
+    private:
+      llvm::iterator_range<base_iterator> real;
+      base_iterator it;
+      bool shadow;
+      unsigned n;
+
+      bool isEnd() const {
+	return it == real.end();
+      }
+    };
+
+    using range_type = llvm::iterator_range<iterator>;
+
+    range_type operator[](Node src) const {
+      const auto real = (src < G.nodes()) ? G[src] : G.empty_range();
+      const iterator begin(real, real.begin(), false, G.nodes());
+      const iterator end(real, real.end(), true, G.nodes());
+      return range_type(begin, end);
     }
 
     Weight get_weight(Node src, Node dst) const override {
@@ -102,25 +159,64 @@ namespace clou {
     }
     
   private:
-    const Graph& G;
+    const BaseGraph& G;
   };
 
+  template <class BaseGraph>
   class ScopedGraph final : public MutableGraph {
+    static_assert(std::is_base_of_v<Graph, BaseGraph>, "Base graph must be derived from Graph class");
   public:
-    ScopedGraph(const Graph *orig): orig(*orig) {}
+    ScopedGraph(const BaseGraph *orig): orig(*orig) {}
 
     unsigned nodes() const override {
       return orig.nodes();
     }
 
-    const Dsts operator[](Node src) const override {
-      Dsts dsts = orig[src];
-      const auto mod_it = mod.find(src);
-      if (mod_it != mod.end())
-	for (const auto& [dst, w] : mod_it->second)
-	  dsts.insert_or_assign(dst, w);
-      std::erase_if(dsts, [] (const auto& p) { return p.second == 0; });
-      return dsts;
+    class iterator {
+    public:
+      using orig_iterator = typename BaseGraph::iterator;
+      using mod_iterator = Dsts::const_iterator;
+      iterator() {}
+      iterator(orig_iterator it): itv(it) {}
+      iterator(mod_iterator it): itv(it) {}
+
+      std::pair<const Node, Weight> operator*() const {
+	return std::visit(llvm::makeVisitor([] (auto it) { return *it; }), itv);
+      }
+
+      iterator& operator++() {
+	std::visit(llvm::makeVisitor([] (auto& it) { ++it; }), itv);
+	return *this;
+      }
+
+      bool operator==(const iterator& o) const {
+	assert(itv.index() == o.itv.index());
+	return itv == o.itv;
+      }
+
+      bool operator!=(const iterator& o) const {
+	return !operator==(o);
+      }
+      
+    private:
+      using Variant = std::variant<orig_iterator, mod_iterator>;
+      Variant itv;
+    };
+
+    using range_type = llvm::iterator_range<iterator>;
+
+    range_type operator[](Node src) const {
+      const auto it = mod.find(src);
+      iterator begin, end;
+      if (it != mod.end()) {
+	begin = iterator(it->second.begin());
+	end = iterator(it->second.end());
+      } else {
+	const auto orig_range = orig[src];
+	begin = iterator(orig_range.begin());
+	end = iterator(orig_range.end());
+      }
+      return range_type(begin, end);
     }
 
     Weight get_weight(Node src, Node dst) const override {
@@ -130,21 +226,34 @@ namespace clou {
 	const auto mod_dst_it = mod_dsts.find(dst);
 	if (mod_dst_it != mod_dsts.end())
 	  return mod_dst_it->second;
+	else
+	  return 0;
+      } else {
+	return orig.get_weight(src, dst);
       }
-      return orig.get_weight(src, dst);
     }
 
     void put_weight(Node src, Node dst, Weight w) override {
       // NOTE: It's ok if weight is 0. This means removing an edge.
-      mod[src][dst] = w;
+      auto it = mod.find(src);
+      if (it == mod.end()) {
+	it = mod.emplace(src, std::map<Node, Weight>()).first;
+	llvm::copy(orig[src], std::inserter(it->second, it->second.end()));
+      }
+      if (w > 0)
+	it->second[dst] = w;
+      else
+	it->second.erase(dst);
     }
     
   private:
-    const Graph& orig;
+    const BaseGraph& orig;
     std::map<Node, Dsts> mod;
   };
 
-  static bool find_st_path(int n, const Graph& G, int s, int t, std::vector<int>& path) {
+  template <class BaseGraph>
+  static bool find_st_path(int n, const BaseGraph& G, int s, int t, std::vector<int>& path) {
+    static_assert(std::is_base_of_v<Graph, BaseGraph>, "");
     std::vector<int> parent(n, -1);
     llvm::BitVector visited(n, false);
     std::queue<int> queue;
@@ -186,8 +295,10 @@ namespace clou {
     return true;
   }
 
-  static bool find_st_path_multi(const Graph& G, llvm::ArrayRef<std::set<unsigned>> waypoint_sets,
+  template <class BaseGraph>
+  static bool find_st_path_multi(const BaseGraph& G, llvm::ArrayRef<std::set<unsigned>> waypoint_sets,
 				 std::vector<unsigned>& path) {
+    static_assert(std::is_base_of_v<Graph, BaseGraph>, "");
     const auto n = G.nodes();
     assert(waypoint_sets.size() >= 2);
     assert(path.empty());
@@ -272,7 +383,9 @@ namespace clou {
     return reach;
   }
 
-  static llvm::BitVector find_reachable_multi(const Graph& G, const std::set<Graph::Node>& S) {
+  template <class BaseGraph>
+  static llvm::BitVector find_reachable_multi(const BaseGraph& G, const std::set<Graph::Node>& S) {
+    static_assert(std::is_base_of_v<Graph, BaseGraph>, "");
     const auto n = G.nodes();
     llvm::BitVector reach(n, false);
     std::stack<unsigned> stack;
@@ -490,8 +603,9 @@ namespace clou {
 
   using Node = Graph::Node;
   using Weight = Graph::Weight;
-  
-  static void ford_fulkerson_multi_impl(const Graph& G, llvm::ArrayRef<std::set<unsigned>> waypoint_sets,
+
+  template <class GraphT>
+  static void ford_fulkerson_multi_impl(const GraphT& G, llvm::ArrayRef<std::set<unsigned>> waypoint_sets,
 					std::vector<std::pair<Node, Node>>& results) {
     constexpr unsigned MAX_WEIGHT = std::numeric_limits<unsigned>::max();
     assert(waypoint_sets.size() >= 2);
@@ -505,7 +619,7 @@ namespace clou {
       unsigned path_flow = MAX_WEIGHT;
       assert(path.size() >= 2);
       for (auto it1 = path.begin(), it2 = std::next(it1); it2 != path.end(); ++it1, ++it2)
-	path_flow = std::min(path_flow, ResG[*it1].at(*it2));
+	path_flow = std::min(path_flow, ResG.get_weight(*it1, *it2));
       assert(path_flow > 0 && path_flow < std::numeric_limits<unsigned>::max());
       for (auto it1 = path.begin(), it2 = std::next(it1); it2 != path.end(); ++it1, ++it2) {
 	ResG.put_weight(*it1, *it2, ResG.get_weight(*it1, *it2) - path_flow);
@@ -521,7 +635,7 @@ namespace clou {
       for (const unsigned u : reach.set_bits()) {
 	// FIXME: Is this assertion useful?
 	assert(!T.contains(u));
-	for (const auto& [v, w] : G[u]) {
+	for (const auto& [v, _] : G[u]) {
 	  if (!reach.test(v))
 	    results.emplace_back(u, v);
 	}
