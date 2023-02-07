@@ -116,14 +116,11 @@ namespace clou {
 	  }
 
 	  // Compute new local min cut.
-	  std::vector<IdxEdge> newcut;
-	  {
-	    const auto newcut_tmp = ford_fulkerson_multi(G, st.waypoints);
-	    llvm::transform(newcut_tmp, std::back_inserter(newcut), [] (const auto& p) -> IdxEdge {
-	      assert(p.first >= 0 && p.second >= 0);
-	      return {.src = static_cast<unsigned>(p.first), .dst = static_cast<unsigned>(p.second)};
-	    });
-	  }
+	  const auto newcut_tmp = ford_fulkerson_multi(G, st.waypoints);
+	  std::vector<IdxEdge> newcut(newcut_tmp.size());
+	  llvm::transform(newcut_tmp, newcut.begin(), [] (const auto& p) -> IdxEdge {
+	    return {.src = p.first, .dst = p.second};
+	  });
 
 	  // Remove new cut edges from G.
 	  for (const IdxEdge& e : newcut) {

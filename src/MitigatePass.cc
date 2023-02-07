@@ -630,6 +630,18 @@ namespace clou {
 	  }
 	}
 
+	const auto make_node_range = [] (const auto& iset) {
+	  return llvm::map_range(iset, [] (llvm::Instruction *I) -> Node {
+	    return {I};
+	  });
+	};
+	const auto make_node_set = [&make_node_range] (const auto& irange) {
+	  std::set<Node> nodes;
+	  llvm::transform(irange, std::inserter(nodes, nodes.end()), [] (llvm::Instruction *I) -> Node {
+	    return {I};
+	  });
+	  return nodes;
+	};
 	
 	if (enabled.ncas_xmit) {
 
@@ -663,6 +675,8 @@ namespace clou {
 		todo.push(succ);
 	    }
 
+	    // Get relevant transmitter instructions.
+	    std::set<Node> xmits;
 	    for (llvm::Instruction *T : seen) {
 	      const auto sensitive_operands = get_transmitter_sensitive_operands(T);
 	      const bool vulnerable = llvm::any_of(sensitive_operands, [&] (const TransmitterOperand& TO) -> bool {
@@ -675,13 +689,10 @@ namespace clou {
 		});
 	      });
 	      if (vulnerable)
-#if 0
-		for (llvm::Instruction *source : sources)
-		  sts.push_back({.s = source, .t = T});
-#else
-	      A.add_st({{SI}, {T}});
-#endif
+		xmits.insert(T);
 	    }
+
+	    A.add_st(std::set<Node>{SI}, xmits);
 	  }
 
 	}
@@ -690,6 +701,7 @@ namespace clou {
 	if (enabled.ncas_ctrl) {
 	  
 	  // Create ST-pairs for {oob_sec_stores X ctrls}
+#if 0
 	  for (auto *ctrl : ctrls) {
 	    for (auto *SI : llvm::concat<llvm::StoreInst * const>(nca_nt_sec_stores, nca_t_sec_stores)) {
 #if 1
@@ -701,12 +713,16 @@ namespace clou {
 #endif
 	    }
 	  }
-
+#else
+	  const auto ncas = llvm::concat<llvm::StoreInst * const>(nca_nt_sec_stores, nca_t_sec_stores);
+	  A.add_st(make_node_set(ncas), make_node_set(ctrls));
+#endif
 	}
 
 	if (enabled.ncal_xmit) {
 
 	  // Create ST-pairs for {source X transmitter}
+#if 0
 	  for (const auto& [transmitter, transmit_ops] : transmitters) {
 	    for (auto *op_I : transmit_ops) {
 	      for (auto *source : ST.taints.at(op_I)) {
@@ -722,58 +738,24 @@ namespace clou {
 	      }
 	    }
 	  }
-	  
+#else
+	  for (const auto& [xmit, xmit_ops] : transmitters) {
+	    std::set<Node> ncals;
+	    for (llvm::Instruction *xmit_op : xmit_ops)
+	      llvm::copy(make_node_range(ST.taints.at(xmit_op)), std::inserter(ncals, ncals.end()));
+	    A.add_st(ncals, std::set<Node>{xmit});
+	  }
+#endif
 	}
 
 	// Add CFG to graph
-#if 1	
 	for (auto& B : F) {
-	  for (auto& dst : B) {
-	    for (auto *src : llvm::predecessors(&dst)) {
-	      G[src][&dst] = compute_edge_weight(src, &dst, DT, LI);
-	    }
+	  for (auto& src : B) {
+	    auto& dsts = G[&src];
+	    for (auto *dst : llvm::successors_inst(&src))
+	      dsts[dst] = compute_edge_weight(&src, dst, DT, LI);
 	  }
 	}
-#else
-	for (llvm::BasicBlock& B : F) {
-	  for (llvm::Instruction *I_src : llvm::predecessors(&B.front()))
-	    G[I_src][&B] = compute_edge_weight(I_src, &B.front(), DT, LI);
-	  G[&B][&B.front()] = compute_edge_weight(&B.front(), &B.front(), DT, LI);
-	  for (auto it_src = B.begin(), it_dst = std::next(it_src); it_dst != B.end(); ++it_src, ++it_dst)
-	    G[&*it_src][&*it_dst] = compute_edge_weight(&*it_src, &*it_dst, DT, LI);
-	}
-#endif
-
-#if 0
-	// EXPERIMENTAL OPTIMIZATION
-	// Remove nodes that aren't s/t.
-	// TODO: Maybe move this to MinCutBase.h?
-	{
-	  std::set<Node> keep;
-	  for (const auto& st : sts) {
-	    keep.insert(st.s);
-	    keep.insert(st.t);
-	  }
-	  for (auto& I : llvm::instructions(F))
-	    if (!keep.contains(&I))
-	      A.elideNode(Node(&I));
-	}
-#endif
-
-
-#if 0
-	/* Add edge connecting return instructions to entry instructions. 
-	 * This allows us to capture aliases across invocations of the same function.
-	 */
-	for (auto& B : F) {
-	  for (auto& I : B) {
-	    if (llvm::isa<llvm::ReturnInst>(&I)) {
-	      auto *entry = &F.getEntryBlock().front();
-	      G[&I][entry] = compute_edge_weight(entry, DT, LI);
-	    }
-	  }
-	}
-#endif
 
 	// Run algorithm to obtain min-cut
 	const clock_t solve_start = clock();

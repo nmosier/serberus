@@ -1,6 +1,6 @@
 include(RegisterLLVMPass)
 
-add_compile_options(-UNDEBUG -UNASSERT -fno-rtti -Wall -Wextra -fcf-protection=full)
+add_compile_options(-fno-rtti -Wall -Wextra -fcf-protection=full -UNDEBUG)
 
 include_directories(include)
 

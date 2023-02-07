@@ -9,6 +9,7 @@
 #include <llvm/ADT/BitVector.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/ADT/Hashing.h>
+#include <llvm/Support/WithColor.h>
 
 namespace clou {
 
@@ -657,6 +658,20 @@ namespace clou {
 	e.second = DupG.get_real_node(e.second);
     }
 
+    llvm::sort(results);
+#ifndef NDEBUG
+    if (results.size() >= 2) {
+      llvm::ArrayRef<std::pair<Node, Node>> results_ref(results);
+      for (const auto& [p1, p2] : llvm::zip(results_ref.drop_back(), results_ref.drop_front()))
+	if (p1 == p2)
+	  llvm::WithColor::warning() << "duplicate cut edges\n";
+    }
+#endif
+    {
+      const auto new_results_end = std::unique(results.begin(), results.end());
+      results.resize(new_results_end - results.begin());
+    }
+    
     return results;
   }
   

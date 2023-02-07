@@ -38,6 +38,23 @@ public:
 
   llvm::ArrayRef<ST> get_sts() const { return sts; }
 
+  template <class... Ts>
+  void add_st(Ts&&... args) {
+    ST& st = sts.emplace_back();
+    ([&]
+    {
+      st.waypoints.push_back(args);
+    } (), ...);
+  }
+
+  template <class... Ts>
+  void add_st(const Ts&... args) {
+    ST& st = sts.emplace_back();
+    for (const std::set<Node>& group : std::initializer_list<std::set<Node>> {args...}) {
+      st.waypoints.push_back(group);
+    }
+  }
+  
   void add_st(std::initializer_list<std::initializer_list<Node>> init_st) {
     ST& st = sts.emplace_back();
     for (std::initializer_list<Node> init_set : init_st) {
