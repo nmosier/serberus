@@ -30,19 +30,11 @@ namespace clou {
 
   class ImmutableVectorGraph final : public ImmutableGraph {
   public:
-    ImmutableVectorGraph(const std::vector<Dsts> *G): G(*G) {
-      // Make sure we don't have any zero weights to start.
-      assert(llvm::all_of(this->G, [] (const std::map<Node, Node>& dsts) {
-	return llvm::all_of(dsts, [] (const auto& p) {
-	  return p.second > 0;
-	});
-      }));
-    }
+    ImmutableVectorGraph(const std::vector<Dsts> *G): G(*G) {}
 
     using iterator = Dsts::const_iterator;
     using range_type = llvm::iterator_range<iterator>;
     range_type operator[](Node src) const {
-      assert(llvm::all_of(G.at(src), [] (const auto& p) { return p.second > 0; }));
       return range_type(G.at(src));
     }
 
