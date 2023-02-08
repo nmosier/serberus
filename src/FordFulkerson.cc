@@ -4,7 +4,6 @@
 #include <queue>
 #include <stack>
 #include <numeric>
-#include <variant>
 #include <sstream>
 #include <fstream>
 
@@ -84,10 +83,10 @@ namespace clou {
       iterator(const llvm::iterator_range<base_iterator>& real, base_iterator it, bool shadow, unsigned n): real(real), it(it), shadow(shadow), n(n) {}
 
       const std::pair<const Node, Weight> operator*() const {
+	std::pair<Node, Weight> p = *it;
 	if (shadow)
-	  return {it->first + n, it->second};
-	else
-	  return *it;
+	  p.first += n;
+	return p;
       }
       
       iterator& operator++() {
@@ -173,21 +172,30 @@ namespace clou {
       using orig_iterator = typename BaseGraph::iterator;
       using mod_iterator = Dsts::const_iterator;
       iterator() {}
-      iterator(orig_iterator it): itv(it) {}
-      iterator(mod_iterator it): itv(it) {}
+      iterator(orig_iterator it): orig(true), orig_it(it) {}
+      iterator(mod_iterator it): orig(false), mod_it(it) {}
 
       std::pair<const Node, Weight> operator*() const {
-	return std::visit(llvm::makeVisitor([] (auto it) { return *it; }), itv);
+	if (orig)
+	  return *orig_it;
+	else
+	  return *mod_it;
       }
 
       iterator& operator++() {
-	std::visit(llvm::makeVisitor([] (auto& it) { ++it; }), itv);
+	if (orig)
+	  ++orig_it;
+	else
+	  ++mod_it;
 	return *this;
       }
 
       bool operator==(const iterator& o) const {
-	assert(itv.index() == o.itv.index());
-	return itv == o.itv;
+	assert(orig == o.orig);
+	if (orig)
+	  return orig_it == o.orig_it;
+	else
+	  return mod_it == o.mod_it;
       }
 
       bool operator!=(const iterator& o) const {
@@ -195,8 +203,9 @@ namespace clou {
       }
       
     private:
-      using Variant = std::variant<orig_iterator, mod_iterator>;
-      Variant itv;
+      bool orig;
+      orig_iterator orig_it;
+      mod_iterator mod_it;
     };
 
     using range_type = llvm::iterator_range<iterator>;
