@@ -15,6 +15,8 @@
 
 #define DEBUG(...) ;
 
+#define CHECK_CUTS 0
+
 namespace clou {
 
   template <class Node>
@@ -94,6 +96,7 @@ namespace clou {
       }
 
       bool changed;
+      enum class Mode {Replace, Augment} mode = Mode::Replace;
       using Cuts = std::vector<std::vector<IdxEdge>>;
       using CutsHistory = std::set<Cuts>;
       Cuts cuts(sts.size());
@@ -108,11 +111,13 @@ namespace clou {
 	for (const auto& [st, cut] : llvm::zip(sts, cuts)) {
 	  
 	  // Add old cut edges back in to graph.
-	  const std::vector<IdxEdge> oldcut = std::move(cut);
-	  for (const IdxEdge& e : oldcut) {
-	    const Weight w = OrigG[e.src].at(e.dst);
-	    [[maybe_unused]] const bool inserted = G[e.src].insert(std::make_pair(e.dst, w)).second;
-	    assert(inserted && "Cut edge still in graph G!");
+	  const auto oldcut = std::move(cut);
+	  if (mode == Mode::Replace) {
+	    for (const IdxEdge& e : oldcut) {
+	      const Weight w = OrigG[e.src].at(e.dst);
+	      [[maybe_unused]] const bool inserted = G[e.src].insert(std::make_pair(e.dst, w)).second;
+	      assert(inserted && "Cut edge still in graph G!");
+	    }
 	  }
 
 	  // Compute new local min cut.
@@ -121,7 +126,11 @@ namespace clou {
 	  llvm::transform(newcut_tmp, newcut.begin(), [] (const auto& p) -> IdxEdge {
 	    return {.src = p.first, .dst = p.second};
 	  });
-
+	  if (mode == Mode::Augment)
+	    llvm::copy(oldcut, std::back_inserter(newcut));
+	  llvm::sort(newcut);
+	  std::unique(newcut.begin(), newcut.end());
+	  
 #if CHECK_CUTS
 	  {
 	    std::set<IdxEdge> cutset;
@@ -132,9 +141,11 @@ namespace clou {
 
 	  // Remove new cut edges from G.
 	  for (const IdxEdge& e : newcut) {
-	    assert(G.at(e.src).find(e.dst) != G.at(e.src).end());
+	    if (mode == Mode::Replace)
+	      assert(G.at(e.src).find(e.dst) != G.at(e.src).end());
 	    [[maybe_unused]] const auto erased = G[e.src].erase(e.dst);
-	    assert(erased > 0);
+	    if (mode == Mode::Replace)
+	      assert(erased > 0);
 	  }
 
 	  // Check if changed.
@@ -156,18 +167,19 @@ namespace clou {
 
 	if (changed) {
 	  if (!cuts_hist.insert(cuts).second) {
+	    assert(mode == Mode::Replace);
 	    llvm::WithColor::warning() << "detected loop in min-cut algorithm\n";
-	    break;
+	    mode = Mode::Augment;
 	  }
 	}
 	
       } while (changed);
       llvm::errs() << "\n";
 
+
 #if CHECK_CUTS
       checkCut(cuts, sts, OrigG);
 #endif
-      
 
       // Now add all cut edges to master copy.
       for (const auto& cut : cuts)
