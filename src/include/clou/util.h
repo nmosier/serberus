@@ -447,7 +447,7 @@ namespace clou {
       static bool classof(const llvm::Value *V);
     };
 
-    void getFrontierBwd(llvm::Instruction *I, const std::set<llvm::Value *>& targets, std::set<llvm::Instruction *>& out);
+    void getFrontierBwd(llvm::Instruction *I, const std::set<llvm::Instruction *>& targets, std::set<llvm::Instruction *>& out);
     
   }
 

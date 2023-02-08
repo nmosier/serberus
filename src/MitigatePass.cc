@@ -128,7 +128,7 @@ namespace clou {
     using Edge = Alg::Edge;
     using ST = Alg::ST;
     
-    static void checkCutST(llvm::ArrayRef<std::set<Node>> st, const std::set<Edge>& cutset) {
+    static void checkCutST(llvm::ArrayRef<std::set<Node>> st, const std::set<Edge>& cutset, llvm::Function& F) {
       assert(st.size() >= 2);
       const auto succs = [&cutset] (const Node& u) {
 	std::set<Node> succs;
@@ -140,39 +140,104 @@ namespace clou {
 	}
 	return succs;
       };
+      std::vector<std::set<Node>> particles;
+      std::vector<std::map<Node, Node>> parents;
       std::set<Node> S = st.front();
       for (const std::set<Node>& T : st.drop_front()) {
+	auto& parent = parents.emplace_back();
+	particles.push_back(S);
+	
 	// Find all nodes reachable from S.
 	std::set<Node> reach;
 	std::stack<Node> todo;
 
 	// Add all the successors of sources but not sources themselves in order to be able to capture cases where s = t.
 	for (const Node& u : S)
-	  for (const Node& v : succs(u))
-	    todo.push(v);
+	  todo.push(u);
 
 	while (!todo.empty()) {
 	  const Node u = todo.top();
 	  todo.pop();
-	  if (!reach.insert(u).second)
-	    continue;
-	  for (const Node v : succs(u))
-	    todo.push(v);
+	  for (const Node v : succs(u)) {
+	    if (reach.insert(v).second) {
+	      todo.push(v);
+	      parent[v] = u;
+	    }
+	  }
 	}
 
 	S.clear();
 	std::set_intersection(T.begin(), T.end(), reach.begin(), reach.end(), std::inserter(S, S.end()));
       }
+      particles.push_back(S);
 
       if (!S.empty()) {
-	llvm::WithColor::error() << "found -st path!\n";
+	llvm::WithColor::error() << "found s-t path!\n";
+
+	// Try to find path.
+	std::vector<Node> path;
+	Node t = *particles.back().begin();
+	for (const auto& [parent, S] : llvm::reverse(llvm::zip(parents, llvm::ArrayRef(particles).drop_back()))) {
+	  Node v = t;
+	  while (true) {
+	    path.push_back(v);
+	    v = parent.at(v);
+	    if (S.contains(v))
+	      break;
+	  }
+	  t = v;
+	}
+	path.push_back(t);
+
+	/*
+	 * 1, 2, 3, ... -- indicates index into st group.
+	 * s -- source of cut
+	 * d -- destination of cut
+	 * * -- along path.
+	 */
+
+	auto& os = llvm::errs();
+	for (llvm::BasicBlock& B : F) {
+	  B.printAsOperand(os);
+	  os << ":\n";
+	  for (llvm::Instruction& I : B) {
+	    for (char c = '0'; const std::set<Node>& group : st) {
+	      os << (group.contains(Node(&I)) ? c : ' ');
+	      ++c;
+	    }
+	    {
+	      const auto it = llvm::find(path, Node(&I));
+	      os << (it != path.end() ? '*' : ' ');
+	    }
+	    {
+	      const auto it = llvm::find_if(cutset, [&I] (const auto& p) {
+		return p.src == Node(&I);
+	      });
+	      os << (it != cutset.end() ? 's' : ' ');
+	    }
+	    {
+	      const auto it = llvm::find_if(cutset, [&I] (const auto& p) {
+		return p.dst == Node(&I);
+	      });
+	      os << (it != cutset.end() ? 'd' : ' ');
+	    }
+	    os << "  " << I << "\n";
+	  }
+	  os << "\n";
+	}
+	
+	llvm::errs() << "Path:\n";
+	for (const Node& v : llvm::reverse(path)) {
+	  llvm::errs() << "    " << *v.V << "\n";
+	}
+	
 	std::abort();
       }
     }
     
-    static void checkCut(llvm::ArrayRef<ST> sts, const std::set<Edge>& cutset) {
+    static void checkCut(llvm::ArrayRef<ST> sts, const std::set<Edge>& cutset, llvm::Function& F) {
       for (const ST& st : sts)
-	checkCutST(st.waypoints, cutset);
+	checkCutST(st.waypoints, cutset, F);
     }
 
     struct MitigatePass final : public llvm::FunctionPass {
@@ -307,21 +372,12 @@ namespace clou {
 	}
       }
 
-#if 0
-      static std::set<llvm::Instruction *> getSourcesForNCAAccess(llvm::Instruction *I,
-								 const std::set<llvm::StoreInst *>& nca_pub_stores) {
-	std::set<llvm::Value *> all_sources;
-	std::set<llvm::Instruction *> sources;
-	auto *PointerOp = util::getPointerOperand(I);
-	all_sources = get_incoming_loads(PointerOp);
-	all_sources.insert(nca_pub_stores.begin(), nca_pub_stores.end());
-	util::getFrontierBwd(I, all_sources, sources);
-	return sources;
-      }
-#else
       static std::set<llvm::Instruction *> getSourcesForNCAAccess(llvm::Instruction *I,
 								  [[maybe_unused]] const std::set<llvm::StoreInst *>& nca_pub_stores) {
+	assert(I != &I->getFunction()->front().front() && "I cannot be the entrypoint instruction of the function");
 	// compute reach set
+	// NOTE: We specifically don't count the first instruction `I` as reaching itself in step 0.
+	// For `I` to be reached, there must be a cycle I -> I in the CFG.
 	std::set<llvm::Instruction *> reach;
 	{
 	  std::stack<llvm::Instruction *> todo;
@@ -329,30 +385,54 @@ namespace clou {
 	  while (!todo.empty()) {
 	    auto *I = todo.top();
 	    todo.pop();
-	    if (!reach.insert(I).second)
-	      continue;
 	    for (auto *pred : llvm::predecessors(I))
-	      todo.push(pred);
+	      if (reach.insert(I).second)
+		todo.push(pred);
 	  }
 	}
 
-	// compute candidate sourecs
-	std::set<llvm::Value *> candidate_sources = get_incoming_loads(util::getPointerOperand(I));
+	// compute candidate sources
+	std::set<llvm::Instruction *> sources;
+
+	// Type 1: values used to compute address.
+	for (llvm::Value *op_V : get_incoming_loads(util::getPointerOperand(I))) {
+	  if (auto *op_I = llvm::dyn_cast<llvm::Instruction>(op_V)) {
+	    sources.insert(op_I);
+	  } else if (llvm::isa<llvm::Argument>(op_V)) {
+	    auto *EntryInst = &I->getFunction()->front().front();
+	    assert(I != EntryInst);
+	    sources.insert(EntryInst);
+	  } else {
+	    unhandled_value(*op_V);
+	  }
+	}
+
+	// Type 2: Control-flow.
+	// TODO: Can use more optimal analysis of control-equivalent uses of base pointer.
 	for (auto *T : reach) {
 	  if (T->isTerminator()) {
 	    const bool unreachable_succ = llvm::any_of(llvm::successors_inst(T), [&reach] (auto *succ) {
 	      return !reach.contains(succ);
 	    });
 	    if (unreachable_succ)
-	      candidate_sources.insert(T);
+	      sources.insert(T);
 	  }
 	}
 
+	std::erase_if(sources, [&reach] (llvm::Instruction *I) {
+	  return !reach.contains(I);
+	});
+
+	// Also do backward frontier
 	std::set<llvm::Instruction *> actual_sources;
-	util::getFrontierBwd(I, candidate_sources, actual_sources);
+#if 0
+	util::getFrontierBwd(I, sources, actual_sources);
+#else
+	actual_sources = std::move(sources);
+#endif
+	
 	return actual_sources;
       }
-#endif
 
       template <class OutputIt>
       static OutputIt getCtrls(llvm::Function& F, OutputIt out) {
@@ -721,31 +801,49 @@ namespace clou {
 
 	if (enabled.ncal_xmit) {
 
+	  std::map<llvm::Instruction *, std::set<llvm::Instruction *>> sources_map;
+	  const auto get_sources = [&] (llvm::Instruction *ncal) -> const std::set<llvm::Instruction *>& {
+	    auto it = sources_map.find(ncal);
+	    if (it == sources_map.end()) {
+	      auto sources = getSourcesForNCAAccess(ncal, nca_pub_stores);
+	      it = sources_map.emplace(ncal, std::move(sources)).first;
+	    }
+	    return it->second; 
+	  };
+
 	  // Create ST-pairs for {source X transmitter}
+	  for (const auto& [xmit, xmit_ops] : transmitters) {
+	    std::set<llvm::Instruction *> ncals;
+	    for (llvm::Instruction *xmit_op : xmit_ops)
+	      llvm::copy(ST.taints.at(xmit_op), std::inserter(ncals, ncals.end()));
 #if 0
-	  for (const auto& [transmitter, transmit_ops] : transmitters) {
-	    for (auto *op_I : transmit_ops) {
-	      for (auto *source : ST.taints.at(op_I)) {
-#if 1
-		A.add_st({{source}, {transmitter}});
-		++stat_st_udts;
+	    A.add_st(make_node_set(ncals), std::set<Node>{xmit});
 #else
-		auto *LI = llvm::cast<llvm::LoadInst>(source);
-		for (auto *source : getSourcesForNCAAccess(LI, nca_pub_stores)) {
-		  sts.push_back({.s = source, .t = transmitter});
+	    for (llvm::Instruction *ncal : ncals) {
+	      if (ncal == &ncal->getFunction()->front().front()) {
+		A.add_st(std::set<Node>{ncal}, std::set<Node>{xmit});
+	      } else {
+		const auto& sources = get_sources(ncal);
+#if 1
+		A.add_st(make_node_set(sources), std::set<Node>{ncal}, std::set<Node>{xmit});
+#elif 0
+		for (llvm::Instruction *source : sources)
+		  A.add_st({{source}, {ncal}, {xmit}});
+#else
+		auto it = sources.begin();
+		while (it != sources.end()) {
+		  std::set<Node> s;
+		  s.insert(*it++);
+		  if (it != sources.end())
+		    s.insert(*it++);
+		  A.add_st(s, std::set<Node>{ncal}, std::set<Node>{xmit});
 		}
 #endif
 	      }
 	    }
-	  }
-#else
-	  for (const auto& [xmit, xmit_ops] : transmitters) {
-	    std::set<Node> ncals;
-	    for (llvm::Instruction *xmit_op : xmit_ops)
-	      llvm::copy(make_node_range(ST.taints.at(xmit_op)), std::inserter(ncals, ncals.end()));
-	    A.add_st(ncals, std::set<Node>{xmit});
-	  }
 #endif
+	  }
+	  
 	}
 
 	// Add CFG to graph
@@ -775,7 +873,7 @@ namespace clou {
 	{
 	  std::set<Edge> cutset;
 	  llvm::copy(cut_edges, std::inserter(cutset, cutset.end()));
-	  checkCut(A.get_sts(), cutset);
+	  checkCut(A.get_sts(), cutset, F);
 	}
 
 	// Output DOT graph, color cut edges

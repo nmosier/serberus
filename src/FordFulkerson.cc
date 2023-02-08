@@ -5,11 +5,14 @@
 #include <stack>
 #include <numeric>
 #include <variant>
+#include <sstream>
+#include <fstream>
 
 #include <llvm/ADT/BitVector.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/ADT/Hashing.h>
 #include <llvm/Support/WithColor.h>
+#include <llvm/Support/raw_os_ostream.h>
 
 namespace clou {
 
@@ -244,6 +247,37 @@ namespace clou {
     std::map<Node, Dsts> mod;
   };
 
+  template <class Graph1, class Graph2>
+  class IntersectUnitGraph final : public ImmutableGraph {
+  public:
+    IntersectUnitGraph(const Graph1 *G1, const Graph2 *G2): G1(*G1), G2(*G2) {
+      assert(this->G1.nodes() == this->G2.nodes());
+    }
+
+    unsigned nodes() const override {
+      return G1.nodes();
+    }
+
+    const std::map<Node, Weight> operator[](Node src) const {
+      std::map<Node, Weight> dsts1, dsts2;
+      llvm::transform(G1[src], std::inserter(dsts1, dsts1.end()), [] (const auto& p) {
+	return std::make_pair(p.first, 1);
+      });
+      llvm::transform(G2[src], std::inserter(dsts2, dsts2.end()), [] (const auto& p) {
+	return std::make_pair(p.first, 1);
+      });
+      std::map<Node, Weight> dsts;
+      std::set_intersection(dsts1.begin(), dsts1.end(), dsts2.begin(), dsts2.end(), std::inserter(dsts, dsts.end()));
+      return dsts;
+    }
+
+    Weight get_weight(Node src, Node dst) const override { std::abort(); }
+
+  private:
+    const Graph1& G1;
+    const Graph2& G2;
+  };
+
   template <class BaseGraph>
   static bool find_st_path(int n, const BaseGraph& G, int s, int t, std::vector<int>& path) {
     static_assert(std::is_base_of_v<Graph, BaseGraph>, "");
@@ -298,22 +332,20 @@ namespace clou {
 
     std::vector<std::vector<int>> parents;
 
-    std::set<unsigned> waypoints_reached = waypoint_sets.front();
-    for (const std::set<unsigned>& T : waypoint_sets.drop_front()) {
-      auto& S = waypoints_reached; // Alias for waypoints_reached. When for-loop terminates, the vertices in
-      // `waypoints_reached` are definitely not S, but rather T.
+    std::set<unsigned> S = waypoint_sets.front();
+    std::vector<std::set<unsigned>> waypoints_reached;
+    for (int i = 0; const std::set<unsigned>& T : waypoint_sets.drop_front()) {
+      waypoints_reached.push_back(S);
       
       std::vector<int>& parent = parents.emplace_back(n, -1);
       llvm::BitVector visited(n, false);
-      std::queue<unsigned> queue;
+      std::stack<unsigned> queue;
       for (auto s : S)
 	queue.push(s);
 
-      // NOTE: It looks like this loop correctly handles the case when s = t.
-      // I should rewrite the algorithm to handle this edge case natively without having to
-      // rewrite the graph, since I'm not sure if that trick will work so easily for 3+ waypoint s-t paths.
+      // Find all the nodes reachable from each s \in S. 
       while (!queue.empty()) {
-	const unsigned u = queue.front();
+	const unsigned u = queue.top();
 	queue.pop();
 	for (const auto& [v, w] : G[u]) {
 	  if (visited.test(v))
@@ -327,31 +359,29 @@ namespace clou {
       // Copy over the vertices that were reached. 
       S.clear();
       llvm::copy_if(T, std::inserter(S, S.end()), [&visited] (unsigned t) -> bool { return visited.test(t); });
-      
     }
+    waypoints_reached.push_back(S);
 
-    if (waypoints_reached.empty())
+    if (S.empty()) {
       // No multi-s-t path was found.
       return false;
+    }
     
     // Find multi-s-t path.
-    const unsigned terminal_t = *waypoints_reached.begin();
-    path.push_back(terminal_t);
-
-    for (unsigned t = terminal_t;
-	 const auto& [parent, waypoint_set] :
-	   llvm::reverse(llvm::zip(parents, llvm::ArrayRef(waypoint_sets).drop_back()))) {
-      assert(path.back() == t);
-      int v = static_cast<int>(t);
-      while (true) {
-	v = parent[v];
-	assert(v >= 0);
-	path.push_back(v);
-	if (waypoint_set.contains(v))
-	  break;
+    {
+      unsigned t = *waypoints_reached.back().begin();
+      for (const auto& [parent, waypoint_set] : llvm::reverse(llvm::zip(parents, llvm::ArrayRef(waypoints_reached).drop_back()))) {
+	int v = static_cast<int>(t);
+	while (true) {
+	  path.push_back(v);
+	  v = parent[v];
+	  assert(v >= 0);
+	  if (waypoint_set.contains(v))
+	    break;
+	}
+	t = v;
       }
-      t = v;
-      assert(path.back() == t);
+      path.push_back(t);
     }
 
     std::reverse(path.begin(), path.end());
@@ -372,6 +402,23 @@ namespace clou {
       for (const auto& [v, w] : G[u])
 	if (w > 0)
 	  stack.push(v);
+    }
+    return reach;
+  }
+
+  template <class GraphT>
+  static llvm::BitVector find_reachable(const GraphT& G, unsigned s) {
+    llvm::BitVector reach(G.nodes(), false);
+    std::stack<unsigned> todo;
+    todo.push(s);
+    while (!todo.empty()) {
+      const unsigned u = todo.top();
+      todo.pop();
+      if (reach.test(u))
+	continue;
+      reach.set(u);
+      for (const auto& [v, w] : G[u])
+	todo.push(v);
     }
     return reach;
   }
@@ -598,6 +645,40 @@ namespace clou {
   using Weight = Graph::Weight;
 
   template <class GraphT>
+  static void printGraph(const std::string& filename, const GraphT& G, llvm::ArrayRef<std::set<unsigned>> waypoint_sets,
+			 const std::set<std::pair<Node, Node>>& cut = {}) {
+    std::ofstream f(filename);
+    llvm::raw_os_ostream os(f);
+    os << "digraph {\n";
+
+    const std::string colors[] = {"green", "yellow", "red"};
+
+    // Define nodes.
+    for (unsigned u = 0; u < G.nodes(); ++u) {
+      os << "node" << u << " [label=\"" << u << "\"";
+      const auto waypoint_it = llvm::find_if(waypoint_sets, [&] (const auto& waypoint_set) {
+	return waypoint_set.contains(u);
+      });
+      if (waypoint_it != waypoint_sets.end()) {
+	os << ", fillcolor=" << colors[waypoint_it - waypoint_sets.begin()] << ", style=filled, fontcolor=black";
+      }
+      os << "];\n";
+    }
+
+    // Define edges.
+    for (unsigned u = 0; u < G.nodes(); ++u) {
+      for (const auto& [v, w] : G[u]) {
+	os << "node" << u << " -> node" << v << " [label=\"" << w << "\"";
+	if (cut.contains({u, v}))
+	  os << ", color=red";
+	os << "];\n";
+      }
+    }
+
+    os << "}\n";
+  }
+
+  template <class GraphT>
   static void ford_fulkerson_multi_impl(const GraphT& G, llvm::ArrayRef<std::set<unsigned>> waypoint_sets,
 					std::vector<std::pair<Node, Node>>& results) {
     constexpr unsigned MAX_WEIGHT = std::numeric_limits<unsigned>::max();
@@ -621,19 +702,54 @@ namespace clou {
       path.clear();
     }
 
+#if 0
+    printGraph("residual.dot", ResG, waypoint_sets);
+#endif
+
+    // NOTE: This is suspicious. I think we need to rewrite this for the multi-s-t case.
+#if 0
     {
       const auto& S = waypoint_sets.front();
-      const auto& T = waypoint_sets.back();
-      const llvm::BitVector reach = find_reachable_multi(ResG, S);
+      const IntersectUnitGraph IntersectG(&G, &ResG);
+      const llvm::BitVector reach = find_reachable_multi(IntersectG, S);
       for (const unsigned u : reach.set_bits()) {
-	// FIXME: Is this assertion useful?
-	assert(!T.contains(u));
 	for (const auto& [v, _] : G[u]) {
 	  if (!reach.test(v))
 	    results.emplace_back(u, v);
 	}
       }
     }
+#elif 0
+    {
+      for (const auto& S : waypoint_sets.drop_back()) {
+	for (const Node s : S) {
+	  // TODO: Do all these S's together?
+	  const llvm::BitVector reach = find_reachable(ResG, s);
+	  for (const Node u : reach.set_bits())
+	    for (const auto& [v, w] : G[u])
+	      if (!reach.test(v))
+		results.emplace_back(u, v);
+	}
+      }
+    }
+#else
+    {
+      for (const auto& S : waypoint_sets.drop_back()) {
+	const llvm::BitVector reach = find_reachable_multi(ResG, S);
+	for (const Node u : reach.set_bits())
+	  for (const auto& [v, w] : G[u])
+	    if (!reach.test(v))
+	      results.emplace_back(u, v);
+      }
+    }
+#endif
+
+#if 0
+    {
+      const IntersectUnitGraph IntersectG(&G, &ResG);
+      printGraph("intersect.dot", IntersectG, waypoint_sets);
+    }
+#endif
   }
 
   std::vector<std::pair<unsigned, unsigned>>
@@ -659,6 +775,7 @@ namespace clou {
     }
 
     llvm::sort(results);
+#if 0
 #ifndef NDEBUG
     if (results.size() >= 2) {
       llvm::ArrayRef<std::pair<Node, Node>> results_ref(results);
@@ -666,6 +783,7 @@ namespace clou {
 	if (p1 == p2)
 	  llvm::WithColor::warning() << "duplicate cut edges\n";
     }
+#endif
 #endif
     {
       const auto new_results_end = std::unique(results.begin(), results.end());

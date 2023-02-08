@@ -320,11 +320,12 @@ namespace clou {
       }
     }
 
-    void getFrontierBwd(llvm::Instruction *root, const std::set<llvm::Value *>& targets, std::set<llvm::Instruction *>& out) {
+    void getFrontierBwd(llvm::Instruction *root, const std::set<llvm::Instruction *>& targets, std::set<llvm::Instruction *>& out) {
       const bool hasArg = llvm::any_of(targets, [] (const llvm::Value *V) { return llvm::isa<llvm::Argument>(V); });
       std::stack<llvm::Instruction *> todo;
       std::set<llvm::Instruction *> seen;
       todo.push(root);
+      assert(!targets.contains(root));
 
       while (!todo.empty()) {
 	llvm::Instruction *I = todo.top();

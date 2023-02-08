@@ -32,6 +32,11 @@ namespace clou {
       template <typename... Ts> IdxST(Ts&&... args): waypoints(std::forward<Ts>(args)...) {}
       auto operator<=>(const IdxST&) const = default;
     };
+    struct IdxEdge {
+      Idx src, dst;
+      auto operator<=>(const IdxEdge& o) const = default;
+    };    
+    using IdxGraph = std::vector<std::map<Idx, Weight>>;
     
   public:
 
@@ -66,7 +71,6 @@ namespace clou {
 	assert(idx < nodes.size());
 	return nodes[idx];
       };
-      using IdxGraph = std::vector<std::map<Idx, Weight>>;
 
       // Get index graph.
       IdxGraph G(nodes.size());
@@ -89,11 +93,6 @@ namespace clou {
 	}
       }
 
-      struct IdxEdge {
-	Idx src, dst;
-	auto operator<=>(const IdxEdge& o) const = default;
-      };
-
       bool changed;
       using Cuts = std::vector<std::vector<IdxEdge>>;
       using CutsHistory = std::set<Cuts>;
@@ -107,6 +106,7 @@ namespace clou {
 	changed = false;
 
 	for (const auto& [st, cut] : llvm::zip(sts, cuts)) {
+	  
 	  // Add old cut edges back in to graph.
 	  const std::vector<IdxEdge> oldcut = std::move(cut);
 	  for (const IdxEdge& e : oldcut) {
@@ -122,6 +122,14 @@ namespace clou {
 	    return {.src = p.first, .dst = p.second};
 	  });
 
+#if CHECK_CUTS
+	  {
+	    std::set<IdxEdge> cutset;
+	    llvm::copy(newcut, std::inserter(cutset, cutset.end()));
+	    checkCutST(st.waypoints, cutset, G);
+	  }
+#endif
+
 	  // Remove new cut edges from G.
 	  for (const IdxEdge& e : newcut) {
 	    assert(G.at(e.src).find(e.dst) != G.at(e.src).end());
@@ -135,13 +143,31 @@ namespace clou {
 
 	  // Update cut.
 	  cut = std::move(newcut);
+
+#if CHECK_CUTS
+	  {
+	    std::set<IdxEdge> cutset;
+	    for (const auto& cutvec : cuts)
+	      llvm::copy(cutvec, std::inserter(cutset, cutset.end()));
+	    checkCutST(st.waypoints, cutset, OrigG);
+	  }
+#endif	  
 	}
 
-	if (changed)
-	  changed = cuts_hist.insert(cuts).second;
+	if (changed) {
+	  if (!cuts_hist.insert(cuts).second) {
+	    llvm::WithColor::warning() << "detected loop in min-cut algorithm\n";
+	    break;
+	  }
+	}
 	
       } while (changed);
       llvm::errs() << "\n";
+
+#if CHECK_CUTS
+      checkCut(cuts, sts, OrigG);
+#endif
+      
 
       // Now add all cut edges to master copy.
       for (const auto& cut : cuts)
@@ -151,6 +177,62 @@ namespace clou {
     
   private:
     using EdgeSet = std::set<Edge>;
+
+    static void checkCutST(llvm::ArrayRef<std::set<unsigned>> st, const std::set<IdxEdge>& cut, const IdxGraph& G) {
+      assert(st.size() >= 2);
+      const auto succs = [&] (unsigned u) {
+	std::set<unsigned> succs;
+	for (const auto& [v, w] : G.at(u)) {
+	  assert(w > 0);
+	  const IdxEdge e = {.src = u, .dst = v};
+	  if (!cut.contains(e))
+	    succs.insert(v);
+	}
+	return succs;
+      };
+
+      std::vector<std::set<unsigned>> particles;
+      std::vector<std::map<unsigned, unsigned>> parents;
+      std::set<unsigned> S = st.front();
+      for (const std::set<unsigned>& T : st.drop_front()) {
+	auto& parent = parents.emplace_back();
+	particles.push_back(S);
+
+	// Find all nodes reachable from S.
+	std::set<unsigned> reach;
+	std::stack<unsigned> todo;
+	for (unsigned u : S)
+	  todo.push(u);
+
+	while (!todo.empty()) {
+	  const unsigned u = todo.top();
+	  todo.pop();
+	  for (unsigned v : succs(u)) {
+	    if (reach.insert(v).second) {
+	      todo.push(v);
+	      parent[v] = u;
+	    }
+	  }
+	}
+
+	S.clear();
+	std::set_intersection(T.begin(), T.end(), reach.begin(), reach.end(), std::inserter(S, S.end()));
+      }
+      particles.push_back(S);
+      
+      if (!S.empty()) {
+	llvm::WithColor::error() << "found s-t path in MinCutGreedy\n";
+	std::abort();
+      }
+    }
+
+    static void checkCut(llvm::ArrayRef<std::vector<IdxEdge>> cut, llvm::ArrayRef<IdxST> sts, const IdxGraph& G) {
+      std::set<IdxEdge> cutset;
+      for (const auto& cutvec : cut)
+	llvm::copy(cutvec, std::inserter(cutset, cutset.end()));
+      for (const IdxST& st : sts)
+	checkCutST(st.waypoints, cutset, G);
+    }
 
     static llvm::BitVector bvand(const llvm::BitVector& a, const llvm::BitVector& b) {
       llvm::BitVector res = a;
