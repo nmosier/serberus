@@ -39,16 +39,249 @@ namespace clou {
       auto operator<=>(const IdxEdge& o) const = default;
     };    
     using IdxGraph = std::vector<std::map<Idx, Weight>>;
+
+    /* This optimization removes all the unreachable nodes in an s-t list.
+     * Requires a follow-up pass to remove s-t lists containing an empty set.
+     */
+    bool optimize_sts_cull_unreachables(ST& st_) const {
+      auto& G = this->G;
+      size_t removed = 0;
+      auto& st = st_.waypoints;
+      for (auto S_it = st.begin(), T_it = std::next(S_it); T_it != st.end(); ++S_it, ++T_it) {
+	const auto& S = *S_it;
+	auto& T = *T_it;
+
+	// Compute reach of S.
+	std::stack<Node> todo;
+	for (const Node& s : S)
+	  todo.push(s);
+	std::set<Node> reach;
+	while (!todo.empty()) {
+	  const Node u = todo.top();
+	  todo.pop();
+	  for (const auto& [v, w] : G[u])
+	    if (reach.insert(v).second)
+	      todo.push(v);
+	}
+
+	// Remove any t's that aren't reached.
+	removed += std::erase_if(T, [&reach] (const Node& v) {
+	  return !reach.contains(v);
+	});
+      }
+      return removed > 0;
+    }
+
+    bool optimize_sts_cull_sources(ST& st_) const {
+      auto& G = this->G;
+      bool changed = false;
+      auto& st = st_.waypoints;
+      for (auto S_it = st.begin(), T_it = std::next(S_it); T_it != st.end(); ++S_it, ++T_it) {
+	auto& S = *S_it;
+	const auto& T = *T_it;
+
+	// Compute reach of each s \in S.
+	for (auto s_it = S.begin(); s_it != S.end(); ) {
+	  std::stack<Node> todo;
+	  todo.push(*s_it);
+	  std::set<Node> reach;
+	  while (!todo.empty()) {
+	    const Node u = todo.top();
+	    todo.pop();
+	    for (const auto& [v, w] : G[u]) {
+	      if (S.contains(v) && !T.contains(v))
+		continue;
+	      if (reach.insert(v).second)
+		todo.push(v);
+	    }
+	  }
+
+	  // If no t \in T is reached, then we can safely remove the source.
+	  const bool reached_T = llvm::any_of(T, [&reach] (const Node& t) {
+	    return reach.contains(t);
+	  });
+	  if (reached_T) {
+	    ++s_it;
+	  } else {
+	    s_it = S.erase(s_it);
+	    changed = true;
+	  }
+	}
+      }
+
+      return changed;
+    }
+
+
+    // TODO: optimize_sts_cull_sinks -- similar to *_soures
+
+    bool optimize_sts_remove_emptyset(std::vector<ST>& sts) const {
+      const auto in_size = sts.size();
+      for (auto it = sts.begin(); it != sts.end(); ) {
+	const bool has_emptyset = llvm::any_of(it->waypoints, [] (const auto& s) {
+	  return s.empty();
+	});
+	if (has_emptyset)
+	  it = sts.erase(it);
+	else
+	  ++it;
+      }
+      const auto out_size = sts.size();
+      return in_size != out_size;
+    }
+
+    
+
+    bool optimize_sts_remove_redundant_internal_st(ST& st_) const {
+      auto& st = st_.waypoints;
+      auto& G = this->G;
+
+      bool changed = false;
+
+      // Check if there's a path from A to C without hitting B.
+      auto B_it = std::next(st.begin());
+      while (std::distance(B_it, st.end()) > 1) {
+	const auto A_it = std::prev(B_it);
+	const auto C_it = std::next(B_it);
+
+	// Check if there's a path from A to C without hitting B.
+	std::stack<Node> todo;
+	for (const Node& a : *A_it)
+	  todo.push(a);
+	std::set<Node> reach;
+	while (!todo.empty()) {
+	  const Node u = todo.top();
+	  todo.pop();
+	  for (const auto& [v, w] : G[u])
+	    if (!B_it->contains(v) && reach.insert(v).second)
+	      todo.push(v);
+	}
+
+	// If no c \in C is reached, then there exists no path directly from A to C. Therefore we can remove B entirely.
+	const bool no_AC_path = llvm::none_of(*C_it, [&] (const Node& v) {
+	  return reach.contains(v);
+	});
+	if (no_AC_path) {
+	  B_it = st.erase(B_it);
+	  changed = true;
+	} else {
+	  ++B_it;
+	}
+      }
+
+      return changed;
+    }
+
+    bool optimize_sts_remove_duplicates(std::vector<ST>& sts) const {
+      const auto in_size = sts.size();
+      llvm::sort(sts);
+      sts.resize(std::unique(sts.begin(), sts.end()) - sts.begin());
+      const auto out_size = sts.size();
+      return in_size != out_size;
+    }
+
+    bool optimize_st_nop(ST& st) const { return false; }
+    bool optimize_sts_nop(std::vector<ST>& sts) const { return false; }
+
+    void optimize_sts(const std::vector<ST>& in_sts, std::vector<ST>& out_sts) const {
+      out_sts = in_sts;
+
+      typedef bool (MinCutGreedy::*optimize_st_t)(ST&) const;
+      typedef bool (MinCutGreedy::*optimize_sts_t)(std::vector<ST>&) const;
+      
+      optimize_st_t local_opts[] = {
+	&MinCutGreedy::optimize_st_nop,
+	&MinCutGreedy::optimize_sts_cull_unreachables,
+	&MinCutGreedy::optimize_sts_cull_sources,
+	// &MinCutGreedy::optimize_sts_remove_redundant_internal_st
+      };
+
+      optimize_sts_t global_opts[] = {
+	&MinCutGreedy::optimize_sts_nop,
+	&MinCutGreedy::optimize_sts_remove_emptyset,
+	&MinCutGreedy::optimize_sts_remove_duplicates,
+      };
+
+      const auto compute_size = [&] (const std::vector<ST>& sts) -> size_t {
+	size_t count = 0;
+	for (const ST& st : sts)
+	  for (const auto& p : st.waypoints)
+	    count += p.size();
+	return count;
+      };
+
+      const size_t in_size = compute_size(out_sts);
+      
+      bool changed;
+      do {
+	changed = false;
+	for (optimize_st_t local_opt : local_opts)
+	  for (ST& st : out_sts)
+	    changed |= (this->*local_opt)(st);
+	for (optimize_sts_t global_opt : global_opts)
+	  changed |= (this->*global_opt)(out_sts);
+      } while (changed);
+
+      // Expand them [DEBUG]
+      if (false) {
+	out_sts.clear();
+	for (const ST& oldst : in_sts) {
+	  if (llvm::any_of(oldst.waypoints, [] (const auto& s) { return s.empty(); }))
+	    continue;
+	  using iterator = std::set<Node>::iterator;
+	  std::vector<iterator> stack;
+	  for (const auto& s : oldst.waypoints)
+	    stack.push_back(s.begin());
+	  unsigned count = 0;
+	  while (true) {
+	    ST& newst = out_sts.emplace_back();
+	    for (iterator it : stack)
+	      newst.waypoints.push_back(std::set<Node>{*it});
+	    ++count;
+	    unsigned i = 0;
+	    while (i < stack.size()) {
+	      auto& it = stack[i];
+	      assert(it != oldst.waypoints[i].end());
+	      ++it;
+	      if (it == oldst.waypoints[i].end()) {
+		it = oldst.waypoints[i].begin();
+		++i;
+	      } else {
+		break;
+	      }
+	    }
+	    if (i == stack.size())
+	      break;
+	  }
+	  unsigned sizes = 1;
+	  for (const auto& s : oldst.waypoints)
+	    sizes *= s.size();
+	  assert(count == sizes);
+	}
+      }
+      
+      const size_t out_size = compute_size(out_sts);
+      
+      llvm::errs() << "reduced sts: " << in_size << " to " << out_size << "\n";
+    }
     
   public:
 
     void run() override {
+#if 0
       // sort and de-duplicate sts
       {
 	const std::set<ST> st_set(this->sts.begin(), this->sts.end());
 	this->sts.resize(st_set.size());
 	llvm::copy(st_set, this->sts.begin());
       }
+#else
+      {
+	std::vector<ST> opt_sts;
+	optimize_sts(this->sts, opt_sts);
+	this->sts = std::move(opt_sts);
+      }
+#endif
 
       llvm::errs() << "min-cut on " << getNodes().size() << " nodes\n";
 
@@ -172,6 +405,20 @@ namespace clou {
 	    mode = Mode::Augment;
 	  }
 	}
+
+	// Double-check there're no redundant edges, since this should never happen.
+#ifndef NDEBUG
+	{
+	  std::vector<IdxEdge> cutset;
+	  for (const auto& cutvec : cuts)
+	    llvm::copy(cutvec, std::back_inserter(cutset));
+	  llvm::sort(cutset);
+	  const auto orig_size = cutset.size();
+	  std::unique(cutset.begin(), cutset.end());
+	  const auto uniq_size = cutset.size();
+	  assert(orig_size == uniq_size);
+	}
+#endif
 	
       } while (changed);
       llvm::errs() << "\n";
