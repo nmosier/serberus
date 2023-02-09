@@ -63,6 +63,102 @@ namespace clou {
     const std::vector<Dsts>& G;
   };
 
+  #if 0
+  template <class BaseGraph>
+  class DupGraph final : public ImmutableGraph {
+  public:
+    using Level = unsigned;
+    
+    DupGraph(const BaseGraph *orig, Level levels): G(*orig), levels(levels) {
+      assert(levels >= 1);
+    }
+
+    unsigned nodes() const override {
+      return G.nodes() * levels;
+    }
+
+  private:
+    using base_iterator = typename BaseGraph::iterator;
+    using base_range_type = typename BaseGraph::range_type;
+  public:
+    class iterator {
+    private:
+      llvm::iterator_range<base_iterator> real;
+      base_iterator it;
+      Level level;
+      unsigned nodes;
+    public:
+      iterator(): real(base_iterator(), base_iterator()) {}
+      iterator(const llvm::iterator_range<base_iterator>& real, base_iterator it, Level level, unsigned nodes):
+	real(real), it(it), level(level), nodes(nodes) {}
+
+      const std::pair<const Node, Weight> operator*() const {
+	std::pair<Node, Weight> p = *it;
+	p.first += level * nodes;
+	return p;
+      }
+
+      iterator& operator++() {
+	assert(it != real.end());
+	++it;
+	if (it == real.end()) {
+	  ++level;
+	  it = real.begin();
+	}
+	return *this;
+      }
+
+      iterator& operator++(int) {
+	return this->operator++();
+      }
+
+      bool operator==(const iterator& o) const {
+	assert(real.begin() == o.real.begin() && real.end() == o.real.end() && nodes == o.nodes);
+	return it == o.it && level == o.level;
+      }
+
+      bool operator!=(const iterator& o) const {
+	return !this->operator==(o);
+      }
+    };
+
+    using range_type = llvm::iterator_range<iterator>;
+
+    range_type operator[](Node src) const {
+      assert(src / G.nodes() < levels);
+      const auto real = G[src % G.nodes()];
+      const iterator begin(real, real.begin(), 0, G.nodes());
+      const iterator end(real, real.begin(), levels, G.nodes());
+      if (real.empty())
+	return range_type(end, end);
+      else
+	return range_type(begin, end);
+    }
+
+    Weight get_weight(Node src, Node dst) const override {
+      return G.get_weight(src % G.nodes(), dst % G.nodes());
+    }
+
+    Node get_last_level_node(Node v) const {
+      assert(v / G.nodes() == 0);
+      return v + (levels - 1) * G.nodes();
+    }
+
+    Node get_first_level_node(Node v) const {
+      return v % G.nodes();
+    }
+
+    Node get_node_for_level(Node v, Level l) const {
+      assert(v < G.nodes());
+      assert(l < levels);
+      return v + G.nodes() * l;
+    }
+    
+  private:
+    const BaseGraph& G;
+    unsigned levels;
+  };
+#elif 0
   template <class BaseGraph>
   class DupGraph final : public ImmutableGraph {
     static_assert(std::is_base_of_v<Graph, BaseGraph>, "Base graph must be derived from Graph class");
@@ -156,6 +252,107 @@ namespace clou {
   private:
     const BaseGraph& G;
   };
+#else
+  template <class BaseGraph>
+  class DupGraph final : public ImmutableGraph {
+  public:
+    using Level = unsigned;
+  private:
+    const BaseGraph& G;
+    Level levels;
+  public:
+    DupGraph(const BaseGraph *orig, Level levels): G(*orig), levels(levels) {
+      assert(levels >= 1);
+    }
+
+    unsigned nodes() const override {
+      return G.nodes() * levels;
+    }
+    
+  private:
+    using base_iterator = typename BaseGraph::iterator;
+    using base_range_type = typename BaseGraph::range_type;
+  public:
+    class iterator {
+    private:
+      base_iterator it;
+      unsigned offset;
+    public:
+      iterator() = default;
+      iterator(base_iterator it, unsigned offset): it(it), offset(offset) {}
+
+      const std::pair<const Node, Weight> operator*() const {
+	std::pair<Node, Weight> p = *it;
+	p.first += offset;
+	return p;
+      }
+
+      iterator& operator++() {
+	++it;
+	return *this;
+      }
+
+      iterator& operator++(int) {
+	return this->operator++();
+      }
+
+      bool operator==(const iterator& o) const {
+	assert(offset == o.offset);
+	return it == o.it;
+      }
+
+      bool operator!=(const iterator& o) const {
+	return !operator==(o);
+      }
+
+      using iterator_category = typename base_iterator::iterator_category;
+    };
+
+    using range_type = llvm::iterator_range<iterator>;
+    
+  private:
+    Level get_level(Node v) const {
+      return v / G.nodes();
+    }
+
+    Node get_base(Node v) const {
+      return v % G.nodes();
+    }
+  public:
+    range_type operator[](Node src) const {
+      const auto range = G[get_base(src)];
+      const unsigned offset = get_level(src) * G.nodes();
+      const iterator begin(range.begin(), offset);
+      const iterator end(range.end(), offset);
+      return range_type(begin, end);
+    }
+
+    Weight get_weight(Node src, Node dst) const override {
+      if (get_level(src) == get_level(dst))
+	return G.get_weight(get_base(src), get_base(dst));
+      else
+	return 0;
+    }
+
+    Node get_first_level_node(Node v) const {
+      return v % G.nodes();
+    }
+
+    Node get_node_for_level(Node v, Level l) const {
+      assert(v < G.nodes());
+      return v + G.nodes() * l;
+    }
+
+    Node inc_level(Node v) const {
+      return get_node_for_level(v, get_level(v) + 1);
+    }
+
+    Node dec_level(Node v) const {
+      return get_node_for_level(v, get_level(v) - 1);
+    }
+  };
+  
+#endif
 
   template <class BaseGraph>
   class ScopedGraph final : public MutableGraph {
@@ -201,7 +398,7 @@ namespace clou {
       bool operator!=(const iterator& o) const {
 	return !operator==(o);
       }
-      
+
     private:
       bool orig;
       orig_iterator orig_it;
@@ -243,7 +440,12 @@ namespace clou {
       auto it = mod.find(src);
       if (it == mod.end()) {
 	it = mod.emplace(src, std::map<Node, Weight>()).first;
+#if 0
 	llvm::copy(orig[src], std::inserter(it->second, it->second.end()));
+#else
+	for (const auto& p : orig[src])
+	  it->second.insert(p);
+#endif
       }
       if (w > 0)
 	it->second[dst] = w;
@@ -346,8 +548,8 @@ namespace clou {
     for (int i = 0; const std::set<unsigned>& T : waypoint_sets.drop_front()) {
       waypoints_reached.push_back(S);
       
-      std::vector<int>& parent = parents.emplace_back(n, -1);
       llvm::BitVector visited(n, false);
+      std::vector<int>& parent = parents.emplace_back(n, -1);
       std::stack<unsigned> queue;
       for (auto s : S)
 	queue.push(s);
@@ -764,23 +966,46 @@ namespace clou {
   std::vector<std::pair<unsigned, unsigned>>
   ford_fulkerson_multi(const std::vector<std::map<unsigned, unsigned>>& G, llvm::ArrayRef<std::set<unsigned>> waypoint_sets) {
     const ImmutableVectorGraph OrigG(&G);
-    const DupGraph DupG(&OrigG);
-
+    const DupGraph DupG(&OrigG, waypoint_sets.size());
+    ScopedGraph ModG(&DupG); // For manually adding in connections from different levels.
+    
     // Need to replace last transmitters with their shadow nodes.
-    std::vector<std::set<unsigned>> waypoints_mod;
-    llvm::copy(waypoint_sets, std::back_inserter(waypoints_mod));
-    auto& T = waypoints_mod.back();
-    const auto OrigT = std::move(T);
-    for (Node t : OrigT)
-      T.insert(DupG.get_shadow_node(t));
+    std::vector<std::set<unsigned>> waypoints_mod(waypoint_sets.size());
+    for (unsigned i = 0; const auto& [in, out] : llvm::zip(waypoint_sets, waypoints_mod)) {
+      llvm::transform(in, std::inserter(out, out.end()), [&] (Node u) -> Node {
+	return DupG.get_node_for_level(u, i);
+      });
+
+      if (i > 0)
+	for (Node u = 0; u < OrigG.nodes(); ++u) {
+	  for (const auto& [v, w] : OrigG[u]) {
+	    if (in.contains(v)) {
+	      // Add level-up u->v edge.
+	      ModG.put_weight(DupG.get_node_for_level(u, i - 1),
+			      DupG.get_node_for_level(v, i),
+			      w);
+
+	      // Delete same-level u->v edge.
+	      ModG.put_weight(DupG.get_node_for_level(u, i - 1),
+			      DupG.get_node_for_level(v, i - 1),
+			      0);
+	    }
+	  }
+
+	}
+      
+      ++i;
+    }
+
+    // printGraph("graph.dot", DupG, waypoints_mod);
+
     std::vector<std::pair<Node, Node>> results;
-    ford_fulkerson_multi_impl(DupG, waypoints_mod, results);
+    ford_fulkerson_multi_impl(ModG, waypoints_mod, results);
 
     // Convert results back to real.
     for (auto& e : results) {
-      assert(!T.contains(e.first));
-      if (T.contains(e.second))
-	e.second = DupG.get_real_node(e.second);
+      e.first = DupG.get_first_level_node(e.first);
+      e.second = DupG.get_first_level_node(e.second);
     }
 
     llvm::sort(results);
