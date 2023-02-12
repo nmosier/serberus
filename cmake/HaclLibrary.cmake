@@ -72,4 +72,6 @@ function(hacl_library NAME)
   target_include_directories(${NAME} SYSTEM INTERFACE ${include_dirs})
   add_dependencies(${NAME} ${NAME}_so)
 
+  set_target_properties(${NAME} PROPERTIES CLOU_LOGS ${LOG_DIR})
+
 endfunction()
