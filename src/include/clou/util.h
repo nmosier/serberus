@@ -44,10 +44,12 @@ namespace clou {
 
       if (llvm::isa<llvm::Argument, llvm::LoadInst, llvm::CallBase>(V)) {
 	*out++ = V;
-      } else if (llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
-	for (llvm::Value *op : I->operands()) {
+      } else if (auto *PHI = llvm::dyn_cast<llvm::PHINode>(V)) {
+	for (llvm::Value *op : PHI->incoming_values())
 	  out = get_incoming_loads(op, out, seen);
-	}
+      } else if (llvm::Instruction *I = llvm::dyn_cast<llvm::Instruction>(V)) {
+	for (llvm::Value *op : I->operands())
+	  out = get_incoming_loads(op, out, seen);
       }
 
       return out;
@@ -439,7 +441,11 @@ namespace clou {
     }
 
     bool isConstantAddress(const llvm::Value *V);
-    bool isConstantAddressStore(const llvm::StoreInst *SI);
+    bool isConstantAddressStore(const llvm::Instruction *SI);
+    bool isGlobalAddress(const llvm::Value *V);
+    bool isGlobalAddressStore(const llvm::Instruction *SI);
+    bool isStackAddress(const llvm::Value *V);
+    bool isStackAccess(const llvm::Instruction *I);
 
     class ExtCallBase : public llvm::CallBase {
     public:

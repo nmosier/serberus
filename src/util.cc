@@ -146,9 +146,51 @@ namespace util {
     return isConstantAddress(LI);
   }
 
-  bool isConstantAddressStore(const llvm::StoreInst *SI) {
-    return isConstantAddress(SI->getPointerOperand());
+  bool isConstantAddressStore(const llvm::Instruction *SI) {
+    if (const llvm::Value *SA = getPointerOperand(SI))
+      return isConstantAddress(SA);
+    else
+      return false;
   }
+
+  static const llvm::Value *getBaseAddress(const llvm::Value *V) {
+    if (llvm::isa<llvm::Argument, llvm::LoadInst, llvm::CallBase, llvm::GlobalVariable, llvm::AllocaInst>(V)) {
+      return V;
+    } else if (const auto *GEP = llvm::dyn_cast<llvm::GetElementPtrInst>(V)) {
+      return getBaseAddress(GEP->getPointerOperand());
+    } else if (const auto *GEP = llvm::dyn_cast<llvm::GEPOperator>(V)) {
+      return getBaseAddress(GEP->getPointerOperand());
+    } else if (const auto *BC = llvm::dyn_cast<llvm::BitCastInst>(V)) {
+      return getBaseAddress(BC->getOperand(0));
+    } else if (const auto *BC = llvm::dyn_cast<llvm::BitCastOperator>(V)) {
+      return getBaseAddress(BC->getOperand(0));
+    } else {
+      unhandled_value(*V);
+    }
+  }
+
+  bool isGlobalAddress(const llvm::Value *V) {
+    return llvm::isa<llvm::GlobalVariable>(getBaseAddress(V));
+  }
+
+  bool isGlobalAddressStore(const llvm::Instruction *SI) {
+    if (const llvm::Value *SA = getPointerOperand(SI))
+      return isGlobalAddress(SA);
+    else
+      return false;
+  }
+
+  bool isStackAddress(const llvm::Value *V) {
+    return llvm::isa<llvm::AllocaInst>(getBaseAddress(V));
+  }
+
+  bool isStackAccess(const llvm::Instruction *I) {
+    if (const auto *A = getPointerOperand(I))
+      return isStackAddress(A);
+    else
+      return false;
+  }
+  
 }
 
 }

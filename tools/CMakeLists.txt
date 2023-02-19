@@ -4,7 +4,7 @@ add_executable(ssbd
   ssbd.c
 )
 
-add_library(trace_runtime SHARED
+add_library(trace_runtime STATIC
   trace_runtime.cc
 )
 target_link_libraries(trace_runtime PRIVATE ${Libunwind_LIBRARIES})

@@ -10,6 +10,7 @@
 #include <variant>
 #include <iomanip>
 #include <csignal>
+#include <cstdlib>
 
 #include <llvm/Analysis/AliasAnalysis.h>
 #include <llvm/Analysis/CallGraph.h>
@@ -52,12 +53,46 @@ namespace clou {
 
     extern "C" void ProfilerStart(const char *);
     extern "C" void ProfilerStop(void);
+    static bool profile_active = false;
+    static struct sigaction oldact;
     __attribute__((constructor)) static void profile_start(void) {
-      ProfilerStart("tmp.prof");
+      if (const char *s = std::getenv("PROFDIR")) {
+	char *path;
+	const char *suffix = ".prof";
+	if (asprintf(&path, "%s/XXXXXX%s", s, suffix) < 0)
+	  err(EXIT_FAILURE, "asprintf");
+	const int fd = mkstemps(path, std::strlen(suffix));
+	if (fd < 0)
+	  err(EXIT_FAILURE, "mkstemp: %s", path);
+	close(fd);	
+	ProfilerStart(path);
+	std::free(path);
+	profile_active = true;
+      } else if (const char *s = std::getenv("PROF")) {
+	ProfilerStart(s);
+	profile_active = true;
+      }
+
+      if (profile_active) {
+	struct sigaction act;
+	act.sa_sigaction = [] (int sig, siginfo_t *si, void *uc) {
+	  ProfilerStop();
+	  if ((oldact.sa_flags & SA_SIGINFO))
+	    oldact.sa_sigaction(sig, si, uc);
+	  else
+	    oldact.sa_handler(sig);
+	};
+	act.sa_flags = SA_SIGINFO;
+	sigemptyset(&act.sa_mask);
+	sigaction(SIGINT, &act, &oldact);
+      }
     }
 
     __attribute__((destructor)) static void profile_stop(void) {
-      ProfilerStop();
+      if (profile_active) {
+	ProfilerStop();
+	profile_active = false;
+      }
     }
     
 
@@ -109,20 +144,21 @@ namespace clou {
       auto operator<=>(const Node&) const = default;
     };
 
+    llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const Node& v) {
+      return os << *v.V;
+    }
+
+    std::ostream& operator<<(std::ostream& os, const Node& v) {
+      llvm::raw_os_ostream os_(os);
+      os_ << v;
+      return os;
+    }
+
     struct NodeHash {
       auto operator()(const Node& n) const {
 	return llvm::hash_value(n.V);
       }
     };
-
-    llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const Node& node) {
-      return os << *node.V;
-    }
-    std::ostream& operator<<(std::ostream& os_, const Node& node) {
-      llvm::raw_os_ostream os(os_);
-      os << node;
-      return os_;
-    }
 
     using Alg = MinCutGreedy<Node>;
     using Edge = Alg::Edge;
@@ -236,6 +272,9 @@ namespace clou {
     }
     
     static void checkCut(llvm::ArrayRef<ST> sts, const std::set<Edge>& cutset, llvm::Function& F) {
+      if (const char *s = std::getenv("NOCHECKCUT"))
+	if (std::string(s) == "1")
+	  return;
       for (const ST& st : sts)
 	checkCutST(st.waypoints, cutset, F);
     }
@@ -302,11 +341,20 @@ namespace clou {
 	}	
       }
 
-      static unsigned compute_edge_weight(llvm::Instruction *src, llvm::Instruction *dst, const llvm::DominatorTree& DT, const llvm::LoopInfo& LI) {
+      static unsigned compute_edge_weight([[maybe_unused]] llvm::Instruction *src, llvm::Instruction *dst, [[maybe_unused]] const llvm::DominatorTree& DT, const llvm::LoopInfo& LI) {
 	if (WeightGraph) {
 	  float score = 1.;
+#if 1
 	  const unsigned LoopDepth = std::min(instruction_loop_nest_depth(src, LI), instruction_loop_nest_depth(dst, LI));
+# if 0
 	  const unsigned DomDepth = std::max(instruction_dominator_depth(src, DT), instruction_dominator_depth(dst, DT));
+# else
+	  const unsigned DomDepth = 1;
+# endif
+#else
+	  const unsigned LoopDepth = instruction_loop_nest_depth(dst, LI);
+	  const unsigned DomDepth = instruction_dominator_depth(dst, DT);
+#endif
 	  score *= pow(LoopDepth + 1, LoopWeight);
 	  score *= 1. / pow(DomDepth + 1, DominatorWeight);
 	  return score * 1000;
@@ -386,9 +434,10 @@ namespace clou {
 	    auto *I = todo.top();
 	    todo.pop();
 	    for (auto *pred : llvm::predecessors(I))
-	      if (reach.insert(I).second)
+	      if (reach.insert(pred).second)
 		todo.push(pred);
 	  }
+	  assert(reach.contains(&I->getFunction()->front().front()));
 	}
 
 	// compute candidate sources
@@ -401,6 +450,7 @@ namespace clou {
 	  } else if (llvm::isa<llvm::Argument>(op_V)) {
 	    auto *EntryInst = &I->getFunction()->front().front();
 	    assert(I != EntryInst);
+	    assert(reach.contains(EntryInst));
 	    sources.insert(EntryInst);
 	  } else {
 	    unhandled_value(*op_V);
@@ -419,6 +469,12 @@ namespace clou {
 	  }
 	}
 
+	// Type 3: Calls.
+	for (auto *I : reach)
+	  if (auto *C = llvm::dyn_cast<llvm::CallBase>(I))
+	    if (!ignoreCall(C))
+	      sources.insert(C);
+	
 	std::erase_if(sources, [&reach] (llvm::Instruction *I) {
 	  return !reach.contains(I);
 	});
@@ -426,6 +482,7 @@ namespace clou {
 	// Also do backward frontier
 	std::set<llvm::Instruction *> actual_sources;
 #if 0
+	// We will hopefully do this in the ST optimizations in MinCut.
 	util::getFrontierBwd(I, sources, actual_sources);
 #else
 	actual_sources = std::move(sources);
@@ -603,9 +660,9 @@ namespace clou {
 	/* Stats */
 	llvm::json::Object log;
 
-	CountStat stat_ncas_load(log, "sts_ncas_cal");
+	CountStat stat_ncas_xmit(log, "sts_ncas_xmit");
 	CountStat stat_ncas_ctrl(log, "sts_ncas_ctrl");
-	CountStat stat_st_udts(log, "sts_udt");
+	CountStat stat_ncal_xmit(log, "sts_ncal_xmit");
 	CountStat stat_instructions(log, "instructions", std::distance(llvm::inst_begin(F), llvm::inst_end(F)));
 	CountStat stat_nonspec_secrets(log, "maybe_nonspeculative_secrets",
 				       llvm::count_if(llvm::instructions(F), [&] (auto& I) { return NST.secret(&I); }));
@@ -722,6 +779,16 @@ namespace clou {
 	  });
 	  return nodes;
 	};
+
+	std::map<llvm::Instruction *, std::set<llvm::Instruction *>> sources_map;
+	const auto get_sources = [&] (llvm::Instruction *ncal) -> const std::set<llvm::Instruction *>& {
+	  auto it = sources_map.find(ncal);
+	  if (it == sources_map.end()) {
+	    auto sources = getSourcesForNCAAccess(ncal, nca_pub_stores);
+	    it = sources_map.emplace(ncal, std::move(sources)).first;
+	  }
+	  return it->second; 
+	};	
 	
 	if (enabled.ncas_xmit) {
 
@@ -772,7 +839,9 @@ namespace clou {
 		xmits.insert(T);
 	    }
 
-	    A.add_st(std::set<Node>{SI}, xmits);
+	    const auto& sources = get_sources(SI);
+	    A.add_st(make_node_set(sources), std::set<Node>{SI}, xmits);
+	    ++stat_ncas_xmit;
 	  }
 
 	}
@@ -793,57 +862,154 @@ namespace clou {
 #endif
 	    }
 	  }
+#elif 0
+	  const auto ncas_range = llvm::concat<llvm::StoreInst * const>(nca_nt_sec_stores, nca_t_sec_stores);
+	  for (llvm::StoreInst *ncas : ncas_range) {
+	    const auto& sources = get_sources(ncas);
+	    A.add_st(make_node_set(sources), std::set<Node>{ncas}, make_node_set(ctrls));
+	    ++stat_ncas_ctrl;
+	  }
 #else
-	  const auto ncas = llvm::concat<llvm::StoreInst * const>(nca_nt_sec_stores, nca_t_sec_stores);
-	  A.add_st(make_node_set(ncas), make_node_set(ctrls));
+	  A.add_st(make_node_set(llvm::concat<llvm::StoreInst * const>(nca_nt_sec_stores, nca_t_sec_stores)),
+		   make_node_set(ctrls));
+	  
 #endif
 	}
 
 	if (enabled.ncal_xmit) {
-
-	  std::map<llvm::Instruction *, std::set<llvm::Instruction *>> sources_map;
-	  const auto get_sources = [&] (llvm::Instruction *ncal) -> const std::set<llvm::Instruction *>& {
-	    auto it = sources_map.find(ncal);
-	    if (it == sources_map.end()) {
-	      auto sources = getSourcesForNCAAccess(ncal, nca_pub_stores);
-	      it = sources_map.emplace(ncal, std::move(sources)).first;
-	    }
-	    return it->second; 
-	  };
 
 	  // Create ST-pairs for {source X transmitter}
 	  for (const auto& [xmit, xmit_ops] : transmitters) {
 	    std::set<llvm::Instruction *> ncals;
 	    for (llvm::Instruction *xmit_op : xmit_ops)
 	      llvm::copy(ST.taints.at(xmit_op), std::inserter(ncals, ncals.end()));
-#if 0
-	    A.add_st(make_node_set(ncals), std::set<Node>{xmit});
-#else
 	    for (llvm::Instruction *ncal : ncals) {
 	      if (ncal == &ncal->getFunction()->front().front()) {
 		A.add_st(std::set<Node>{ncal}, std::set<Node>{xmit});
+		++stat_ncal_xmit;
 	      } else {
 		const auto& sources = get_sources(ncal);
-#if 1
 		A.add_st(make_node_set(sources), std::set<Node>{ncal}, std::set<Node>{xmit});
-#elif 0
-		for (llvm::Instruction *source : sources)
-		  A.add_st({{source}, {ncal}, {xmit}});
-#else
-		auto it = sources.begin();
-		while (it != sources.end()) {
-		  std::set<Node> s;
-		  s.insert(*it++);
-		  if (it != sources.end())
-		    s.insert(*it++);
-		  A.add_st(s, std::set<Node>{ncal}, std::set<Node>{xmit});
-		}
-#endif
+		++stat_ncal_xmit;
 	      }
 	    }
-#endif
 	  }
 	  
+	}
+
+	if (enabled.ncal_glob) {
+
+	  for (llvm::StoreInst& SI : util::instructions<llvm::StoreInst>(F)) {
+	    llvm::Value *SV = SI.getValueOperand();
+	    if (util::isConstantAddressStore(&SI) && util::isGlobalAddressStore(&SI) && !NST.secret(SV) && ST.secret(SV)) {
+	      for (llvm::Instruction *LI : ST.taints.at(llvm::cast<llvm::Instruction>(SV))) {
+		A.add_st(std::set<Node>{LI}, std::set<Node>{&SI});
+	      }
+	    }
+	  }
+	  
+	}
+
+	if (enabled.load_xmit) {
+
+#if 1
+
+	  // {load} x {dependent transmitters}
+	  for (llvm::Instruction& xmit : llvm::instructions(F)) {
+	    std::set<llvm::Instruction *> sources;
+	    for (const auto& [kind, xmit_op] : get_transmitter_sensitive_operands(&xmit))
+	      for (llvm::Value *SourceV : get_incoming_loads(xmit_op))
+		if (auto *LI = llvm::dyn_cast<llvm::LoadInst>(SourceV))
+		  sources.insert(LI);
+	    A.add_st(make_node_set(sources), std::set<Node>{&xmit});
+	  }
+
+	  // {call} x {transmitters}
+	  {
+	    std::set<llvm::Instruction *> xmits;
+	    std::set<llvm::CallBase *> calls;
+	    for (llvm::Instruction& xmit : llvm::instructions(F)) 
+	      for (const auto& [kind, xmit_op] : get_transmitter_sensitive_operands(&xmit))
+		if (!llvm::isa<llvm::Constant>(xmit_op)) // Could also check if it's defined before the call.
+		  xmits.insert(&xmit);
+	    for (llvm::CallBase& call : util::instructions<llvm::CallBase>(F))
+	      if (!ignoreCall(&call))
+		calls.insert(&call);
+	    A.add_st(make_node_set(calls), make_node_set(xmits));
+	  }
+
+	  // ret
+	  for (llvm::ReturnInst& ret : util::instructions<llvm::ReturnInst>(F)) {
+	    std::set<llvm::Instruction *> sources;
+	    llvm::copy(llvm::predecessors(&ret), std::inserter(sources, sources.end()));
+	    if (sources.empty())
+	      sources.insert(&F.front().front());
+	    A.add_st(make_node_set(sources), std::set<Node>{&ret});
+	  }
+
+	  // call
+	  for (llvm::CallBase& call : util::instructions<llvm::CallBase>(F)) {
+	    if (!ignoreCall(&call)) {
+	      std::set<llvm::Instruction *> sources;
+	      llvm::copy(llvm::predecessors(&call), std::inserter(sources, sources.end()));
+	      if (sources.empty())
+		sources.insert(&F.front().front());
+	      A.add_st(make_node_set(sources), std::set<Node>{&call});
+	    }
+	  }
+
+	  // {entry + call} x {stack access}
+	  // NOTE: I think this is redundant since we're already inserting LFENCEs on exit.
+	  if (false) {
+	    std::set<llvm::Instruction *> entries;
+	    for (llvm::Instruction& I : llvm::instructions(F)) {
+	      if (llvm::predecessors(&I).empty()) {
+		entries.insert(&I);
+		continue;
+	      }
+	      if (auto *CI = llvm::dyn_cast<llvm::CallBase>(&I)) {
+		if (ignoreCall(CI))
+		  continue;
+		entries.insert(&I);
+	      }
+	    }
+
+	    std::set<llvm::Instruction *> stacks;
+	    for (llvm::Instruction& I : llvm::instructions(F))
+	      if (util::isStackAccess(&I))
+		stacks.insert(&I);
+
+	    A.add_st(make_node_set(entries), make_node_set(stacks));
+	  }
+	    
+
+#else
+	  std::set<llvm::Instruction *> xmits;
+	  for (llvm::Instruction& I : llvm::instructions(F)) {
+	    // Return instructions are implicitly transmitters
+	    if (llvm::isa<llvm::ReturnInst>(&I))
+	      xmits.insert(&I);
+
+	    // Add all the usual transmitters.
+	    for (const auto& [kind, xmit_op] : get_transmitter_sensitive_operands(&I))
+	      if (kind == TransmitterOperand::Kind::TRUE && llvm::isa<llvm::Instruction, llvm::Argument>(xmit_op))
+		xmits.insert(&I);
+	  }
+
+	  for (auto *xmit : xmits) {
+	    if (llvm::predecessors(xmit).empty()) {
+	      if (llvm::successors_inst(xmit).empty())
+		A.add_st(std::set<Node>{xmit}, std::set<Node>{xmit});
+	      else
+		for (auto *sink : llvm::successors_inst(xmit))
+		  A.add_st(std::set<Node>{xmit}, std::set<Node>{sink});
+	    } else {
+	      for (auto *source : llvm::predecessors(xmit))
+		A.add_st(std::set<Node>{source}, std::set<Node>{xmit});
+	    }
+	  }
+	  
+#endif
 	}
 
 	// Add CFG to graph
@@ -855,6 +1021,12 @@ namespace clou {
 	  }
 	}
 
+	// Add back edges to CFG
+	for (llvm::ReturnInst& RI : util::instructions<llvm::ReturnInst>(F)) {
+	  llvm::Instruction *Entry = &F.front().front();
+	  G[&RI][Entry] = compute_edge_weight(&RI, Entry, DT, LI);
+	}
+
 	// Run algorithm to obtain min-cut
 	const clock_t solve_start = clock();
 #if 0
@@ -862,6 +1034,7 @@ namespace clou {
 #endif
 	llvm::errs() << F.getName() << "\n";
 	auto G_ = G;
+	const auto sts_bak = A.get_sts().vec();
 	A.run();
 	const clock_t solve_stop = clock();
 	const float solve_duration = (static_cast<float>(solve_stop) - static_cast<float>(solve_start)) / CLOCKS_PER_SEC;
@@ -873,14 +1046,14 @@ namespace clou {
 	{
 	  std::set<Edge> cutset;
 	  llvm::copy(cut_edges, std::inserter(cutset, cutset.end()));
-	  checkCut(A.get_sts(), cutset, F);
+	  checkCut(sts_bak, cutset, F);
 	}
 
 	// Output DOT graph, color cut edges
 	if (ClouLog) {
 	  
 	  // emit dot
-#if 0
+#if 1
 	  {
 	    std::stringstream path;
 	    path << ClouLogDir << "/" << F.getName().str() << ".dot";
@@ -896,9 +1069,15 @@ namespace clou {
 	    }
 
 	    std::map<Node, std::string> special;
-	    for (const Alg::ST& st : A.sts) {
-	      special[st.t] = "blue"; // TODO: used to be green, but sometimes nodes are both sources and sinks.
-	      special[st.s] = "blue";
+	    for (const auto& st : A.get_sts()) {
+	      static const char *colors[] = {"green", "yellow", "red"};
+	      for (int i = 0; const auto& group : st.waypoints) {
+		const char *color = colors[i];
+		for (const Node& v : group) {
+		  special[v] = color;
+		}
+		++i;
+	      }
 	    }
 	    
 	    for (const auto& [node, i] : nodes) {
@@ -909,10 +1088,19 @@ namespace clou {
 	      f << "];\n";
 	    }
 
+#if 0
 	    // Add ST-pairs as dotted gray edges
-	    for (const auto& st : A.sts) {
-	      f << "node" << nodes.at(st.s) << " -> node" << nodes.at(st.t) << " [style=\"dashed\", color=\"blue\", penwidth=3]\n";
+	    for (const auto& st : A.get_sts()) {
+	      for (const auto& [srcs, dsts] : llvm::zip(llvm::ArrayRef(st.waypoints).drop_back(),
+							llvm::ArrayRef(st.waypoints).drop_front())) {
+		for (const Node& src : srcs) {
+		  for (const Node& dst : dsts) {
+		    f << "node" << nodes.at(st.s) << " -> node" << nodes.at(st.t) << " [style=\"dashed\", color=\"blue\", penwidth=3]\n";
+		  }
+		}
+	      }
 	    }
+#endif
 	  
             
 	    for (const auto& [u, usucc] : G_) {
@@ -965,6 +1153,25 @@ namespace clou {
 	    }
 #endif
 
+	    if (F.getName() == "OPENSSL_strcasecmp") {
+	      llvm::json::Array j_sts;
+	      for (const auto& st : sts_bak) {
+		llvm::json::Array j_waypoints;
+		for (const std::set<Node>& waypoint : st.waypoints) {
+		  llvm::json::Array j_waypoint;
+		  for (const Node& v : waypoint) {
+		    std::string s;
+		    llvm::raw_string_ostream os(s);
+		    v.V->print(os);
+		    j_waypoint.push_back(s);
+		  }
+		  j_waypoints.push_back(llvm::json::Value(std::move(j_waypoint)));
+		}
+		j_sts.push_back(llvm::json::Value(std::move(j_waypoints)));
+	      }
+	      log["st_pairs"] = llvm::json::Value(std::move(j_sts));
+	    }
+
 	    // TODO: emit this to separate file?
 	    auto& j_cuts = log["cut_edges"] = llvm::json::Array();
 	    for (const auto& cut : cut_edges) {
@@ -997,7 +1204,24 @@ namespace clou {
 	auto& lfence_srclocs = log["lfence_srclocs"] = llvm::json::Array();
 	for (const auto& [src, dst] : cut_edges) {
 	  if (llvm::Instruction *mitigation_point = getMitigationPoint(llvm::cast<llvm::Instruction>(src.V), llvm::cast<llvm::Instruction>(dst.V))) {
-	    CreateMitigation(mitigation_point, "clou-mitigate-pass");
+	    std::string s;
+	    llvm::raw_string_ostream os(s);
+	    const auto print_debug_loc = [&os] (const llvm::Value *V, bool forward) {
+	      const llvm::Instruction *I = llvm::cast<llvm::Instruction>(V);
+	      llvm::DebugLoc DL;
+	      while (I != nullptr && !DL) {
+		DL = I->getDebugLoc();
+		if (forward)
+		  I = I->getNextNode();
+		else
+		  I = I->getPrevNode();
+	      }
+	      DL.print(os);
+	    };
+	    print_debug_loc(src.V, false);
+	    os << "--->";
+	    print_debug_loc(dst.V, true);
+	    CreateMitigation(mitigation_point, s.c_str());
 	    
 	    // Print out mitigation info
 	    if (ClouLog) {

@@ -29,7 +29,9 @@ function(hacl_library NAME)
 
   # Convert PASSes to CFLAGS
   foreach(pass IN LISTS HACL_PASS)
-    list(APPEND HACL_CFLAGS -Xclang -load -Xclang $<TARGET_FILE:${pass}>)
+    set(flags -Xclang -load -Xclang $<TARGET_FILE:${pass}>)
+    list(APPEND HACL_CFLAGS ${flags})
+    list(APPEND HACL_LDFLAGS ${flags})
     list(APPEND HACL_DEPENDS ${pass})
   endforeach()
 

@@ -41,6 +41,16 @@ libsodium_cloucc_library(libsodium_cloucc
   LLVMFLAGS -clou
 )
 
+libsodium_cloucc_library(libsodium_cloucc_naive
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=load_xmit,prech
+)
+
+libsodium_cloucc_library(libsodium_cloucc_noinline
+  PASS MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou
+)
+
 libsodium_cloucc_library(libsodium_cloucc_logs
   PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   CFLAGS -g
@@ -50,6 +60,11 @@ libsodium_cloucc_library(libsodium_cloucc_logs
 libsodium_cloucc_library(libsodium_cloucc_ncal_xmit
   PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=ncal_xmit
+)
+
+libsodium_cloucc_library(libsodium_cloucc_ncal_glob
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=ncal_glob
 )
 
 libsodium_cloucc_library(libsodium_cloucc_ncas_xmit
@@ -62,13 +77,45 @@ libsodium_cloucc_library(libsodium_cloucc_ncas_ctrl
   LLVMFLAGS -clou=ncas_ctrl
 )
 
+libsodium_cloucc_library(libsodium_cloucc_debug
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=ncas_ctrl
+  CFLAGS -g
+)
+
+libsodium_cloucc_library(libsodium_cloucc_load_xmit
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=load_xmit
+)
+
 libsodium_cloucc_library(libsodium_cloucc_sts
   PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
-  LLVMFLAGS -clou=ncal_xmit,ncas_xmit,ncas_ctrl
+  LLVMFLAGS -clou=ncal_xmit,ncal_glob,ncas_xmit,ncas_ctrl
 )
 
 
 libsodium_cloucc_library(libsodium_cloucc_fps
   PASS InlinePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=fps
+)
+
+libsodium_cloucc_library(libsodium_cloucc_fps+postch
+  PASS InlinePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=fps,postch
 )
+
+libsodium_cloucc_library(libsodium_cloucc_prech
+  PASS InlinePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=prech
+)
+
+libsodium_cloucc_library(libsodium_cloucc_trace
+  PASS InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes TracePass
+  LLVMFLAGS -clou
+)
+
+libsodium_cloucc_library(libsodium_cloucc_test
+  PASS TestPass
+  LLVMFLAGS -clou=none
+)
+

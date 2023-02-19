@@ -11,7 +11,12 @@
 namespace clou {
 
   bool MitigationInst::classof(const llvm::IntrinsicInst *I) {
+#if 0
     return I->getIntrinsicID() == llvm::Intrinsic::x86_sse2_lfence && md::getMetadataFlag(I, mitigation_flag);
+#else
+    return I->getIntrinsicID() == llvm::Intrinsic::x86_sse2_lfence;
+    // FIXME: find out why commented out code doesn't work.
+#endif
   }
 
   bool MitigationInst::classof(const llvm::Value *V) {

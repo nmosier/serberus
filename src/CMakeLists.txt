@@ -168,3 +168,9 @@ if(0)
   register_llvm_pass(NCAStorePass)
   target_link_libraries(NCAStorePass PRIVATE FordFulkerson util Mitigation Transmitter)
 endif()
+
+add_library(TestPass SHARED
+  TestPass.cc
+)
+target_link_libraries(TestPass PRIVATE util)
+register_llvm_pass(TestPass)

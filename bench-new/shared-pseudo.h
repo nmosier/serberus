@@ -4,6 +4,7 @@
 #include <cstring>
 #include <vector>
 #include <numeric>
+#include <err.h>
 #include "benchmark_memory.h"
 #include "shared-main.h"
 
@@ -31,6 +32,7 @@ static long execute(char *argv[]);
 static void execute_nested(void);
 #endif
 
+#ifndef NOMAIN
 int main(int argc, char *argv[]) {
   if (getenv("EXECUTE")) {
 #ifndef EXECUTE_CUSTOM
@@ -69,3 +71,4 @@ int main(int argc, char *argv[]) {
     std::fprintf(f, fmt, XSTR(BENCH_NAME), BENCH_ARG, XSTR(BENCH_METRIC), mean);
   }
 }
+#endif

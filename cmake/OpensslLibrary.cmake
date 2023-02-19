@@ -19,7 +19,9 @@ function(openssl_library NAME)
   list(APPEND OPENSSL_LLVMFLAGS -clou-log=${LOG_DIR})
 
   foreach(pass IN LISTS OPENSSL_PASS)
-    list(APPEND OPENSSL_CFLAGS -Xclang -load -Xclang $<TARGET_FILE:${pass}>)
+    set(flags -Xclang -load -Xclang $<TARGET_FILE:${pass}>)
+    list(APPEND OPENSSL_CFLAGS ${flags})
+    list(APPEND OPENSSL_LDFLAGS ${flags})
     list(APPEND OPENSSL_DEPENDS ${pass})
   endforeach()
 
@@ -38,7 +40,7 @@ function(openssl_library NAME)
   list(JOIN OPENSSL_LDFLAGS " " OPENSSL_LDFLAGS)
 
   add_custom_command(OUTPUT ${STAMP_DIR}/configure.stamp
-    COMMAND ${OPENSSL_DIR}/Configure --prefix=${INSTALL_DIR} CC=${LLVM_BINARY_DIR}/bin/clang LD=${LLVM_BINARY_DIR}/bin/ld.lld "CPPFLAGS=${OPENSSL_CPPFLAGS}" "CFLAGS=${OPENSSL_CFLAGS}" "LDFLAGS=${OPENSSL_LDFLAGS}" ${OPENSSL_CONFIGURE_OPTIONS}
+    COMMAND ${OPENSSL_DIR}/Configure --prefix=${INSTALL_DIR} CC=${LLVM_BINARY_DIR}/bin/clang LD=${LLVM_BINARY_DIR}/bin/ld.lld "CPPFLAGS=${OPENSSL_CPPFLAGS}" "CFLAGS=${OPENSSL_CFLAGS}" "LDFLAGS=${OPENSSL_LDFLAGS}" ${OPENSSL_CONFIGURE_OPTIONS} RANLIB=${LLVM_BINARY_DIR}/bin/llvm-ranlib
     COMMAND touch ${STAMP_DIR}/configure.stamp
     COMMENT "Configuring OpenSSL library ${NAME}"
     WORKING_DIRECTORY ${BUILD_DIR}

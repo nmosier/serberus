@@ -33,7 +33,8 @@ function(libsodium_library NAME)
   list(APPEND LIBSODIUM_CPPFLAGS -flegacy-pass-manager)
   
   foreach(pass IN LISTS LIBSODIUM_PASS)
-    list(APPEND LIBSODIUM_CPPFLAGS -Xclang -load -Xclang $<TARGET_FILE:${pass}>)
+    set(flags -Xclang -load -Xclang $<TARGET_FILE:${pass}>)
+    list(APPEND LIBSODIUM_CPPFLAGS ${flags})
     list(APPEND LIBSODIUM_DEPENDS ${pass})
   endforeach()
 

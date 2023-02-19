@@ -5,12 +5,14 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Attributes.h>
 #include <llvm/Transforms/Utils/Cloning.h>
+#include <llvm/IR/IntrinsicsX86.h>
 
 #include "clou/util.h"
 #include "clou/analysis/SpeculativeTaintAnalysis.h"
 #include "clou/analysis/LeakAnalysis.h"
 #include "clou/containers.h"
 #include "clou/analysis/NonspeculativeTaintAnalysis.h"
+#include "clou/Mitigation.h"
 
 namespace clou {
   namespace {
@@ -90,7 +92,9 @@ namespace clou {
 	llvm::CallBase *CB;
 	std::set<llvm::CallBase *> skip;
 	bool changed = false;
+	int i = 0;
 	while ((CB = getCallToInline(F, skip))) {
+	  llvm::errs() << "\rInlinePass iteration " << ++i;
 	  llvm::InlineFunctionInfo IFI;
 	  const auto result = llvm::InlineFunction(*CB, IFI);
 	  if (result.isSuccess()) {
@@ -99,6 +103,23 @@ namespace clou {
 	    skip.insert(CB);
 	  }
 	}
+	llvm::errs() << "\n";
+
+	// We'll also erase any mitigations that have been introduced.
+	std::vector<MitigationInst *> mitigations;
+	for (MitigationInst& I : util::instructions<MitigationInst>(F))
+	  mitigations.push_back(&I);
+	changed |= !mitigations.empty();
+	for (MitigationInst *I : mitigations)
+	  I->eraseFromParent();
+
+	assert(llvm::none_of(llvm::instructions(F), [] (const llvm::Instruction& I) {
+	  if (const auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(&I))
+	    return II->getIntrinsicID() == llvm::Intrinsic::x86_sse2_lfence;
+	  else
+	    return false;
+	}));
+	
 	return changed;
       }
     };
