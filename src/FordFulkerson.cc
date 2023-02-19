@@ -917,33 +917,7 @@ namespace clou {
     printGraph("residual.dot", ResG, waypoint_sets);
 #endif
 
-    // NOTE: This is suspicious. I think we need to rewrite this for the multi-s-t case.
 #if 0
-    {
-      const auto& S = waypoint_sets.front();
-      const IntersectUnitGraph IntersectG(&G, &ResG);
-      const llvm::BitVector reach = find_reachable_multi(IntersectG, S);
-      for (const unsigned u : reach.set_bits()) {
-	for (const auto& [v, _] : G[u]) {
-	  if (!reach.test(v))
-	    results.emplace_back(u, v);
-	}
-      }
-    }
-#elif 0
-    {
-      for (const auto& S : waypoint_sets.drop_back()) {
-	for (const Node s : S) {
-	  // TODO: Do all these S's together?
-	  const llvm::BitVector reach = find_reachable(ResG, s);
-	  for (const Node u : reach.set_bits())
-	    for (const auto& [v, w] : G[u])
-	      if (!reach.test(v))
-		results.emplace_back(u, v);
-	}
-      }
-    }
-#else
     {
       for (const auto& S : waypoint_sets.drop_back()) {
 	const llvm::BitVector reach = find_reachable_multi(ResG, S);
@@ -952,6 +926,15 @@ namespace clou {
 	    if (!reach.test(v))
 	      results.emplace_back(u, v);
       }
+    }
+#else
+    {
+      const auto& S = waypoint_sets.front();
+      const llvm::BitVector reach = find_reachable_multi(ResG, S);
+      for (const Node u : reach.set_bits())
+	for (const auto& [v, w] : G[u])
+	  if (!reach.test(v))
+	    results.emplace_back(u, v);
     }
 #endif
 
