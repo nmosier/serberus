@@ -71,10 +71,26 @@ function(add_mitigation_benchmark)
   add_dependencies(${exe} bkptcount)
 endfunction()
 
+function(add_trace_benchmark lib name arg)
+  set(metric trace)
+  set(mode cloucc_trace)
+  string(TOUPPER ${lib} LIB)
+  string(TOUPPER ${metric} METRIC)
+  set(exe ${metric}_${lib}_${name}_${arg}_${mode})
+  add_executable(${exe} ${lib}_${name}.cc ${metric}-main.cc)
+  target_link_libraries(${exe} PRIVATE ${lib}_${mode}${libsuffix})
+  target_compile_definitions(${exe} PRIVATE BENCH_${LIB} BENCH_${METRIC} BENCH_METRIC=${metric}
+    BENCH_NAME=${lib}_${name} BENCH_ARG=${arg})
+  target_compile_options(${exe} PRIVATE -Wno-unused-parameter)
+  set(exe ${exe} PARENT_SCOPE)
+endfunction()
+
 function(add_benchmarks lib name arg)
   # set(modes baseline_none cloucc)
-  # set(modes baseline_none cloucc_sts cloucc_ncal_xmit cloucc_ncas_xmit cloucc_ncas_ctrl)
-  set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc)
+  # set(modes baseline_none cloucc_sts cloucc_ncal_xmit cloucc_ncal_glob cloucc_ncas_xmit cloucc_ncas_ctrl cloucc_load_xmit cloucc_fps cloucc_fps+postch cloucc_prech)
+  set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc cloucc_naive)
+  # set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc_test)
+  # set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc_ncal_xmit)  
   # set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc cloucc_ncal_xmit cloucc_ncas_xmit cloucc_ncas_ctrl)
   # set(modes baseline_none baseline_slh+retpoline+ssbd cloucc_ncas)
   foreach(mode IN LISTS modes)
@@ -87,6 +103,7 @@ function(add_benchmarks lib name arg)
     add_perf_benchmark(${lib} ${name} ${mode} ${arg})
     add_mitigation_benchmark(${lib} ${name} ${mode} ${arg})
   endforeach()
+  add_trace_benchmark(${lib} ${name} ${arg})
 endfunction()
 
 
@@ -98,7 +115,7 @@ add_benchmarks(hacl      poly1305   1024)
 add_benchmarks(hacl      curve25519 64)
 add_benchmarks(openssl   sha256     64)
 add_benchmarks(openssl   sha256     8192)
-add_benchmarks(openssl   sha256     1048576)
+# add_benchmarks(openssl   sha256     1048576)
 add_benchmarks(openssl   chacha20   8192)
 add_benchmarks(openssl   curve25519 64)
 
@@ -136,3 +153,5 @@ get_directory_property(bench_clean bench_clean)
 add_custom_target(clean_bench
   COMMAND rm -f ${bench_clean}
 )
+
+
