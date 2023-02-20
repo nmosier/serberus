@@ -43,6 +43,7 @@
 #include "clou/Log.h"
 #include "clou/analysis/NonspeculativeTaintAnalysis.h"
 #include "clou/analysis/SpeculativeTaintAnalysis.h"
+#include "clou/analysis/ConstantAddressAnalysis.h"
 #include "clou/analysis/LeakAnalysis.h"
 #include "clou/Stat.h"
 #include "clou/containers.h"
@@ -285,6 +286,7 @@ namespace clou {
       MitigatePass() : llvm::FunctionPass(ID) {}
 
       void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
+	AU.addRequired<ConstantAddressAnalysis>();
 	AU.addRequired<NonspeculativeTaint>();
 	AU.addRequired<SpeculativeTaint>();
 	AU.addRequired<LeakAnalysis>();
@@ -364,12 +366,12 @@ namespace clou {
       }
 
       template <class OutputIt>
-      OutputIt getPublicLoads(llvm::Function& F, OutputIt out) {
+      OutputIt getPublicLoads(llvm::Function& F, ConstantAddressAnalysis& CAA, OutputIt out) {
 	LeakAnalysis& LA = getAnalysis<LeakAnalysis>();
 	SpeculativeTaint& ST = getAnalysis<SpeculativeTaint>();
 	for (auto& I : llvm::instructions(F)) {
 	  if (auto *LI = llvm::dyn_cast<llvm::LoadInst>(&I)) {
-	    if (LA.mayLeak(LI) && (!ST.secret(LI) || util::isConstantAddress(LI->getPointerOperand()))) {
+	    if (LA.mayLeak(LI) && (!ST.secret(LI) || CAA.isConstantAddress(LI->getPointerOperand()))) {
 	      *out++ = LI;
 	    }
 	  }
@@ -378,11 +380,12 @@ namespace clou {
       }
 
       static void getNonConstantAddressSecretStores(llvm::Function& F, NonspeculativeTaint& NST, SpeculativeTaint& ST,
+						    ConstantAddressAnalysis& CAA, 
 						    std::set<llvm::StoreInst *>& nca_nt_sec_stores, std::set<llvm::StoreInst *>& nca_t_sec_stores,
 						    std::set<llvm::StoreInst *>& nca_pub_stores) {
 	for (llvm::Instruction& I : llvm::instructions(F)) {
 	  if (auto *SI = llvm::dyn_cast<llvm::StoreInst>(&I)) {
-	    if (!util::isConstantAddressStore(SI)) {
+	    if (!CAA.isConstantAddress(SI->getPointerOperand())) {
 	      if (llvm::Instruction *V = llvm::dyn_cast<llvm::Instruction>(SI->getValueOperand())) {
 		bool nt_sec = false;
 		bool t_sec = false;
@@ -587,6 +590,7 @@ namespace clou {
 	auto& NST = getAnalysis<NonspeculativeTaint>();
 	auto& ST = getAnalysis<SpeculativeTaint>();
 	auto& LA = getAnalysis<LeakAnalysis>();
+	auto& CAA = getAnalysis<ConstantAddressAnalysis>();
 
 	
 	llvm::DominatorTree DT(F);
@@ -594,11 +598,11 @@ namespace clou {
 
 	// Set of speculatively public loads	
 	std::set<llvm::LoadInst *> spec_pub_loads;
-	getPublicLoads(F, std::inserter(spec_pub_loads, spec_pub_loads.end()));
+	getPublicLoads(F, CAA, std::inserter(spec_pub_loads, spec_pub_loads.end()));
 	
 	// Set of secret, speculatively out-of-bounds stores (speculative or nonspeculative)
 	std::set<llvm::StoreInst *> nca_nt_sec_stores, nca_t_sec_stores, nca_pub_stores;
-	getNonConstantAddressSecretStores(F, NST, ST, nca_nt_sec_stores, nca_t_sec_stores,
+	getNonConstantAddressSecretStores(F, NST, ST, CAA, nca_nt_sec_stores, nca_t_sec_stores,
 					  nca_pub_stores);
 
 	// Set of control-transfer instructions that require all previous OOB stores to have resolved
@@ -729,7 +733,7 @@ namespace clou {
 	  CountStat stat_ncas_sec(log, "ncas_sec");
 	  
 	  for (auto& SI : util::instructions<llvm::StoreInst>(F)) {
-	    if (util::isConstantAddress(SI.getPointerOperand())) {
+	    if (CAA.isConstantAddress(SI.getPointerOperand())) {
 	      ++stat_cas;
 	    } else {
 	      auto *V = SI.getValueOperand();
@@ -748,7 +752,7 @@ namespace clou {
 	  CountStat stat_cal_leak(log, "cal_leak");
 
 	  for (auto& LI : util::instructions<llvm::LoadInst>(F)) {
-	    if (util::isConstantAddress(LI.getPointerOperand())) {
+	    if (CAA.isConstantAddress(LI.getPointerOperand())) {
 	      ++stat_cal;
 	      if (LA.mayLeak(&LI)) {
 		++stat_cal_leak;
@@ -901,7 +905,7 @@ namespace clou {
 
 	  for (llvm::StoreInst& SI : util::instructions<llvm::StoreInst>(F)) {
 	    llvm::Value *SV = SI.getValueOperand();
-	    if (util::isConstantAddressStore(&SI) && util::isGlobalAddressStore(&SI) && !NST.secret(SV) && ST.secret(SV)) {
+	    if (CAA.isConstantAddress(SI.getPointerOperand()) && util::isGlobalAddressStore(&SI) && !NST.secret(SV) && ST.secret(SV)) {
 	      for (llvm::Instruction *LI : ST.taints.at(llvm::cast<llvm::Instruction>(SV))) {
 		A.add_st(std::set<Node>{LI}, std::set<Node>{&SI});
 	      }
@@ -911,8 +915,6 @@ namespace clou {
 	}
 
 	if (enabled.load_xmit) {
-
-#if 1
 
 	  // {load} x {dependent transmitters}
 	  for (llvm::Instruction& xmit : llvm::instructions(F)) {
@@ -947,15 +949,19 @@ namespace clou {
 	    A.add_st(make_node_set(sources), std::set<Node>{&ret});
 	  }
 
-	  // call
+	  // non-direct-only call
 	  for (llvm::CallBase& call : util::instructions<llvm::CallBase>(F)) {
-	    if (!ignoreCall(&call)) {
-	      std::set<llvm::Instruction *> sources;
-	      llvm::copy(llvm::predecessors(&call), std::inserter(sources, sources.end()));
-	      if (sources.empty())
-		sources.insert(&F.front().front());
-	      A.add_st(make_node_set(sources), std::set<Node>{&call});
-	    }
+	    if (ignoreCall(&call))
+	      continue;
+	    if (const auto *CalledF = util::getCalledFunction(&call))
+	      if (util::functionIsDirectCallOnly(*CalledF))
+		continue;
+
+	    std::set<llvm::Instruction *> sources;
+	    llvm::copy(llvm::predecessors(&call), std::inserter(sources, sources.end()));
+	    if (sources.empty())
+	      sources.insert(&F.front().front());
+	    A.add_st(make_node_set(sources), std::set<Node>{&call});
 	  }
 
 	  // {entry + call} x {stack access}
@@ -982,34 +988,6 @@ namespace clou {
 	    A.add_st(make_node_set(entries), make_node_set(stacks));
 	  }
 	    
-
-#else
-	  std::set<llvm::Instruction *> xmits;
-	  for (llvm::Instruction& I : llvm::instructions(F)) {
-	    // Return instructions are implicitly transmitters
-	    if (llvm::isa<llvm::ReturnInst>(&I))
-	      xmits.insert(&I);
-
-	    // Add all the usual transmitters.
-	    for (const auto& [kind, xmit_op] : get_transmitter_sensitive_operands(&I))
-	      if (kind == TransmitterOperand::Kind::TRUE && llvm::isa<llvm::Instruction, llvm::Argument>(xmit_op))
-		xmits.insert(&I);
-	  }
-
-	  for (auto *xmit : xmits) {
-	    if (llvm::predecessors(xmit).empty()) {
-	      if (llvm::successors_inst(xmit).empty())
-		A.add_st(std::set<Node>{xmit}, std::set<Node>{xmit});
-	      else
-		for (auto *sink : llvm::successors_inst(xmit))
-		  A.add_st(std::set<Node>{xmit}, std::set<Node>{sink});
-	    } else {
-	      for (auto *source : llvm::predecessors(xmit))
-		A.add_st(std::set<Node>{source}, std::set<Node>{xmit});
-	    }
-	  }
-	  
-#endif
 	}
 
 	// Add CFG to graph
@@ -1053,7 +1031,7 @@ namespace clou {
 	if (ClouLog) {
 	  
 	  // emit dot
-#if 1
+#if 0
 	  {
 	    std::stringstream path;
 	    path << ClouLogDir << "/" << F.getName().str() << ".dot";

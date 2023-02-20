@@ -12,6 +12,7 @@
 #include "clou/analysis/LeakAnalysis.h"
 #include "clou/containers.h"
 #include "clou/analysis/NonspeculativeTaintAnalysis.h"
+#include "clou/analysis/ConstantAddressAnalysis.h"
 #include "clou/Mitigation.h"
 
 namespace clou {
@@ -23,6 +24,7 @@ namespace clou {
       using CBSet = std::set<llvm::CallBase *>;
 
       void getAnalysisUsage(llvm::AnalysisUsage& AU) const override {
+	AU.addRequired<ConstantAddressAnalysis>();
 	AU.addRequired<NonspeculativeTaint>();
 	AU.addRequired<SpeculativeTaint>();
 	AU.addRequired<LeakAnalysis>();
@@ -66,6 +68,7 @@ namespace clou {
       llvm::CallBase *getCallToInline(llvm::Function& F, CBSet& skip) {
 	auto& ST = getAnalysis<SpeculativeTaint>();
 	auto& NST = getAnalysis<NonspeculativeTaint>();
+	const auto& CAA = getAnalysis<ConstantAddressAnalysis>();
 
 	for (llvm::Instruction& I : llvm::instructions(F)) {
 	  if (llvm::isa<llvm::CallBase>(&I)) {
@@ -73,7 +76,7 @@ namespace clou {
 	    // TODO: handle intrinsics properly
 	  } else if (auto *SI = llvm::dyn_cast<llvm::StoreInst>(&I)) {
 	    llvm::Value *V = SI->getValueOperand();
-	    if (!util::isSpeculativeInbounds(SI) && (NST.secret(V) || ST.secret(V))) {
+	    if (!CAA.isConstantAddress(SI->getPointerOperand()) && (NST.secret(V) || ST.secret(V))) {
 	      if (llvm::CallBase *CB = handleSecretStore(SI, skip)) {
 		const llvm::Function *callee = util::getCalledFunction(CB);
 		if (callee == &F)

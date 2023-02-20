@@ -17,6 +17,9 @@ namespace clou {
 	  F.addFnAttr("noredzone");
 	}
 
+	if (util::functionIsDirectCallOnly(F))
+	  F.addFnAttr(llvm::Attribute::NoCfCheck);
+
 	const char *stack_protector_attrs[] = {"ssp", "sspstrong", "sspreq"};
 	for (const char *stack_protector_attr : stack_protector_attrs) {
 	  if (F.hasFnAttribute(stack_protector_attr)) {

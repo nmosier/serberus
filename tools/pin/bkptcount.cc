@@ -22,7 +22,7 @@ static VOID handle_sentinel() {
 
 // Pin calls this function every time a new instruction is encountered
 VOID Instruction(INS ins, VOID* v) {
-  if (INS_Opcode(ins) == XED_ICLASS_MFENCE) {
+  if (INS_Opcode(ins) == XED_ICLASS_MFENCE || INS_Opcode(ins) == XED_ICLASS_LFENCE) {
     INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) handle_sentinel, IARG_END);
     INS_Delete(ins);
   }

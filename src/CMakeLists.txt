@@ -45,7 +45,7 @@ target_include_directories(MinCut INTERFACE ${Z3_INCLUDE_DIRS})
 add_library(Mitigation SHARED
   Mitigation.cc
 )
-target_link_libraries(Mitigation PRIVATE Metadata)
+target_link_libraries(Mitigation PRIVATE Metadata ConstantAddressAnalysis)
 
 add_library(CommandLine SHARED
   CommandLine.cc

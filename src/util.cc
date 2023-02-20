@@ -50,6 +50,53 @@ unsigned instruction_dominator_depth(llvm::Instruction *I, const llvm::Dominator
 
 namespace util {
 
+  bool mayLowerToFunctionCall(const llvm::CallBase& C) {
+    if (const auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(&C)) {
+      switch (II->getIntrinsicID()) {
+      case llvm::Intrinsic::fshr:
+      case llvm::Intrinsic::fshl:
+      case llvm::Intrinsic::x86_aesni_aesenc:
+      case llvm::Intrinsic::x86_aesni_aeskeygenassist:
+      case llvm::Intrinsic::x86_aesni_aesenclast:
+      case llvm::Intrinsic::vector_reduce_and:
+      case llvm::Intrinsic::vector_reduce_or:
+      case llvm::Intrinsic::umax:
+      case llvm::Intrinsic::umin:
+      case llvm::Intrinsic::smax:
+      case llvm::Intrinsic::smin:
+      case llvm::Intrinsic::ctpop:
+      case llvm::Intrinsic::bswap:
+      case llvm::Intrinsic::x86_pclmulqdq:
+      case llvm::Intrinsic::x86_rdrand_32:
+      case llvm::Intrinsic::vastart:
+      case llvm::Intrinsic::vaend:
+      case llvm::Intrinsic::vector_reduce_add:
+      case llvm::Intrinsic::abs:
+      case llvm::Intrinsic::umul_with_overflow:
+      case llvm::Intrinsic::bitreverse:
+      case llvm::Intrinsic::cttz:
+      case llvm::Intrinsic::usub_sat:
+      case llvm::Intrinsic::fmuladd:
+      case llvm::Intrinsic::annotation:
+      case llvm::Intrinsic::x86_sse2_mfence:
+      case llvm::Intrinsic::fabs:
+      case llvm::Intrinsic::floor:
+	return true;
+
+      case llvm::Intrinsic::memset:
+      case llvm::Intrinsic::memcpy:
+      case llvm::Intrinsic::memmove:
+	return false;
+
+      default:
+	warn_unhandled_intrinsic(II);
+	return false;
+      }
+    } else {
+      return true;
+    }
+  }
+
   namespace {
     llvm::Function *getCalledFunctionRec(llvm::Value *V) {
       if (llvm::Function *F = llvm::dyn_cast<llvm::Function>(V)) {
@@ -69,108 +116,40 @@ namespace util {
     return getCalledFunctionRec(C->getCalledOperand());
   }
 
-  namespace {
-    bool functionIsDirectCallOnlyRec(const llvm::Use& use, std::set<const llvm::User *>& seen) {
-      const llvm::User *user = use.getUser();
-      llvm::errs() << "User: " << *user << "\n";
-      if (!seen.insert(user).second) {
-	return false;
-      } else if (llvm::isa<llvm::Operator, llvm::Constant>(user)) {
-	return std::all_of(user->use_begin(), user->use_end(), [&] (const llvm::Use& use) {
-	  return functionIsDirectCallOnlyRec(use, seen);
-	});
-      } else if (llvm::isa<llvm::Instruction>(user)) {
-	return llvm::isa<llvm::CallBase>(user) && use.getOperandNo() == 0;
-      } else {
-	unhandled_value(*user);
-      }
-    }
-  }
-  
-  bool functionIsDirectCallOnly(const llvm::Function& F) {
-    if (llvm::Function::isLocalLinkage(F.getLinkage())) {
-      std::set<const llvm::User *> seen;
-      return std::all_of(F.use_begin(), F.use_end(), [&] (const llvm::Use& use) {
-	return functionIsDirectCallOnlyRec(use, seen);
-      });
-    } else {
-      return false;
-    }
-  }
-
-  namespace {
-
-    // FIXME: This isn't entirely correct...
-    bool isSpeculativeInboundsValue(const llvm::Value *V) {
-      if (const auto *I = llvm::dyn_cast<llvm::Instruction>(V)) {
-	if (llvm::isa<llvm::PHINode>(I) || I->mayReadFromMemory()) {
-	  return false;
-	} else {
-	  return std::all_of(I->op_begin(), I->op_end(), isSpeculativeInboundsValue);
-	}
-      } else if (llvm::isa<llvm::Argument>(V)) {
-	return false;
-      } else if (llvm::isa<llvm::Constant>(V)) {
-	return true;
-      } else {
-	unhandled_value(*V);
-      }
-    }
-  }
-
-  bool isSpeculativeInbounds(llvm::StoreInst *SI) {
-    if (md::getMetadataFlag(SI, md::speculative_inbounds)) {
-      return true;
-    } else {
-      return isSpeculativeInboundsValue(SI->getPointerOperand());
-    }
-  }
-
-  static bool isConstantValue(const llvm::Value *V) {
-    if (llvm::isa<llvm::Argument, llvm::PHINode, llvm::CallBase, llvm::LoadInst>(V)) {
-      return false;
-    } else if (llvm::isa<llvm::Constant, llvm::AllocaInst>(V)) {
-      return true;
-    } else if (llvm::isa<llvm::GetElementPtrInst, llvm::CastInst, llvm::BinaryOperator, llvm::SelectInst, llvm::CmpInst, llvm::ExtractElementInst, llvm::InsertElementInst>(V)) {
-      return llvm::all_of(llvm::cast<llvm::Instruction>(V)->operands(), isConstantAddress);
-    } else {
-      unhandled_value(*V);
-    }
-  }
-
-  bool isConstantAddress(const llvm::Value *V) {
-    return isConstantValue(V);
-  }  
-
-  bool isConstantAddressLoad(const llvm::LoadInst *LI) {
-    return isConstantAddress(LI);
-  }
-
-  bool isConstantAddressStore(const llvm::Instruction *SI) {
-    if (const llvm::Value *SA = getPointerOperand(SI))
-      return isConstantAddress(SA);
-    else
-      return false;
-  }
-
-  static const llvm::Value *getBaseAddress(const llvm::Value *V) {
+  template <class OutputIt>
+  static void getBaseAddresses(const llvm::Value *V, OutputIt out) {
     if (llvm::isa<llvm::Argument, llvm::LoadInst, llvm::CallBase, llvm::GlobalVariable, llvm::AllocaInst>(V)) {
-      return V;
+      *out++ = V;
     } else if (const auto *GEP = llvm::dyn_cast<llvm::GetElementPtrInst>(V)) {
-      return getBaseAddress(GEP->getPointerOperand());
+      getBaseAddresses(GEP->getPointerOperand(), out);
     } else if (const auto *GEP = llvm::dyn_cast<llvm::GEPOperator>(V)) {
-      return getBaseAddress(GEP->getPointerOperand());
+      getBaseAddresses(GEP->getPointerOperand(), out);
     } else if (const auto *BC = llvm::dyn_cast<llvm::BitCastInst>(V)) {
-      return getBaseAddress(BC->getOperand(0));
+      getBaseAddresses(BC->getOperand(0), out);
     } else if (const auto *BC = llvm::dyn_cast<llvm::BitCastOperator>(V)) {
-      return getBaseAddress(BC->getOperand(0));
+      getBaseAddresses(BC->getOperand(0), out);
+    } else if (const auto *Sel = llvm::dyn_cast<llvm::SelectInst>(V)) {
+      getBaseAddresses(Sel->getTrueValue(), out);
+      getBaseAddresses(Sel->getFalseValue(), out);
     } else {
       unhandled_value(*V);
     }
   }
 
   bool isGlobalAddress(const llvm::Value *V) {
-    return llvm::isa<llvm::GlobalVariable>(getBaseAddress(V));
+    std::vector<const llvm::Value *> bases;
+    getBaseAddresses(V, std::back_inserter(bases));
+    return llvm::all_of(bases, [] (const llvm::Value *V) {
+      return llvm::isa<llvm::GlobalVariable>(V);
+    });
+  }
+
+  bool isStackAddress(const llvm::Value *V) {
+    std::vector<const llvm::Value *> bases;
+    getBaseAddresses(V, std::back_inserter(bases));
+    return llvm::all_of(bases, [] (const llvm::Value *V) {
+      return llvm::isa<llvm::AllocaInst>(V);
+    });
   }
 
   bool isGlobalAddressStore(const llvm::Instruction *SI) {
@@ -178,10 +157,6 @@ namespace util {
       return isGlobalAddress(SA);
     else
       return false;
-  }
-
-  bool isStackAddress(const llvm::Value *V) {
-    return llvm::isa<llvm::AllocaInst>(getBaseAddress(V));
   }
 
   bool isStackAccess(const llvm::Instruction *I) {

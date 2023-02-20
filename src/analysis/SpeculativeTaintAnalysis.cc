@@ -15,6 +15,7 @@
 #include "clou/util.h"
 #include "clou/Mitigation.h"
 #include "clou/analysis/NonspeculativeTaintAnalysis.h"
+#include "clou/analysis/ConstantAddressAnalysis.h"
 
 namespace clou {
 
@@ -22,6 +23,7 @@ namespace clou {
   SpeculativeTaint::SpeculativeTaint(): llvm::FunctionPass(ID) {}
 
   void SpeculativeTaint::getAnalysisUsage(llvm::AnalysisUsage& AU) const {
+    AU.addRequired<ConstantAddressAnalysis>();
     AU.addRequired<llvm::AAResultsWrapperPass>();
     AU.addRequired<NonspeculativeTaint>();
     AU.setPreservesAll();    
@@ -38,12 +40,13 @@ namespace clou {
 
   bool SpeculativeTaint::runOnFunction(llvm::Function& F) {
     auto& AA = getAnalysis<llvm::AAResultsWrapperPass>().getAAResults();
+    const auto& CAA = getAnalysis<ConstantAddressAnalysis>();
     llvm::DominatorTree DT(F);
     llvm::LoopInfo LI(DT);
 
     std::vector<llvm::LoadInst *> ncals;
     for (llvm::LoadInst& LI : util::instructions<llvm::LoadInst>(F))
-      if (!util::isConstantAddress(LI.getPointerOperand()))
+      if (!CAA.isConstantAddress(LI.getPointerOperand()))
 	ncals.push_back(&LI);
     llvm::sort(ncals);
     using Idx = unsigned;
@@ -61,7 +64,7 @@ namespace clou {
     for (llvm::StoreInst& SI : util::instructions<llvm::StoreInst>(F)) {
       auto& loads = rfs[&SI];
       for (llvm::LoadInst& LI : util::instructions<llvm::LoadInst>(F))
-	if (util::isConstantAddress(LI.getPointerOperand()) &&
+	if (CAA.isConstantAddress(LI.getPointerOperand()) &&
 	    !isDefinitelyNoAlias(AA.alias(SI.getPointerOperand(), LI.getPointerOperand())))
 	  loads.insert(&LI);
     }
@@ -73,7 +76,7 @@ namespace clou {
       for (llvm::Instruction& I : llvm::instructions(F)) {
 	
 	if (llvm::LoadInst *LI = llvm::dyn_cast<llvm::LoadInst>(&I)) {
-	  if (!util::isConstantAddress(LI->getPointerOperand()))
+	  if (!CAA.isConstantAddress(LI->getPointerOperand())) 
 	    taints[LI].set(ncal_to_idx(LI));
 	  continue;
 	}
@@ -188,7 +191,7 @@ namespace clou {
     }
   }
 
-  llvm::RegisterPass<SpeculativeTaint> X {"clou-speculative-taint", "Clou's Speculative Taint Analysis Pass", true, true};
-  util::RegisterClangPass<SpeculativeTaint> Y;
+  static llvm::RegisterPass<SpeculativeTaint> X {"clou-speculative-taint", "Clou's Speculative Taint Analysis Pass", true, true};
+  // util::RegisterClangPass<SpeculativeTaint> Y;
   
 }

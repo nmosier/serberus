@@ -208,8 +208,6 @@ namespace clou {
     }
   }
 
-  namespace {
-    llvm::RegisterPass<LeakAnalysis> X {"clou-leak-analysis", "ClouCC's Leak Analysis"};
-  }
+  static llvm::RegisterPass<LeakAnalysis> X {"clou-leak-analysis", "ClouCC's Leak Analysis"};
 
 }

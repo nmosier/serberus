@@ -235,11 +235,7 @@ namespace clou {
     return !pub_vals.contains(V);
   }
 
-  namespace {
-
-    llvm::RegisterPass<NonspeculativeTaint> X {"clou-nonspeculative-taint-analysis", "Clou's Nonspeculative Taint Analysis"};
-    util::RegisterClangPass<NonspeculativeTaint> Y;
-
-  }
+  static llvm::RegisterPass<NonspeculativeTaint> X {"clou-nonspeculative-taint-analysis", "Clou's Nonspeculative Taint Analysis"};
+    // util::RegisterClangPass<NonspeculativeTaint> Y;
 
 }

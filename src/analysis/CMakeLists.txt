@@ -1,3 +1,9 @@
+add_library(ConstantAddressAnalysis SHARED
+  ConstantAddressAnalysis.cc
+)
+register_llvm_pass(ConstantAddressAnalysis)
+target_link_libraries(ConstantAddressAnalysis PRIVATE util)
+
 add_library(LeakAnalysis SHARED
   LeakAnalysis.cc
   ../include/clou/analysis/LeakAnalysis.h
@@ -17,4 +23,6 @@ add_library(SpeculativeTaintAnalysis SHARED
   ../include/clou/analysis/SpeculativeTaintAnalysis.h
 )
 register_llvm_pass(SpeculativeTaintAnalysis)
-target_link_libraries(SpeculativeTaintAnalysis PRIVATE util Mitigation NonspeculativeTaintAnalysis)
+target_link_libraries(SpeculativeTaintAnalysis PRIVATE util Mitigation NonspeculativeTaintAnalysis ConstantAddressAnalysis)
+
+

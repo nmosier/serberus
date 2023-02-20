@@ -34,6 +34,23 @@ namespace clou {
   bool has_incoming_addr(const llvm::Value *V);
   bool is_nonconstant_value(const llvm::Value *V);
 
+  namespace util {
+    inline bool functionIsDirectCallOnly(const llvm::Function& F) {
+      if (F.hasAddressTaken())
+	return false;
+      using L = llvm::Function::LinkageTypes;
+      switch (F.getLinkage()) {
+      case L::InternalLinkage:
+      case L::PrivateLinkage:
+	return true;
+      default:
+	return false;
+      }
+    }
+
+    bool mayLowerToFunctionCall(const llvm::CallBase& C);
+  }
+
   namespace impl {
     template <class OutputIt>
     OutputIt get_incoming_loads(llvm::Value *V, OutputIt out,
@@ -188,8 +205,6 @@ namespace clou {
      */
     llvm::Function *getCalledFunction(const llvm::CallBase *C);
 
-    bool functionIsDirectCallOnly(const llvm::Function& F);
-
     template <class Pass>
     class RegisterClangPass {
     public:
@@ -213,8 +228,6 @@ namespace clou {
 	PM.add(new Pass());
       }
     };
-
-    bool isSpeculativeInbounds(llvm::StoreInst *SI);
 
     // TODO: template, and explicitly specialize to llvm::Function?
     // Directly iterate over insturctions in functions.
@@ -440,8 +453,6 @@ namespace clou {
       return s;
     }
 
-    bool isConstantAddress(const llvm::Value *V);
-    bool isConstantAddressStore(const llvm::Instruction *SI);
     bool isGlobalAddress(const llvm::Value *V);
     bool isGlobalAddressStore(const llvm::Instruction *SI);
     bool isStackAddress(const llvm::Value *V);
