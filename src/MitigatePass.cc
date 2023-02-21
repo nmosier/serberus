@@ -11,6 +11,11 @@
 #include <iomanip>
 #include <csignal>
 #include <cstdlib>
+#include <cerrno>
+#include <cstring>
+
+#include <fcntl.h>
+#include <sys/stat.h>
 
 #include <llvm/Analysis/AliasAnalysis.h>
 #include <llvm/Analysis/CallGraph.h>
@@ -51,6 +56,22 @@
 
 namespace clou {
   namespace {
+
+    static std::ofstream openFile(const llvm::Function& F, const char *suffix) {
+      std::string path;
+      llvm::raw_string_ostream path_os(path);
+      path_os << ClouLogDir << "/";
+      {
+	char *source_path = ::strdup(F.getParent()->getSourceFileName().c_str());
+	char *source_file = ::basename(source_path);
+	path_os << source_file;
+	std::free(source_path);
+      }
+      if (::mkdir(path.c_str(), 0770) < 0 && errno != EEXIST)
+	err(EXIT_FAILURE, "mkdir: %s", path.c_str());
+      path_os << "/" << F.getName() << suffix;
+      return std::ofstream(path);
+    }
 
     extern "C" void ProfilerStart(const char *);
     extern "C" void ProfilerStop(void);
@@ -292,57 +313,6 @@ namespace clou {
 	AU.addRequired<LeakAnalysis>();
       }
 
-      static bool ignoreCall(const llvm::CallBase *C) {
-	if (auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(C)) {
-	  if (llvm::isa<MitigationInst, llvm::DbgInfoIntrinsic>(II) ||  II->isAssumeLikeIntrinsic()) {
-	    return true;
-	  } else {
-	    switch (II->getIntrinsicID()) {
-	    case llvm::Intrinsic::fshr:
-	    case llvm::Intrinsic::fshl:
-	    case llvm::Intrinsic::x86_aesni_aesenc:
-	    case llvm::Intrinsic::x86_aesni_aeskeygenassist:
-	    case llvm::Intrinsic::x86_aesni_aesenclast:
-	    case llvm::Intrinsic::vector_reduce_and:
-	    case llvm::Intrinsic::vector_reduce_or:
-	    case llvm::Intrinsic::umax:
-	    case llvm::Intrinsic::umin:
-	    case llvm::Intrinsic::smax:
-	    case llvm::Intrinsic::smin:
-	    case llvm::Intrinsic::ctpop:
-	    case llvm::Intrinsic::bswap:
-	    case llvm::Intrinsic::x86_pclmulqdq:
-	    case llvm::Intrinsic::x86_rdrand_32:
-	    case llvm::Intrinsic::vastart:
-	    case llvm::Intrinsic::vaend:
-	    case llvm::Intrinsic::vector_reduce_add:
-	    case llvm::Intrinsic::abs:
-	    case llvm::Intrinsic::umul_with_overflow:
-	    case llvm::Intrinsic::bitreverse:
-	    case llvm::Intrinsic::cttz:
-	    case llvm::Intrinsic::usub_sat:
-	    case llvm::Intrinsic::fmuladd:
-	    case llvm::Intrinsic::annotation:
-	    case llvm::Intrinsic::x86_sse2_mfence:
-	    case llvm::Intrinsic::fabs:
-	    case llvm::Intrinsic::floor:
-	      return true;
-
-	    case llvm::Intrinsic::memset:
-	    case llvm::Intrinsic::memcpy:
-	    case llvm::Intrinsic::memmove:
-	      return false;
-
-	    default:
-	      warn_unhandled_intrinsic(II);
-	      return false;
-	    }
-	  }
-	} else {
-	  return false;
-	}	
-      }
-
       static unsigned compute_edge_weight([[maybe_unused]] llvm::Instruction *src, llvm::Instruction *dst, [[maybe_unused]] const llvm::DominatorTree& DT, const llvm::LoopInfo& LI) {
 	if (WeightGraph) {
 	  float score = 1.;
@@ -475,7 +445,7 @@ namespace clou {
 	// Type 3: Calls.
 	for (auto *I : reach)
 	  if (auto *C = llvm::dyn_cast<llvm::CallBase>(I))
-	    if (!ignoreCall(C))
+	    if (util::mayLowerToFunctionCall(*C))
 	      sources.insert(C);
 	
 	std::erase_if(sources, [&reach] (llvm::Instruction *I) {
@@ -498,9 +468,8 @@ namespace clou {
       static OutputIt getCtrls(llvm::Function& F, OutputIt out) {
 	for (auto& I : llvm::instructions(F)) {
 	  if (llvm::CallBase *CB = llvm::dyn_cast<llvm::CallBase>(&I)) {
-	    if (!ignoreCall(CB)) {
+	    if (util::mayLowerToFunctionCall(*CB))
 	      *out++ = CB;
-	    }
 	  } else if (llvm::isa<llvm::ReturnInst>(&I)) {
 	    *out++ = &I;
 	  }
@@ -544,11 +513,29 @@ namespace clou {
 	for (const llvm::CallBase& CB : util::instructions<llvm::CallBase>(F)) {
 	  if (const llvm::Function *F = CB.getCalledFunction()) {
 	    if (seen.insert(F).second) {
-	      callees.getAsArray()->push_back(llvm::json::Value(F->getName()));
+	      std::string s;
+	      llvm::raw_string_ostream os(s);
+	      os << F->getName() << " (";
+	      if (F->isDeclaration())
+		os << "decl";
+	      else
+		os << "def";
+	      os << ", " << util::linkageTypeToString(F->getLinkage()) << ")";
+	      callees.getAsArray()->push_back(llvm::json::Value(s));
 	    }
 	  } else {
 	    indirect_calls = true;
 	  }
+	}
+
+	// Print which arguments are constant-address?
+	auto& CAA = getAnalysis<ConstantAddressAnalysis>();
+	auto& ca_args = j["ca_args"] = llvm::json::Array();
+	for (const llvm::Argument *A : CAA.getConstAddrArgs(&F)) {
+	  std::string s;
+	  llvm::raw_string_ostream os(s);
+	  os << *A;
+	  ca_args.getAsArray()->push_back(llvm::json::Value(s));
 	}
 
 	// Get all transmitters
@@ -572,10 +559,7 @@ namespace clou {
       void saveLog(llvm::json::Object&& j, llvm::Function& F) {
 	if (!ClouLog)
 	  return;
-	std::string s;
-	llvm::raw_string_ostream ss(s);
-	ss << ClouLogDir << "/" << F.getName() << ".json";
-	std::ofstream os_cxx(s);
+	std::ofstream os_cxx = openFile(F, ".json");
 	llvm::raw_os_ostream os_llvm(os_cxx);
 	os_llvm << llvm::json::Value(std::move(j));
       }
@@ -935,7 +919,7 @@ namespace clou {
 		if (!llvm::isa<llvm::Constant>(xmit_op)) // Could also check if it's defined before the call.
 		  xmits.insert(&xmit);
 	    for (llvm::CallBase& call : util::instructions<llvm::CallBase>(F))
-	      if (!ignoreCall(&call))
+	      if (util::mayLowerToFunctionCall(call))
 		calls.insert(&call);
 	    A.add_st(make_node_set(calls), make_node_set(xmits));
 	  }
@@ -951,7 +935,7 @@ namespace clou {
 
 	  // non-direct-only call
 	  for (llvm::CallBase& call : util::instructions<llvm::CallBase>(F)) {
-	    if (ignoreCall(&call))
+	    if (!util::mayLowerToFunctionCall(call))
 	      continue;
 	    if (const auto *CalledF = util::getCalledFunction(&call))
 	      if (util::functionIsDirectCallOnly(*CalledF))
@@ -974,7 +958,7 @@ namespace clou {
 		continue;
 	      }
 	      if (auto *CI = llvm::dyn_cast<llvm::CallBase>(&I)) {
-		if (ignoreCall(CI))
+		if (!util::mayLowerToFunctionCall(*CI))
 		  continue;
 		entries.insert(&I);
 	      }
@@ -1212,9 +1196,7 @@ namespace clou {
 	}
 
 	if (ClouLog) {
-	  std::stringstream path;
-	  path << ClouLogDir << "/" << F.getName().str() << ".ll";
-	  std::ofstream f(path.str());
+	  std::ofstream f = openFile(F, ".ll");
 	  llvm::raw_os_ostream os(f);
 	  F.print(os);
 	}

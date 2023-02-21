@@ -67,7 +67,7 @@ function(libsodium_library NAME)
   # clean step
   add_custom_command(OUTPUT ${STAMP_DIR}/clean.stamp
     COMMAND make --quiet clean
-    COMMAND rm -f ${LOG_DIR}/*
+    COMMAND rm -rf ${LOG_DIR}/*
     COMMAND touch ${STAMP_DIR}/clean.stamp
     DEPENDS ${STAMP_DIR}/configure.stamp
     COMMENT "Cleaning libsodium library ${NAME}"
@@ -76,7 +76,6 @@ function(libsodium_library NAME)
 
   # build step
   add_custom_command(OUTPUT ${STAMP_DIR}/build.stamp #  ${BUILD_DIR}/build.log
-    COMMAND rm -f ${LOG_DIR}/*
     COMMAND make --quiet -j8 2>&1 # | tee ${BUILD_DIR}/build.log
     COMMAND touch ${STAMP_DIR}/build.stamp
     DEPENDS ${STAMP_DIR}/clean.stamp

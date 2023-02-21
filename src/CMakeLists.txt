@@ -140,6 +140,12 @@ add_library(InlinePass SHARED
 register_llvm_pass(InlinePass)
 target_link_libraries(InlinePass PRIVATE util NonspeculativeTaintAnalysis SpeculativeTaintAnalysis LeakAnalysis)
 
+add_library(DuplicatePass SHARED
+  DuplicatePass.cc
+)
+register_llvm_pass(DuplicatePass)
+target_link_libraries(DuplicatePass PRIVATE util)
+
 # add_library(StatsPass SHARED
 #   StatsPass.cc
 # )

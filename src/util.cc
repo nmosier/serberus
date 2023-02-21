@@ -13,6 +13,9 @@
 #include <llvm/IR/Operator.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Use.h>
+#include <llvm/IR/Intrinsics.h>
+#include <llvm/IR/IntrinsicInst.h>
+#include <llvm/IR/IntrinsicsX86.h>
 
 #include "clou/Metadata.h"
 
@@ -50,8 +53,37 @@ unsigned instruction_dominator_depth(llvm::Instruction *I, const llvm::Dominator
 
 namespace util {
 
+  llvm::StringRef linkageTypeToString(llvm::GlobalValue::LinkageTypes linkageType) {
+    switch (linkageType) {
+        case llvm::GlobalValue::PrivateLinkage:
+            return "private";
+        case llvm::GlobalValue::InternalLinkage:
+            return "internal";
+        case llvm::GlobalValue::AvailableExternallyLinkage:
+            return "available_externally";
+        case llvm::GlobalValue::LinkOnceAnyLinkage:
+            return "linkonce_any";
+        case llvm::GlobalValue::LinkOnceODRLinkage:
+            return "linkonce_odr";
+        case llvm::GlobalValue::WeakAnyLinkage:
+            return "weak_any";
+        case llvm::GlobalValue::WeakODRLinkage:
+            return "weak_odr";
+        case llvm::GlobalValue::CommonLinkage:
+            return "common";
+        case llvm::GlobalValue::AppendingLinkage:
+            return "appending";
+        case llvm::GlobalValue::ExternalLinkage:
+            return "external";
+        default:
+            return "unknown_linkage_type";
+    }
+}
+
   bool mayLowerToFunctionCall(const llvm::CallBase& C) {
     if (const auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(&C)) {
+      if (II->isAssumeLikeIntrinsic())
+	return false;
       switch (II->getIntrinsicID()) {
       case llvm::Intrinsic::fshr:
       case llvm::Intrinsic::fshl:
@@ -81,16 +113,16 @@ namespace util {
       case llvm::Intrinsic::x86_sse2_mfence:
       case llvm::Intrinsic::fabs:
       case llvm::Intrinsic::floor:
-	return true;
+	return false;
 
       case llvm::Intrinsic::memset:
       case llvm::Intrinsic::memcpy:
       case llvm::Intrinsic::memmove:
-	return false;
+	return true;
 
       default:
 	warn_unhandled_intrinsic(II);
-	return false;
+	return true;
       }
     } else {
       return true;

@@ -49,6 +49,8 @@ function(openssl_library NAME)
 
   # clean step
   add_custom_command(OUTPUT ${STAMP_DIR}/clean.stamp
+    COMMAND rm -rf ${LOG_DIR}
+    COMMAND mkdir ${LOG_DIR}
     COMMAND make --quiet clean
     COMMAND touch ${STAMP_DIR}/clean.stamp
     DEPENDS ${STAMP_DIR}/configure.stamp

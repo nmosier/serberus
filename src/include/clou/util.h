@@ -49,6 +49,8 @@ namespace clou {
     }
 
     bool mayLowerToFunctionCall(const llvm::CallBase& C);
+
+    llvm::StringRef linkageTypeToString(llvm::GlobalValue::LinkageTypes linkageType);    
   }
 
   namespace impl {

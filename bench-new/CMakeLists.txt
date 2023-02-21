@@ -101,7 +101,7 @@ endfunction()
 
 function(add_benchmarks lib name arg)
   # set(modes baseline_none cloucc)
-  # set(modes baseline_none cloucc_sts cloucc_ncal_xmit cloucc_ncal_glob cloucc_ncas_xmit cloucc_ncas_ctrl cloucc_load_xmit cloucc_fps cloucc_fps+postch cloucc_prech)
+  # set(modes baseline_none cloucc cloucc_sts cloucc_ncal_xmit cloucc_ncal_glob cloucc_ncas_xmit cloucc_ncas_ctrl cloucc_fps cloucc_fps+postch cloucc_prech)
   set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc cloucc_naive)
   # set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc_test)
   # set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc_ncal_xmit)  

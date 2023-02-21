@@ -1,0 +1,16 @@
+#!/bin/bash
+
+usage() {
+    cat <<EOF
+usage: $0 <pintool> <command> [<args>...]
+EOF
+}
+
+if [[ $# -lt 2 ]]; then 
+    usage >&2
+    exit 1
+fi
+tool="$1"
+shift 1
+
+"@PIN_DIR@/pin" -t "$tool" -- "$@"
