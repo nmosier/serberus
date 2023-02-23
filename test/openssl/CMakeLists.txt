@@ -105,8 +105,3 @@ openssl_cloucc_library(openssl_cloucc_trace
 )
 target_link_libraries(openssl_cloucc_trace INTERFACE trace_runtime)
 endif()
-
-openssl_cloucc_library(openssl_cloucc_baseptr
-  PASS DuplicatePass InlinePass MitigatePass BasePointerPass Attributes
-  LLVMFLAGS -clou=ncal_xmit,ncal_glob,ncas_xmit,ncas_ctrl,prech
-)

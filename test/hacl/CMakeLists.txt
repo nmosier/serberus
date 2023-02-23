@@ -79,13 +79,3 @@ hacl_benchmark_library(hacl_cloucc_prech ${cloucc_base_args}
   PASS DuplicatePass InlinePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=prech
 )
-
-hacl_benchmark_library(hacl_cloucc_trace ${cloucc_base_args}
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes TracePass
-  LLVMFLAGS -clou
-)
-
-hacl_benchmark_library(hacl_cloucc_baseptr ${cloucc_base_args}
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass BasePointerPass Attributes
-  LLVMFLAGS -clou=ncal_xmit,ncal_glob,ncas_xmit,ncas_ctrl,prech
-)

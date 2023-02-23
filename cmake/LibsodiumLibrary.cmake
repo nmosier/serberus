@@ -5,6 +5,8 @@ function(libsodium_library NAME)
   set(multi_value_args DEPENDS PASS CPPFLAGS CFLAGS LDFLAGS LLVMFLAGS CLOUFLAGS CONFIGURE_OPTIONS)
   cmake_parse_arguments(LIBSODIUM "" "" "${multi_value_args}" ${ARGN})
 
+  FetchContent_GetProperties(Libsodium SOURCE_DIR Libsodium_SOURCE_DIR)
+  set(SOURCE_DIR ${Libsodium_SOURCE_DIR})
   set(PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/${NAME})
   set(BUILD_DIR ${PREFIX_DIR}/build)
   set(STAMP_DIR ${PREFIX_DIR}/stamp)
@@ -57,7 +59,7 @@ function(libsodium_library NAME)
   
   # configure command
   add_custom_command(OUTPUT ${STAMP_DIR}/configure.stamp
-    COMMAND ${LIBSODIUM_DIR}/configure --quiet --prefix=${PREFIX_DIR} CC=${LLVM_BINARY_DIR}/bin/clang LD=${LLVM_BINARY_DIR}/bin/ld.lld "CPPFLAGS=${LIBSODIUM_CPPFLAGS}" "CFLAGS=${LIBSODIUM_CFLAGS}" "LDFLAGS=${LIBSODIUM_LDFLAGS}" ${LIBSODIUM_CONFIGURE_OPTIONS}
+    COMMAND ${SOURCE_DIR}/configure --quiet --prefix=${PREFIX_DIR} CC=${LLVM_BINARY_DIR}/bin/clang LD=${LLVM_BINARY_DIR}/bin/ld.lld "CPPFLAGS=${LIBSODIUM_CPPFLAGS}" "CFLAGS=${LIBSODIUM_CFLAGS}" "LDFLAGS=${LIBSODIUM_LDFLAGS}" ${LIBSODIUM_CONFIGURE_OPTIONS}
     COMMAND touch ${STAMP_DIR}/configure.stamp
     COMMENT "Configuring libsodium library ${NAME}"
     WORKING_DIRECTORY ${BUILD_DIR}

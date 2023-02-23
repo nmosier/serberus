@@ -2,6 +2,8 @@ function(openssl_library NAME)
   set(multi_value_args DEPENDS PASS CPPFLAGS CFLAGS LDFLAGS LLVMFLAGS CLOUFLAGS CONFIGURE_OPTIONS)
   cmake_parse_arguments(OPENSSL "" "" "${multi_value_args}" ${ARGN})
 
+  FetchContent_GetProperties(OpenSSL SOURCE_DIR OpenSSL_SOURCE_DIR)
+  set(SOURCE_DIR ${OpenSSL_SOURCE_DIR})
   set(PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/${NAME})
   set(BUILD_DIR ${PREFIX_DIR}/build)
   set(STAMP_DIR ${PREFIX_DIR}/stamp)
@@ -40,7 +42,7 @@ function(openssl_library NAME)
   list(JOIN OPENSSL_LDFLAGS " " OPENSSL_LDFLAGS)
 
   add_custom_command(OUTPUT ${STAMP_DIR}/configure.stamp
-    COMMAND ${OPENSSL_DIR}/Configure --prefix=${INSTALL_DIR} CC=${LLVM_BINARY_DIR}/bin/clang LD=${LLVM_BINARY_DIR}/bin/ld.lld "CPPFLAGS=${OPENSSL_CPPFLAGS}" "CFLAGS=${OPENSSL_CFLAGS}" "LDFLAGS=${OPENSSL_LDFLAGS}" ${OPENSSL_CONFIGURE_OPTIONS} RANLIB=${LLVM_BINARY_DIR}/bin/llvm-ranlib
+    COMMAND ${SOURCE_DIR}/Configure --prefix=${INSTALL_DIR} CC=${LLVM_BINARY_DIR}/bin/clang LD=${LLVM_BINARY_DIR}/bin/ld.lld "CPPFLAGS=${OPENSSL_CPPFLAGS}" "CFLAGS=${OPENSSL_CFLAGS}" "LDFLAGS=${OPENSSL_LDFLAGS}" ${OPENSSL_CONFIGURE_OPTIONS} RANLIB=${LLVM_BINARY_DIR}/bin/llvm-ranlib
     COMMAND touch ${STAMP_DIR}/configure.stamp
     COMMENT "Configuring OpenSSL library ${NAME}"
     WORKING_DIRECTORY ${BUILD_DIR}

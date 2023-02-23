@@ -22,7 +22,7 @@ function(hacl_benchmark NAME BENCHSRC SRC)
     list(APPEND Hacl_CFLAGS -mllvm ${flag})
   endforeach()
 
-  FetchContent_GetProperties(Hacl SOURCE_DIR Hacl_SOURCE_DIR)
+  FetchContent_GetProperties(Hacl)
   set(Hacl_INCLUDE_DIRS ${Hacl_SOURCE_DIR}/dist/gcc-compatible ${Hacl_SOURCE_DIR}/dist/karamel/include ${Hacl_SOURCE_DIR}/dist/karamel/krmllib/dist/minimal)
 
   foreach(inc IN LISTS Hacl_INCLUDE_DIRS)

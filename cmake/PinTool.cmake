@@ -1,4 +1,5 @@
 function(add_pin_tool name source)
+  FetchContent_GetProperties(Pin SOURCE_DIR PIN_DIR)
   get_filename_component(source ${source} ABSOLUTE)
   set(pintooldir "${CMAKE_CURRENT_BINARY_DIR}/${name}.pintool.d")
   make_directory("${pintooldir}")

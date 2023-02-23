@@ -52,6 +52,7 @@ function(add_stall_benchmark)
 endfunction()
 
 function(add_inst_benchmark)
+  FetchContent_GetProperties(Pin SOURCE_DIR PIN_DIR)
   add_benchmark_shared(${ARGN} inst "")
   target_compile_definitions(${exe} PRIVATE PIN_DIR=\"${PIN_DIR}\" PIN_TOOL=\"$<TARGET_PROPERTY:inscount,LIBRARY>\")
   add_dependencies(${exe} inscount)

@@ -175,18 +175,6 @@ if(0)
   target_link_libraries(NCAStorePass PRIVATE FordFulkerson util Mitigation Transmitter)
 endif()
 
-add_library(TestPass SHARED
-  TestPass.cc
-)
-target_link_libraries(TestPass PRIVATE util)
-register_llvm_pass(TestPass)
-
-add_library(BasePointerPass SHARED
-  BasePointerPass.cc
-)
-register_llvm_pass(BasePointerPass)
-target_link_libraries(BasePointerPass PRIVATE util)
-
 add_library(FramePromotion SHARED
   FramePromotion.cc
 )
