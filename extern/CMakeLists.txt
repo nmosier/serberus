@@ -7,10 +7,10 @@ macro(declare name)
   FetchContent_Declare(
     ${name}
     ${ARGN}
-    CONFIGURE_COMMAND
-    BUILD_COMMAND
-    TEST_COMMAND
-    INSTALL_COMMAND
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    TEST_COMMAND ""
+    INSTALL_COMMAND ""
   )
   FetchContent_MakeAvailable(${name})
   FetchContent_GetProperties(${name} POPULATED populated)
@@ -55,17 +55,29 @@ else()
 endif()
 
 if(DEFINED PIN_DIR)
-  declare(Pin
+  FetchContent_Declare(Pin
     SOURCE_DIR ${PIN_DIR}
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    TEST_COMMAND ""
+    INSTALL_COMMAND ""
   )
 else()
-  declare(Pin
+  FetchContent_Declare(Pin
     URL https://software.intel.com/sites/landingpage/pintool/downloads/pin-3.26-98690-g1fc9d60e6-gcc-linux.tar.gz
     DOWNLOAD_NO_PROGRESS Off
-  )    
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    TEST_COMMAND ""
+    INSTALL_COMMAND ""
+  )
 endif()
+FetchContent_MakeAvailable(Pin)
+FetchContent_GetProperties(Pin SOURCE_DIR Pin_SOURCE_DIR)
+set(PIN_DIR ${Pin_SOURCE_DIR} CACHE PATH "Path to Pin source directory")
 
 block()
+  
   set(BENCHMARK_ENABLE_TESTING OFF)
   set(CMAKE_BUILD_TYPE Release)
   set(CMAKE_C_FLAGS -fcf-protection=branch)
