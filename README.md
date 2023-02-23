@@ -1,16 +1,27 @@
 # LLSCT
 ## Building
+LLSCT is only supported for Linux (but may run on Intel-based Macs with some tweaks).
+
+### Dependencies
+LLSCT currently requires the following dependencies:
+- gperftools
+- libunwind
+- CMake (version >= 3.25)
+You can install all of these using [Homebrew ](https://brew.sh).
+
+### Building llsct-llvm
 To build LLSCT, you will need to clone two repositories: [llsct-llvm](https://github.com/nmosier/clouxx-llvm) and llsct-passes (this repository).
 First, clone and build __llsct-llvm__:
 ```sh
 git clone https://github.com/nmosier/clouxx-llvm --depth=1 llsct-llvm
 mkdir llsct-llvm/build && cd llsct-llvm/build
 cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../install -DLLVM_ENABLE_ASSERTIONS=On -DLLVM_ENABLE_PROJECTS='clang;lld' -DLLVM_TARGETS_TO_BUILD='X86' ../llvm
-cmake --build .
-cmake --install .
+ninja
+ninja install
 cd ../..
 ```
 
+### Building llsct-passes
 Now, clone and configure __llsct-passes__:
 ```sh
 git clone https://github.com/nmosier/clouxx-passes llsct-passes
