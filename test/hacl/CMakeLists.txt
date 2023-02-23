@@ -5,11 +5,6 @@ make_directory(${CMAKE_CURRENT_BINARY_DIR}/logs)
 
 function(hacl_benchmark_library NAME)
   hacl_library(${NAME} ${ARGN} CFLAGS -O3 -fno-stack-protector)
-  hacl_library(${NAME}_marked ${ARGN}
-    CFLAGS -O3 -fno-stack-protector
-    LLVMFLAGS -clou-mitigation-trap
-    LDFLAGS -Wl,-z,trace-mitigations
-  )
 endfunction()
 
 hacl_benchmark_library(hacl_baseline_none)
@@ -23,6 +18,16 @@ hacl_benchmark_library(hacl_baseline_slh+retpoline+ssbd ${baseline_slh_retpoline
 hacl_benchmark_library(hacl_cloucc ${cloucc_base_args}
   PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou
+)
+
+hacl_benchmark_library(hacl_cloucc_frame ${cloucc_base_args}
+  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes FramePromotion
+  LLVMFLAGS -clou
+)
+
+hacl_benchmark_library(hacl_cloucc_opt ${cloucc_base_args}
+  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou -clou-expand-sts
 )
 
 hacl_benchmark_library(hacl_cloucc_naive ${cloucc_base_args}
@@ -80,3 +85,7 @@ hacl_benchmark_library(hacl_cloucc_trace ${cloucc_base_args}
   LLVMFLAGS -clou
 )
 
+hacl_benchmark_library(hacl_cloucc_baseptr ${cloucc_base_args}
+  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass BasePointerPass Attributes
+  LLVMFLAGS -clou=ncal_xmit,ncal_glob,ncas_xmit,ncas_ctrl,prech
+)

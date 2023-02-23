@@ -554,6 +554,8 @@ namespace clou {
 	  if (is_xmit)
 	    ++stat_naive_xmits;
 	}
+
+	j["does_not_recurse"] = F.doesNotRecurse();
       }
 
       void saveLog(llvm::json::Object&& j, llvm::Function& F) {
@@ -827,8 +829,12 @@ namespace clou {
 		xmits.insert(T);
 	    }
 
-	    const auto& sources = get_sources(SI);
-	    A.add_st(make_node_set(sources), std::set<Node>{SI}, xmits);
+	    if (ExpandSTs) { 
+	      const auto& sources = get_sources(SI);
+	      A.add_st(make_node_set(sources), std::set<Node>{SI}, xmits);
+	    } else {
+	      A.add_st(std::set<Node>{SI}, xmits); // REVERTME
+	    }
 	    ++stat_ncas_xmit;
 	  }
 
@@ -836,32 +842,21 @@ namespace clou {
 
 
 	if (enabled.ncas_ctrl) {
-	  
-	  // Create ST-pairs for {oob_sec_stores X ctrls}
-#if 0
-	  for (auto *ctrl : ctrls) {
-	    for (auto *SI : llvm::concat<llvm::StoreInst * const>(nca_nt_sec_stores, nca_t_sec_stores)) {
-#if 1
-	      A.add_st({{SI}, {ctrl}});
-	      ++stat_ncas_ctrl;
-#else
-	      for (auto *source : getSourcesForNCAAccess(SI, nca_pub_stores))
-		sts.push_back({.s = source, .t = ctrl});
-#endif
+
+	  // OPT NOTE: For some reason, this seems to make overall performance worse.
+	  if (ExpandSTs && false) {
+
+	    for (llvm::StoreInst *SI : llvm::concat<llvm::StoreInst * const>(nca_nt_sec_stores, nca_t_sec_stores)) {
+	      // Find sources.
+	      const auto& sources = get_sources(SI);
+	      A.add_st(make_node_set(sources), std::set<Node>{SI}, make_node_set(ctrls));
 	    }
-	  }
-#elif 0
-	  const auto ncas_range = llvm::concat<llvm::StoreInst * const>(nca_nt_sec_stores, nca_t_sec_stores);
-	  for (llvm::StoreInst *ncas : ncas_range) {
-	    const auto& sources = get_sources(ncas);
-	    A.add_st(make_node_set(sources), std::set<Node>{ncas}, make_node_set(ctrls));
-	    ++stat_ncas_ctrl;
-	  }
-#else
-	  A.add_st(make_node_set(llvm::concat<llvm::StoreInst * const>(nca_nt_sec_stores, nca_t_sec_stores)),
+
+	  } else {
+	    // Create ST-pairs for {oob_sec_stores X ctrls}
+	    A.add_st(make_node_set(llvm::concat<llvm::StoreInst * const>(nca_nt_sec_stores, nca_t_sec_stores)),
 		   make_node_set(ctrls));
-	  
-#endif
+	  }
 	}
 
 	if (enabled.ncal_xmit) {
@@ -872,7 +867,8 @@ namespace clou {
 	    for (llvm::Instruction *xmit_op : xmit_ops)
 	      llvm::copy(ST.taints.at(xmit_op), std::inserter(ncals, ncals.end()));
 	    for (llvm::Instruction *ncal : ncals) {
-	      if (ncal == &ncal->getFunction()->front().front()) {
+	      // FIXME: ADDED || TRUE; revert if necessary.
+	      if (!ExpandSTs || ncal == &ncal->getFunction()->front().front()) {
 		A.add_st(std::set<Node>{ncal}, std::set<Node>{xmit});
 		++stat_ncal_xmit;
 	      } else {
@@ -889,7 +885,8 @@ namespace clou {
 
 	  for (llvm::StoreInst& SI : util::instructions<llvm::StoreInst>(F)) {
 	    llvm::Value *SV = SI.getValueOperand();
-	    if (CAA.isConstantAddress(SI.getPointerOperand()) && util::isGlobalAddressStore(&SI) && !NST.secret(SV) && ST.secret(SV)) {
+	    if (CAA.isConstantAddress(SI.getPointerOperand()) && util::isGlobalAddressStore(&SI) &&
+		!NST.secret(SV) && ST.secret(SV)) {
 	      for (llvm::Instruction *LI : ST.taints.at(llvm::cast<llvm::Instruction>(SV))) {
 		A.add_st(std::set<Node>{LI}, std::set<Node>{&SI});
 	      }
@@ -1087,7 +1084,8 @@ namespace clou {
 	  {
 	    log["function_name"] = F.getName();
 	    log["solution_time"] = util::make_string_std(std::setprecision(3), solve_duration) + "s";
-	    log["num_st_pairs"] = A.get_sts().size();
+	    log["num_sts_unopt"] = sts_bak.size();
+	    log["num_sts_opt"] = A.get_sts().size();
 #if 0
 	    VSet sources, sinks;
 	    for (const auto& st : A.sts) {

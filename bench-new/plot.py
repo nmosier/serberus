@@ -125,10 +125,13 @@ plt.tight_layout()
 
 ax = g.facet_axis(0, 0)
 
-# TODO: make it proportional, not fixed
-ymax = 1500
-if ax.get_ybound()[1] >= ymax: 
-    ax.set_ybound(upper = ymax)
+# FIXME: make it proportional, not fixed
+# REVERTME
+# ymax = 1500
+ymax = None
+if ymax is not None:
+    if ax.get_ybound()[1] >= ymax: 
+        ax.set_ybound(upper = ymax)
 
 # fix up bars
 for c in ax.containers:
@@ -140,7 +143,8 @@ for c in ax.containers:
         else:
             s = f'{val:.1f}'
         labels.append(s)
-        v.set_height(min(v.get_height(), ymax))
+        if ymax is not None:
+            v.set_height(min(v.get_height(), ymax))
     texts = ax.bar_label(c, labels = labels, label_type = 'edge', rotation = 90, fontsize = 'small')
 
     

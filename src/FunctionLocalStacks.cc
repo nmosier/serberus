@@ -14,6 +14,7 @@
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/Clou/Clou.h>
+#include <llvm/IR/InstIterator.h>
 
 #include "clou/util.h"
 
@@ -25,7 +26,6 @@ constexpr const char *sep = "_"; // TODO: get rid of
 
 namespace {
 
-  constexpr uint64_t stack_size = 0x10000; // TODO: make these command-line parameters
   const Align max_align (256); // TODO: make command-line parameter
 
   struct FunctionLocalStacks final: public ModulePass {
@@ -37,25 +37,6 @@ namespace {
       if (!enabled.fps)
 	return false;
 
-#if 0
-      // for every function declaration, emit tentative wrappers
-      {
-	std::vector<Function *> todo;
-	std::transform(M.begin(), M.end(), std::back_inserter(todo), [] (Function& F) { return &F; });
-	for (Function *F : todo) {
-	  if (F->isDeclaration()) {
-	    emitWrapperForDeclaration(*F);
-	  } else {
-	    emitAliasForDefinition(*F);
-	  }
-	}
-      }
-
-      replaceMalloc(M);
-      replaceMemoryRealloc(M, "realloc");
-      replaceMemoryRealloc(M, "reallocarray");
-#endif
-      
       std::vector<GlobalVariable *> GVs;
       
       for (Function& F : M) {
@@ -67,14 +48,31 @@ namespace {
       return true;
     }
 
+    static bool shouldRestoreOldSP(const Function& F) {
+      //return !F.doesNotRecurse();
+      return !util::doesNotRecurse(F);
+    }
+
+    static bool shouldSaveNewSP(Function& F) {
+      for (const auto& C : util::instructions<CallBase>(F))
+	if (util::mayLowerToFunctionCall(C))
+	  return true;
+      return false;
+    }
+
     template <class OutputIt>
     void runOnFunction(Function& F, OutputIt out) {
+      // FIXME: Is this necessary?
+      // YES!
       F.addFnAttr(Attribute::get(F.getContext(), "stackrealign"));
+
+      if (!shouldRestoreOldSP(F))
+	F.addFnAttr(FnAttr_fps_usestack);
       
       Module& M = *F.getParent();
 
       // Type:
-      Type *stack_ty = ArrayType::get(IntegerType::getInt8Ty(F.getContext()), stack_size);
+      Type *stack_ty = ArrayType::get(IntegerType::getInt8Ty(F.getContext()), StackSize);
       Type *sp_ty = PointerType::get(IntegerType::getInt8Ty(F.getContext()), 0);
       const auto stack_name = (F.getName() + sep + "stack").str();
       const auto sp_name = (F.getName() + sep + "sp").str();
@@ -101,13 +99,31 @@ namespace {
       *out++ = sp;
 
       // Save old function-local stack pointer on entry + exit
-      LoadInst *LI = IRBuilder<>(&F.getEntryBlock().front()).CreateLoad(sp_ty, sp);
-      for (BasicBlock &B : F) {
-	Instruction *I = &B.back();
-	if (isa<ReturnInst>(I)) {
-	  IRBuilder<>(I).CreateStore(LI, sp);
+      {
+	LLVMContext& ctx = F.getContext();
+	Value *OldSP;
+	IRBuilder<> IRB(&F.getEntryBlock().front());
+	if (shouldRestoreOldSP(F)) 
+	  OldSP = IRB.CreateLoad(sp_ty, sp);
+	if (shouldSaveNewSP(F)) {
+	  Value *NewSP;
+	  Metadata *MD = MDString::get(ctx, "rsp");
+	  MDNode *MDN = MDNode::get(ctx, {MD});
+	  Value *MDV = MetadataAsValue::get(ctx, MDN);
+	  NewSP = IRB.CreateIntrinsic(Intrinsic::read_register, {Type::getInt64Ty(ctx)}, {MDV});
+	  NewSP = IRB.CreateIntToPtr(NewSP, sp_ty);
+	  IRB.CreateStore(NewSP, sp);
+	}
+	if (shouldRestoreOldSP(F)) {
+	  for (BasicBlock &B : F) {
+	    Instruction *I = &B.back();
+	    if (isa<ReturnInst>(I)) {
+	      IRBuilder<>(I).CreateStore(OldSP, sp);
+	    }
+	  }
 	}
       }
+
     }
 
     CallInst *findCallToFunction(Function& F, StringRef name) {

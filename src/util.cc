@@ -113,6 +113,7 @@ namespace util {
       case llvm::Intrinsic::x86_sse2_mfence:
       case llvm::Intrinsic::fabs:
       case llvm::Intrinsic::floor:
+      case llvm::Intrinsic::x86_sse2_lfence:
 	return false;
 
       case llvm::Intrinsic::memset:
@@ -127,6 +128,35 @@ namespace util {
     } else {
       return true;
     }
+  }
+
+  namespace {
+    bool doesNotRecurseRec(const llvm::Function& F, std::set<const llvm::Function *>& seen) {
+      if (!seen.insert(&F).second)
+	return false;
+      if (F.doesNotRecurse())
+	return true;
+      if (F.isDeclaration())
+	return false;
+      return llvm::all_of(llvm::instructions(F), [&] (const llvm::Instruction& I) {
+	if (const auto *C = llvm::dyn_cast<llvm::CallBase>(&I)) {
+	  if (llvm::isa<llvm::IntrinsicInst>(&I))
+	    return true;
+	  const auto *CalledF = getCalledFunction(C);
+	  if (CalledF == nullptr)
+	    return false;
+	  if (doesNotRecurseRec(*CalledF, seen))
+	    return true;
+	  return false;
+	}
+	return true;
+      });
+    }
+  }
+
+  bool doesNotRecurse(const llvm::Function& F) {
+    std::set<const llvm::Function *> seen;
+    return doesNotRecurseRec(F, seen);
   }
 
   namespace {

@@ -8,12 +8,6 @@ function(libsodium_benchmark_library NAME)
     CFLAGS -O3 -fno-stack-protector
     ${ARGN}
   )
-  libsodium_library(${NAME}_marked
-    CFLAGS -O3 -fno-stack-protector
-    ${ARGN}
-    LLVMFLAGS -clou-mitigation-trap
-    LDFLAGS -Wl,-z,trace-mitigations
-  )
 endfunction()
 
 function(libsodium_baseline_library NAME)
@@ -41,9 +35,19 @@ libsodium_cloucc_library(libsodium_cloucc
   LLVMFLAGS -clou
 )
 
+libsodium_cloucc_library(libsodium_cloucc_frame
+  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes FramePromotion
+  LLVMFLAGS -clou
+)
+
 libsodium_cloucc_library(libsodium_cloucc_naive
   PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=load_xmit,prech
+)
+
+libsodium_cloucc_library(libsodium_cloucc_opt
+  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou -clou-expand-sts
 )
 
 libsodium_cloucc_library(libsodium_cloucc_ncal_xmit
@@ -90,9 +94,4 @@ libsodium_cloucc_library(libsodium_cloucc_fps+postch
 libsodium_cloucc_library(libsodium_cloucc_prech
   PASS DuplicatePass InlinePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=prech
-)
-
-libsodium_cloucc_library(libsodium_cloucc_trace
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes TracePass
-  LLVMFLAGS -clou
 )

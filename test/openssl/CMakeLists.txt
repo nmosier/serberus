@@ -9,13 +9,6 @@ function(openssl_base_library NAME)
     CONFIGURE_OPTIONS no-asm
     ${ARGN}
   )
-  openssl_library(${NAME}_marked
-    CFLAGS -O3 -fno-stack-protector
-    CONFIGURE_OPTIONS no-asm
-    ${ARGN}
-    LLVMFLAGS -clou-mitigation-trap
-    LDFLAGS -Wl,-z,trace-mitigations
-  )
 endfunction()
 
 function(openssl_baseline_library NAME)
@@ -41,6 +34,16 @@ openssl_baseline_library(openssl_baseline_slh+retpoline+ssbd ${baseline_slh_args
 openssl_cloucc_library(openssl_cloucc
   PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou
+)
+
+openssl_cloucc_library(openssl_cloucc_frame
+  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes FramePromotion
+  LLVMFLAGS -clou
+)
+
+openssl_cloucc_library(openssl_cloucc_opt
+  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou -clou-expand-sts
 )
 
 openssl_cloucc_library(openssl_cloucc_naive
@@ -102,3 +105,8 @@ openssl_cloucc_library(openssl_cloucc_trace
 )
 target_link_libraries(openssl_cloucc_trace INTERFACE trace_runtime)
 endif()
+
+openssl_cloucc_library(openssl_cloucc_baseptr
+  PASS DuplicatePass InlinePass MitigatePass BasePointerPass Attributes
+  LLVMFLAGS -clou=ncal_xmit,ncal_glob,ncas_xmit,ncas_ctrl,prech
+)

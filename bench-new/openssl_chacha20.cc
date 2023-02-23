@@ -1,7 +1,8 @@
 #include "shared.h"
 #include <openssl/evp.h>
 
-__asm__(".globl safe_call\n\t"
+__asm__(".text\n\t"
+	".globl safe_call\n\t"
 	".type safe_call, @function\n\t"
 	"safe_call:\n\t"
 	".cfi_startproc\n\t"

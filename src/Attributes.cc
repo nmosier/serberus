@@ -31,8 +31,8 @@ namespace clou {
       }
     };
 
-    llvm::RegisterPass<AttributesPass> X {"clou-attributes-pass", "Clou's Attributes Pass"};
-    util::RegisterClangPass<AttributesPass> Y;
+    static llvm::RegisterPass<AttributesPass> X {"clou-attributes-pass", "Clou's Attributes Pass"};
+    static util::RegisterClangPass<AttributesPass> Y;
     
   }
 }

@@ -180,3 +180,15 @@ add_library(TestPass SHARED
 )
 target_link_libraries(TestPass PRIVATE util)
 register_llvm_pass(TestPass)
+
+add_library(BasePointerPass SHARED
+  BasePointerPass.cc
+)
+register_llvm_pass(BasePointerPass)
+target_link_libraries(BasePointerPass PRIVATE util)
+
+add_library(FramePromotion SHARED
+  FramePromotion.cc
+)
+register_llvm_pass(FramePromotion)
+target_link_libraries(FramePromotion PRIVATE util)
