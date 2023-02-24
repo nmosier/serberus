@@ -40,7 +40,7 @@ Now, clone and configure __llsct-passes__:
 ```sh
 git clone https://github.com/nmosier/clouxx-passes llsct-passes
 mkdir llsct-passes/build && cd llsct-passes/build
-cmake -G Ninja -DCMAKE_CXX_COMPILER=g++-12 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLSCT_LLVM_DIR=../llsct-llvm/install -DLLSCT_REQUIRE_CET=Off ..
+cmake -G Ninja -DCMAKE_CXX_COMPILER=g++-12 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLSCT_LLVM_DIR=$PWD/../../llsct-llvm/install -DLLSCT_REQUIRE_CET=Off ..
 ninja src/all
 ```
 The last command builds all of LLSCT's IR passes.
