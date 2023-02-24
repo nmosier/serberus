@@ -785,7 +785,13 @@ namespace clou {
 	  // Create ST-pairs for {oob_sec_stores X spec_pub_loads}
 	  CountStat stat_spec_pub_loads(log, "spec_pub_loads", spec_pub_loads.size());
 
-	  for (auto *SI : llvm::concat<llvm::StoreInst * const>(nca_nt_sec_stores, nca_t_sec_stores)) {
+	  std::set<llvm::Instruction *> ncas;
+	  llvm::copy(nca_nt_sec_stores, std::inserter(ncas, ncas.end()));
+	  llvm::copy(nca_t_sec_stores, std::inserter(ncas, ncas.end()));
+	  for (llvm::MemCpyInlineInst& MCII : util::instructions<llvm::MemCpyInlineInst>(F))
+	    ncas.insert(&MCII);	  
+	  
+	  for (auto *SI : ncas) {
 #if 0
 	    // Compute source(s)
 	    std::set<llvm::Instruction *> sources;
@@ -853,9 +859,14 @@ namespace clou {
 	    }
 
 	  } else {
+	    std::set<llvm::Instruction *> ncas;
+	    llvm::copy(nca_nt_sec_stores, std::inserter(ncas, ncas.end()));
+	    llvm::copy(nca_t_sec_stores, std::inserter(ncas, ncas.end()));
+	    for (llvm::MemCpyInlineInst& MCII : util::instructions<llvm::MemCpyInlineInst>(F))
+	      ncas.insert(&MCII);
 	    // Create ST-pairs for {oob_sec_stores X ctrls}
-	    A.add_st(make_node_set(llvm::concat<llvm::StoreInst * const>(nca_nt_sec_stores, nca_t_sec_stores)),
-		   make_node_set(ctrls));
+	    A.add_st(make_node_set(ncas),
+		     make_node_set(ctrls));
 	  }
 	}
 

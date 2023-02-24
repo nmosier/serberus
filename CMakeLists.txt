@@ -7,13 +7,23 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+if(DEFINED LIBSODIUM_DIR)
+  get_filename_component(LIBSODIUM_DIR ${LIBSODIUM_DIR} ABSOLUTE ${CMAKE_BINARY_DIR})
+endif()
+if(DEFINED OPENSSL_DIR)
+  message("get_filename_component(OPENSSL_DIR ${OPENSSL_DIR} ABSOLUTE ${CMAKE_BINARY_DIR})")
+endif()
+if(DEFINED PIN_DIR)
+  get_filename_component(PIN_DIR ${PIN_DIR} ABSOLUTE ${CMAKE_BINARY_DIR})
+endif()
+
 add_subdirectory(extern)
 
 if(NOT DEFINED LLSCT_LLVM_DIR)
   message(FATAL_ERROR "LLSCT_LLVM_DIR unset. This should point to the install directory of llsct-llvm.")
 endif()
 list(APPEND CMAKE_MODULE_PATH ${LLSCT_LLVM_DIR}/lib/cmake)
-include(${LLSCT_LLVM_DIR}/lib/cmake/llvm/LLVMConfig)
+include(${LLSCT_LLVM_DIR}/lib/cmake/llvm/LLVMConfig.cmake)
 
 # TODO: Replace uses of LLVM_DIR
 get_filename_component(LLVM_DIR "${LLCST_LLVM_DIR}" ABSOLUTE ${CMAKE_BINARY_DIR})

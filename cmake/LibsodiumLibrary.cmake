@@ -19,12 +19,6 @@ function(libsodium_library NAME)
 
   # Use ld.lld
   list(APPEND LIBSODIUM_LDFLAGS -fuse-ld=${LLVM_BINARY_DIR}/bin/ld.lld)
-
-  # TESTING -- CET
-  if(0)
-    list(APPEND LIBSODIUM_LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:cet> -L$<TARGET_FILE_DIR:cet> -lcet)
-    list(APPEND LIBSODIUM_DEPENDS cet)
-  endif(0)
   list(APPEND LIBSODIUM_CFLAGS -fcf-protection=branch)
 
 

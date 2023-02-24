@@ -36,8 +36,11 @@ if(DEFINED LIBSODIUM_DIR)
   )
 else()
   declare(Libsodium
-    DOWNLOAD_NO_PROGRESS Off
-    URL https://github.com/jedisct1/libsodium/releases/download/1.0.18-RELEASE/libsodium-1.0.18.tar.gz
+    # DOWNLOAD_NO_PROGRESS Off
+    # URL https://github.com/jedisct1/libsodium/releases/download/1.0.18-RELEASE/libsodium-1.0.18.tar.gz
+    GIT_REPOSITORY https://github.com/jedisct1/libsodium.git
+    GIT_TAG e2bd4024008c73f1c0402e1c2f4db9a2300e9c95
+    GIT_PROGRESS On
   )
 endif()
 

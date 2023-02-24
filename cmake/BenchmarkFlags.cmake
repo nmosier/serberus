@@ -36,9 +36,9 @@ set(cloucc_base_args
   LLVMFLAGS -clou-loop-weight=${LLSCT_LOOP_WEIGHT} -clou-dom-weight=${LLSCT_DOM_WEIGHT} -clou-st-weight=${LLSCT_ST_WEIGHT}
   
   # CET
-  # LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:cet> -L$<TARGET_FILE_DIR:cet> -lcet
-  # DEPENDS cet
-  # LDFLAGS -Wl,-z,force-ibt
+  LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:cet> -L$<TARGET_FILE_DIR:cet> -lcet
+  DEPENDS cet
+  LDFLAGS -Wl,-z,force-ibt
 )
 
 # Google Benchmark Flags

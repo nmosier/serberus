@@ -114,6 +114,7 @@ namespace util {
       case llvm::Intrinsic::fabs:
       case llvm::Intrinsic::floor:
       case llvm::Intrinsic::x86_sse2_lfence:
+      case llvm::Intrinsic::memcpy_inline:
 	return false;
 
       case llvm::Intrinsic::memset:
