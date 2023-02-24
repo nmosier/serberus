@@ -16,6 +16,7 @@
 
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <llvm/Analysis/AliasAnalysis.h>
 #include <llvm/Analysis/CallGraph.h>
@@ -54,6 +55,10 @@
 #include "clou/containers.h"
 #include "clou/CFG.h"
 
+#ifdef HAVE_LIBPROFILER
+# include <gperftools/profiler.h>
+#endif
+
 namespace clou {
   namespace {
 
@@ -73,8 +78,7 @@ namespace clou {
       return std::ofstream(path);
     }
 
-    extern "C" void ProfilerStart(const char *);
-    extern "C" void ProfilerStop(void);
+#ifdef HAVE_LIBPROFILER 
     static bool profile_active = false;
     static struct sigaction oldact;
     __attribute__((constructor)) static void profile_start(void) {
@@ -116,7 +120,7 @@ namespace clou {
 	profile_active = false;
       }
     }
-    
+#endif
 
     llvm::cl::opt<bool> log_times {
       "clou-times",
@@ -164,6 +168,8 @@ namespace clou {
       Node() {}
       Node(llvm::Instruction *V): V(V) {}
       auto operator<=>(const Node&) const = default;
+      // bool operator<(const Node&) const = default;
+      // bool operator==(const Node&) const = default;
     };
 
     llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const Node& v) {

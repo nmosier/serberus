@@ -18,6 +18,9 @@ add_library(libssbd SHARED
 add_library(cet SHARED
   cet.c
 )
+if(LLSCT_REQUIRE_CET)
+  target_compile_definitions(cet PRIVATE LLSCT_REQUIRE_CET)
+endif()
 
 add_executable(memusage
   memusage.c

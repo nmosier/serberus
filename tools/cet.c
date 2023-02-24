@@ -1,3 +1,5 @@
+#ifdef LLSCT_REQUIRE_CET
+
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -22,3 +24,5 @@ __attribute__((constructor)) void require_ibt(void) {
     _Exit(EXIT_FAILURE);
   }
 }
+
+#endif

@@ -7,6 +7,8 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+set(LLSCT_REQUIRE_CET On CACHE BOOL "Require CET to be enabled at runtime")
+
 if(DEFINED LIBSODIUM_DIR)
   get_filename_component(LIBSODIUM_DIR ${LIBSODIUM_DIR} ABSOLUTE ${CMAKE_BINARY_DIR})
 endif()
@@ -29,7 +31,7 @@ include(${LLSCT_LLVM_DIR}/lib/cmake/llvm/LLVMConfig.cmake)
 get_filename_component(LLVM_DIR "${LLCST_LLVM_DIR}" ABSOLUTE ${CMAKE_BINARY_DIR})
 
 find_package(PkgConfig REQUIRED)
-# pkg_check_modules(Libprofiler libprofiler)
+pkg_check_modules(Libprofiler libprofiler)
 # FIXME: Might not need this anymore.
 pkg_check_modules(Libunwind libunwind-generic)
 # pkg_check_modules(GoogleBenchmark REQUIRED benchmark)

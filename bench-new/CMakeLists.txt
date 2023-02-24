@@ -103,7 +103,7 @@ endfunction()
 function(add_benchmarks lib name arg)
   # set(modes baseline_none cloucc)
   # set(modes baseline_none cloucc cloucc_sts cloucc_ncal_xmit cloucc_ncal_glob cloucc_ncas_xmit cloucc_ncas_ctrl cloucc_fps cloucc_fps+postch cloucc_prech)
-  set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc cloucc_frame) # cloucc_sts) # cloucc_opt cloucc_naive)
+  set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc) # cloucc_sts) # cloucc_opt cloucc_naive)
   # set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc_test)
   # set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc_ncal_xmit)  
   # set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc cloucc_ncal_xmit cloucc_ncas_xmit cloucc_ncas_ctrl)
@@ -133,9 +133,6 @@ add_benchmarks(openssl   sha256     64)
 add_benchmarks(openssl   sha256     8192)
 add_benchmarks(openssl   chacha20   8192)
 add_benchmarks(openssl   curve25519 64)
-
-# add_benchmarks(openssl   sha256     1048576)
-
 
 function(add_breakdowns)
   set(modes baseline_none baseline_lfence baseline_slh baseline_retpoline baseline_ssbd baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc cloucc_udt cloucc_ncas cloucc_fps cloucc_prech)

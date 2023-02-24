@@ -9,9 +9,11 @@ include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 
 message("LLVM_INCLUDE_DIRS=${LLVM_INCLUDE_DIRS}")
 
-include_directories(SYSTEM ${LLVM_INCLUDE_DIRS} ${Libprofiler_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
-link_directories(${Libprofiler_LIBRARY_DIRS})
-link_libraries(${Libprofiler_LIBRARIES})
+if(Libprofiler_FOUND)
+  include_directories(SYSTEM ${LLVM_INCLUDE_DIRS} ${Libprofiler_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
+  link_directories(${Libprofiler_LIBRARY_DIRS})
+  link_libraries(${Libprofiler_LIBRARIES})
+endif()
 
 add_subdirectory(analysis)
 
@@ -113,6 +115,9 @@ add_library(MitigatePass SHARED
 )
 register_llvm_pass(MitigatePass)
 target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaintAnalysis SpeculativeTaintAnalysis CommandLine LeakAnalysis ${Z3_LIBRARIES} MinCut cfg)
+if(Libprofiler_FOUND)
+  target_compile_definitions(MitigatePass PRIVATE HAVE_LIBPROFILER)
+endif()
 
 add_library(FunctionLocalStacks SHARED
   FunctionLocalStacks.cc
@@ -146,34 +151,9 @@ add_library(DuplicatePass SHARED
 register_llvm_pass(DuplicatePass)
 target_link_libraries(DuplicatePass PRIVATE util)
 
-# add_library(StatsPass SHARED
-#   StatsPass.cc
-# )
-# register_llvm_pass(StatsPass)
-# target_link_libraries(StatsPass PRIVATE util)
-
-
 add_library(cfg SHARED
   CFG.cc
 )
-
-
-pkg_check_modules(Libprofiler REQUIRED libprofiler)
-
-add_library(Profiler SHARED
-  Profiler.cc
-)
-target_include_directories(Profiler PRIVATE ${Libprofiler_INCLUDE_DIRS})
-target_link_directories(Profiler PRIVATE ${Libprofiler_LIBRARY_DIRS})
-target_link_libraries(Profiler PRIVATE ${Libprofiler_LIBRARIES})
-
-if(0)
-  add_library(NCAStorePass SHARED
-    NCAStorePass.cc
-  )
-  register_llvm_pass(NCAStorePass)
-  target_link_libraries(NCAStorePass PRIVATE FordFulkerson util Mitigation Transmitter)
-endif()
 
 add_library(FramePromotion SHARED
   FramePromotion.cc

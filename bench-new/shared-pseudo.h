@@ -4,6 +4,7 @@
 #include <cstring>
 #include <vector>
 #include <numeric>
+#include <cstdlib>
 #include <err.h>
 #include "benchmark_memory.h"
 #include "shared-main.h"
