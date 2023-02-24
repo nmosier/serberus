@@ -2,6 +2,8 @@
 ## Building
 LLSCT is only supported for Linux (but may run on Intel-based Macs with some tweaks).
 
+Requires gcc-12 (for C++20 features).
+
 ### Dependencies
 LLSCT currently requires the following dependencies:
 - gperftools
