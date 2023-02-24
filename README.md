@@ -9,7 +9,16 @@ LLSCT currently requires the following dependencies:
 - gperftools
 - libunwind
 - CMake (version >= 3.25)
+- Ninja
+- Python3
+- Python packages: pandas, seaborn
 You can install all of these using [Homebrew ](https://brew.sh).
+
+### Installing Dependencies
+```sh
+brew install gperftools libunwind cmake ninja python3
+pip3 install pandas seaborn
+```
 
 ### Building llsct-llvm
 To build LLSCT, you will need to clone two repositories: [llsct-llvm](https://github.com/nmosier/clouxx-llvm) and llsct-passes (this repository).
