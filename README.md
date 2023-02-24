@@ -2,12 +2,26 @@
 ## Building
 LLSCT is only supported for Linux (but may run on Intel-based Macs with some tweaks).
 
+Requires gcc-12 (for C++20 features).
+
 ### Dependencies
 LLSCT currently requires the following dependencies:
 - gperftools
 - libunwind
 - CMake (version >= 3.25)
+- Ninja
+- Python3
+- Python packages: pandas, seaborn
+- GCC 12
 You can install all of these using [Homebrew ](https://brew.sh).
+
+### Installing Dependencies
+Here's how to install LLSCT's dependencies using Homebrew.
+```sh
+brew install gperftools libunwind cmake ninja python3 gcc
+pip3 install pandas seaborn
+export LD_LIBRARY_PATH="$(brew --prefix gcc)/lib/gcc/current:$LD_LIBRARY_PATH"
+```
 
 ### Building llsct-llvm
 To build LLSCT, you will need to clone two repositories: [llsct-llvm](https://github.com/nmosier/clouxx-llvm) and llsct-passes (this repository).
@@ -15,7 +29,7 @@ First, clone and build __llsct-llvm__:
 ```sh
 git clone https://github.com/nmosier/clouxx-llvm --depth=1 llsct-llvm
 mkdir llsct-llvm/build && cd llsct-llvm/build
-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../install -DLLVM_ENABLE_ASSERTIONS=On -DLLVM_ENABLE_PROJECTS='clang;lld' -DLLVM_TARGETS_TO_BUILD='X86' ../llvm
+cmake -G Ninja -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_COMPILER=g++-12 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../install -DLLVM_ENABLE_ASSERTIONS=On -DLLVM_ENABLE_PROJECTS='clang;lld' -DLLVM_TARGETS_TO_BUILD='X86' ../llvm
 ninja
 ninja install
 cd ../..
@@ -26,10 +40,11 @@ Now, clone and configure __llsct-passes__:
 ```sh
 git clone https://github.com/nmosier/clouxx-passes llsct-passes
 mkdir llsct-passes/build && cd llsct-passes/build
-cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLSCT_LLVM_DIR=../llsct-llvm/install ..
+cmake -G Ninja -DCMAKE_CXX_COMPILER=g++-12 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLSCT_LLVM_DIR=../llsct-llvm/install -DLLSCT_REQUIRE_CET=Off ..
 ninja src/all
 ```
 The last command builds all of LLSCT's IR passes.
+The `-DLLSCT_ENABLE_CET=Off` flag disables runtime Intel CET enforcement if your Linux distribution doesn't support userspace CET (at the time of writing, none of them do).
 
 To build all the benchmark programs so that you can run them as standaloen programs, build the `raw_compile` target:
 ```sh
