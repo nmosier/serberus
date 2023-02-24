@@ -6,6 +6,7 @@ make_directory(${CMAKE_CURRENT_BINARY_DIR}/logs)
 function(libsodium_benchmark_library NAME)
   libsodium_library(${NAME}
     CFLAGS -O3 -fno-stack-protector
+    CONFIGURE_OPTIONS --disable-asm
     ${ARGN}
   )
 endfunction()
@@ -31,12 +32,12 @@ libsodium_baseline_library(libsodium_baseline_slh+retpoline+ssbd ${baseline_slh_
 
 # ClouCC Mitigation
 libsodium_cloucc_library(libsodium_cloucc
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou
 )
 
-libsodium_cloucc_library(libsodium_cloucc_frame
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes FramePromotion
+libsodium_cloucc_library(libsodium_cloucc_mem
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou
 )
 

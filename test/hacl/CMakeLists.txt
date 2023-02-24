@@ -16,12 +16,12 @@ hacl_benchmark_library(hacl_baseline_lfence+retpoline+ssbd ${baseline_lfence_ret
 hacl_benchmark_library(hacl_baseline_slh+retpoline+ssbd ${baseline_slh_retpoline_ssbd_args})
 
 hacl_benchmark_library(hacl_cloucc ${cloucc_base_args}
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou
 )
 
-hacl_benchmark_library(hacl_cloucc_frame ${cloucc_base_args}
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes FramePromotion
+hacl_benchmark_library(hacl_cloucc_mem ${cloucc_base_args}
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou
 )
 

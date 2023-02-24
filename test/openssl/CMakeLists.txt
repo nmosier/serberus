@@ -32,12 +32,12 @@ openssl_baseline_library(openssl_baseline_slh+retpoline+ssbd ${baseline_slh_args
 
 
 openssl_cloucc_library(openssl_cloucc
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou
 )
 
-openssl_cloucc_library(openssl_cloucc_frame
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes FramePromotion
+openssl_cloucc_library(openssl_cloucc_mem
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
   LLVMFLAGS -clou
 )
 

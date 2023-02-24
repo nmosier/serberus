@@ -180,3 +180,9 @@ add_library(FramePromotion SHARED
 )
 register_llvm_pass(FramePromotion)
 target_link_libraries(FramePromotion PRIVATE util)
+
+add_library(MemIntrinsicPass SHARED
+  MemIntrinsicPass.cc
+)
+register_llvm_pass(MemIntrinsicPass)
+target_link_libraries(MemIntrinsicPass PRIVATE util ConstantAddressAnalysis)
