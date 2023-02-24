@@ -40,10 +40,11 @@ Now, clone and configure __llsct-passes__:
 ```sh
 git clone https://github.com/nmosier/clouxx-passes llsct-passes
 mkdir llsct-passes/build && cd llsct-passes/build
-cmake -G Ninja -DCMAKE_CXX_COMPILER=g++-12 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLSCT_LLVM_DIR=../llsct-llvm/install ..
+cmake -G Ninja -DCMAKE_CXX_COMPILER=g++-12 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLSCT_LLVM_DIR=../llsct-llvm/install -DLLSCT_REQUIRE_CET=Off ..
 ninja src/all
 ```
 The last command builds all of LLSCT's IR passes.
+The `-DLLSCT_ENABLE_CET=Off` flag disables runtime Intel CET enforcement if your Linux distribution doesn't support userspace CET (at the time of writing, none of them do).
 
 To build all the benchmark programs so that you can run them as standaloen programs, build the `raw_compile` target:
 ```sh
