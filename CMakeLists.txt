@@ -62,8 +62,6 @@ find_program(CAT_EXE REQUIRED NAMES cat)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 add_subdirectory(src)
-add_subdirectory(runtime)
 add_subdirectory(tools)
-add_subdirectory(scripts)
 add_subdirectory(test)
 add_subdirectory(bench)
