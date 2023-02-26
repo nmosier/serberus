@@ -16,7 +16,7 @@ function(add_pin_tool name source)
   set(obj obj-intel64/${base}.so)
   add_custom_command(OUTPUT ${so}
     COMMAND cp "${source}" "${pintooldir}/${base}.cpp"
-    COMMAND make -C "${pintooldir}" "PIN_ROOT=${PIN_DIR}" "${obj}"
+    COMMAND make -C "${pintooldir}" "PIN_ROOT=${PIN_DIR}" "${obj}" CXX=${CMAKE_CXX_COMPILER} CXXFLAGS="-std=c++20"
     COMMAND cp "${pintooldir}/${obj}" "${so}"
     DEPENDS ${source}
     BYPRODUCTS ${pintooldir}/${obj}

@@ -39,10 +39,7 @@ add_library(MinCut SHARED
   include/clou/MinCutBase.h
   include/clou/MinCutSMT.h
 )
-target_link_libraries(MinCut INTERFACE ${Z3_LIBRARIES})
 target_link_libraries(MinCut PUBLIC util FordFulkerson)
-target_link_directories(MinCut INTERFACE ${Z3_LIBRARY_DIRS})
-target_include_directories(MinCut INTERFACE ${Z3_INCLUDE_DIRS})
 
 add_library(Mitigation SHARED
   Mitigation.cc
@@ -114,7 +111,7 @@ add_library(MitigatePass SHARED
   MitigatePass.cc
 )
 register_llvm_pass(MitigatePass)
-target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaintAnalysis SpeculativeTaintAnalysis CommandLine LeakAnalysis ${Z3_LIBRARIES} MinCut cfg)
+target_link_libraries(MitigatePass PRIVATE util Mitigation Transmitter NonspeculativeTaintAnalysis SpeculativeTaintAnalysis CommandLine LeakAnalysis MinCut cfg)
 if(Libprofiler_FOUND)
   target_compile_definitions(MitigatePass PRIVATE HAVE_LIBPROFILER)
 endif()
