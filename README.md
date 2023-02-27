@@ -18,7 +18,7 @@ You can install all of these using [Homebrew ](https://brew.sh).
 ### Installing Dependencies
 Here's how to install LLSCT's dependencies using Homebrew.
 ```sh
-brew install gperftools libunwind cmake ninja python3 gcc
+brew install gperftools libunwind cmake ninja python3 gcc binutils glibc
 pip3 install pandas seaborn
 export LD_LIBRARY_PATH="$(brew --prefix gcc)/lib/gcc/current:$LD_LIBRARY_PATH"
 ```
