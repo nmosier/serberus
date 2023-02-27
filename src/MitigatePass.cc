@@ -40,7 +40,6 @@
 
 #include <err.h>
 
-#include "clou/MinCutSMT.h"
 #include "clou/MinCutGreedy.h"
 #include "clou/util.h"
 #include "clou/Transmitter.h"
