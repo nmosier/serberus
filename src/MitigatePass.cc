@@ -166,9 +166,12 @@ namespace clou {
       llvm::Value *V;
       Node() {}
       Node(llvm::Instruction *V): V(V) {}
-      auto operator<=>(const Node&) const = default;
-      // bool operator<(const Node&) const = default;
-      // bool operator==(const Node&) const = default;
+      bool operator<(const Node& o) const {
+	return V < o.V;
+      }
+      bool operator==(const Node& o) const {
+	return V == o.V;
+      }
     };
 
     llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const Node& v) {
@@ -299,9 +302,9 @@ namespace clou {
     }
     
     static void checkCut(llvm::ArrayRef<ST> sts, const std::set<Edge>& cutset, llvm::Function& F) {
-      if (const char *s = std::getenv("NOCHECKCUT"))
-	if (std::string(s) == "1")
-	  return;
+      const char *s = std::getenv("CHECKCUT");
+      if (s == nullptr)
+	return;
       for (const ST& st : sts)
 	checkCutST(st.waypoints, cutset, F);
     }

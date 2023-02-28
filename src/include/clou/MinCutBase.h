@@ -19,7 +19,12 @@ class MinCutBase {
 public:
   struct ST {
     std::vector<std::set<Node>> waypoints;
-    auto operator<=>(const ST& o) const = default;
+    bool operator<(const ST& o) const {
+      return waypoints < o.waypoints;
+    }
+    bool operator==(const ST& o) const {
+      return waypoints == o.waypoints;
+    }
   };
   
   using Graph = std::map<Node, std::map<Node, Weight>>;
@@ -28,6 +33,15 @@ public:
     Node src;
     Node dst;
     auto operator<=>(const Edge&) const = default;
+    auto pair() const {
+      return std::make_pair(src, dst);
+    }
+    bool operator<(const Edge& o) const {
+      return pair() < o.pair();
+    }
+    bool operator==(const Edge& o) const {
+      return pair() == o.pair();
+    }
   };
 
   mutable Graph G;

@@ -31,11 +31,25 @@ namespace clou {
     using Idx = unsigned;
     struct IdxST {
       std::vector<std::set<Idx>> waypoints;
-      auto operator<=>(const IdxST&) const = default;
+      bool operator<(const IdxST& o) const {
+	return waypoints < o.waypoints;
+      }
+      bool operator==(const IdxST& o) const {
+	return waypoints == o.waypoints;
+      }
     };
     struct IdxEdge {
       Idx src, dst;
-      auto operator<=>(const IdxEdge& o) const = default;
+      // auto operator<=>(const IdxEdge& o) const = default;
+      auto pair() const {
+	return std::make_pair(src, dst);
+      }
+      bool operator<(const IdxEdge& o) const {
+	return pair() < o.pair();
+      }
+      bool operator==(const IdxEdge& o) const {
+	return pair() == o.pair();
+      }
     };    
     using IdxGraph = std::vector<std::map<Idx, Weight>>;
 
