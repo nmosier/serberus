@@ -40,7 +40,7 @@ endfunction()
 
 function(add_time_benchmark)
   add_benchmark_shared(${ARGN} time "")
-  target_link_libraries(${exe} PRIVATE benchmark::benchmark)
+  target_link_libraries(${exe} PRIVATE benchmark::benchmark dl)
 endfunction()
 
 function(add_cache_benchmark)
