@@ -32,7 +32,7 @@ public:
   struct Edge {
     Node src;
     Node dst;
-    auto operator<=>(const Edge&) const = default;
+    // auto operator<=>(const Edge&) const = default;
     auto pair() const {
       return std::make_pair(src, dst);
     }
