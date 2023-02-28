@@ -92,7 +92,7 @@ function(openssl_library NAME)
   )
 
   add_library(${NAME} INTERFACE)
-  target_link_libraries(${NAME} INTERFACE ${INSTALL_DIR}/lib64/libssl.a ${INSTALL_DIR}/lib64/libcrypto.a)
+  target_link_libraries(${NAME} INTERFACE ${INSTALL_DIR}/lib64/libssl.a ${INSTALL_DIR}/lib64/libcrypto.a dl)
   target_include_directories(${NAME} INTERFACE ${INSTALL_DIR}/include)
   add_dependencies(${NAME} ${NAME}_install)
   
