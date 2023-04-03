@@ -1,154 +1,212 @@
+include(../bench/CompilationFlags)
+
+# set dependencies
+# expects list of keys 
+function(register_mode name)
+  set(flags)
+  foreach(key IN ITEMS ${ARGN})
+    list(APPEND flags ${compile_${key}})
+  endforeach()
+  # set(compile_${name} ${flags} PARENT_SCOPE)
+  message("${name} compile flags: ${flags}")
+  foreach(lib IN ITEMS libsodium hacl openssl)
+    cmake_language(CALL add_${lib}_library ${lib}_${name} ${flags})
+  endforeach()
+
+  # run flags
+  set(runflags)
+  foreach(key IN ITEMS ${ARGN})
+    list(APPEND runflags ${run_${key}})
+  endforeach()
+  set(runc_${name} ${runflags} PARENT_SCOPE)
+
+  list(APPEND modes ${name})
+  set(modes ${modes} PARENT_SCOPE)
+endfunction()
+
+register_mode(base base)
+register_mode(lfence base lfence)
+register_mode(lfence+retpoline base lfence retpoline)
+register_mode(lfence+retpoline+ssbd base lfence retpoline ssbd)
+register_mode(slh base slh)
+register_mode(slh+retpoline base slh retpoline)
+register_mode(slh+retpoline+ssbd base slh retpoline ssbd)
+
+register_mode(hwmodel base hwmodel)
+register_mode(swmodel base hwmodel swmodel)
+register_mode(llsct-fence base hwmodel swmodel llsct_fence)
+register_mode(llsct-fence+fps base hwmodel swmodel llsct_fence llsct_fps)
+register_mode(llsct base hwmodel swmodel llsct_fence llsct_fps llsct_regclean)
+# register_mode(llsct-psf base hwmodel swmodel llsct_naive)
+
 include(BenchmarkFlags)
 
 add_link_options(-fPIE -fPIC -pthread)
 
-configure_file(breakdown.py.in breakdown.py)
-configure_file(stats.py.in stats.py)
+# set(metrics time mem cache stall inst serial perf mitigation raw)
+set(metrics time raw)
 
-foreach(benchspec IN ITEMS baseline_breakdown cloucc_breakdown)
-  file(GENERATE
-    OUTPUT ${benchspec}.json
-    INPUT ${benchspec}.json.in
+foreach(metric IN LISTS metrics)
+  add_custom_target(${metric}_compile)
+  add_custom_target(${metric}_sh)
+endforeach()
+
+function(add_benchmark_shared lib name mode arg metric libsuffix)
+  string(TOUPPER ${lib} LIB)
+  string(TOUPPER ${metric} METRIC)
+  set(exe ${metric}_${lib}_${name}_${arg}_${mode})
+  add_executable(${exe} ${lib}_${name}.cc ${metric}-main.cc)
+  target_link_libraries(${exe} PRIVATE ${lib}_${mode}${libsuffix})
+  target_compile_definitions(${exe} PRIVATE BENCH_${LIB} BENCH_${METRIC} BENCH_METRIC=${metric}
+    BENCH_NAME=${lib}_${name} BENCH_ARG=${arg})
+  target_compile_options(${exe} PRIVATE -Wno-unused-parameter)
+  add_dependencies(${exe} ${lib}_${mode}${libsuffix})
+  set(exe ${exe} PARENT_SCOPE)
+
+  # add rule for generating jsons
+  set(json ${exe}.json)
+  add_custom_command(OUTPUT ${json}
+    COMMAND sudo taskset -c 0 env BENCH=1 ${runc_${mode}} ${CMAKE_CURRENT_BINARY_DIR}/${exe} ${benchmark_runtime_flags} --benchmark_out_format=json --benchmark_out=${json} --benchmark_color=true
+    DEPENDS ${exe}
+  )
+  add_custom_target(${exe}_json
+    DEPENDS ${json}
+  )
+  get_directory_property(jsons ${metric}_jsons)
+  set_property(DIRECTORY PROPERTY ${metric}_jsons ${jsons} ${json})
+
+  # generate run script
+  set(sh ${exe}.sh)
+  set(cmd sudo taskset -c 0 env BENCH=1 ${runc_${mode}} ${CMAKE_CURRENT_BINARY_DIR}/${exe} ${tmp_benchmark_runtime_flags} --benchmark_out_format=json --benchmark_out=${json} --benchmark_color=true)
+  list(JOIN cmd " " cmd)
+  configure_file(template.sh.in ${sh})
+    # FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE  
+
+  add_dependencies(${metric}_compile ${exe})
+endfunction()
+
+function(add_mem_benchmark)
+  add_benchmark_shared(${ARGN} mem "")
+endfunction()
+
+function(add_time_benchmark)
+  add_benchmark_shared(${ARGN} time "")
+  target_link_libraries(${exe} PRIVATE benchmark::benchmark)
+endfunction()
+
+function(add_cache_benchmark)
+  add_benchmark_shared(${ARGN} cache "")
+endfunction()
+
+function(add_stall_benchmark)
+  add_benchmark_shared(${ARGN} stall "")
+endfunction()
+
+function(add_inst_benchmark)
+  FetchContent_GetProperties(Pin SOURCE_DIR PIN_DIR)
+  add_benchmark_shared(${ARGN} inst "")
+  target_compile_definitions(${exe} PRIVATE PIN_DIR=\"${PIN_DIR}\" PIN_TOOL=\"$<TARGET_PROPERTY:inscount,LIBRARY>\")
+  add_dependencies(${exe} inscount)
+endfunction()
+
+function(add_serial_benchmark)
+  add_benchmark_shared(${ARGN} serial "")
+endfunction()
+
+function(add_perf_benchmark)
+  add_benchmark_shared(${ARGN} perf "")
+endfunction()
+
+function(add_mitigation_benchmark)
+  add_benchmark_shared(${ARGN} mitigation "")
+  target_compile_definitions(${exe} PRIVATE PIN_DIR=\"${PIN_DIR}\" PIN_TOOL=\"$<TARGET_PROPERTY:bkptcount,LIBRARY>\")
+  add_dependencies(${exe} bkptcount)
+endfunction()
+
+function(add_raw_benchmark lib name mode arg)
+  set(metric raw)
+  string(TOUPPER ${lib} LIB)
+  string(TOUPPER ${metric} METRIC)
+  set(exe ${metric}_${lib}_${name}_${arg}_${mode})
+  add_executable(${exe} ${lib}_${name}.cc ${metric}-main.cc)
+  target_link_libraries(${exe} PRIVATE ${lib}_${mode}${libsuffix})
+  target_compile_definitions(${exe} PRIVATE BENCH_${LIB} BENCH_${METRIC} BENCH_METRIC=${metric}
+    BENCH_NAME=${lib}_${name} BENCH_ARG=${arg})
+  target_compile_options(${exe} PRIVATE -Wno-unused-parameter -Wno-unused-function)
+  set(exe ${exe} PARENT_SCOPE)
+  add_dependencies(${metric}_compile ${exe})
+endfunction()
+
+function(add_benchmarks lib name arg)
+  # set(modes baseline_none cloucc)
+  # set(modes baseline_none cloucc cloucc_sts cloucc_ncal_xmit cloucc_ncal_glob cloucc_ncas_xmit cloucc_ncas_ctrl cloucc_fps cloucc_fps+postch cloucc_prech)
+  # set(modes base lfence lfence+retpoline lfence+retpoline+ssbd slh slh+retpoline slh+retpoline+ssbd)
+    # set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc baseline_slh) # cloucc_csrs) # cloucc_ssbd cloucc_init) # cloucc_opt cloucc_naive)
+  # set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc_test)
+  # set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc_ncal_xmit)  
+  # set(modes baseline_none baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc cloucc_ncal_xmit cloucc_ncas_xmit cloucc_ncas_ctrl)
+  # set(modes baseline_none baseline_slh+retpoline+ssbd cloucc_ncas)
+  foreach(mode IN LISTS modes)
+    add_time_benchmark(${lib} ${name} ${mode} ${arg})
+    # add_mem_benchmark(${lib} ${name} ${mode} ${arg})
+    # add_cache_benchmark(${lib} ${name} ${mode} ${arg})
+    # add_stall_benchmark(${lib} ${name} ${mode} ${arg})
+    # add_inst_benchmark(${lib} ${name} ${mode} ${arg})
+    # add_serial_benchmark(${lib} ${name} ${mode} ${arg})
+    # add_perf_benchmark(${lib} ${name} ${mode} ${arg})
+    # add_mitigation_benchmark(${lib} ${name} ${mode} ${arg})
+    add_raw_benchmark(${lib} ${name} ${mode} ${arg})
+  endforeach()
+  # add_trace_benchmark(${lib} ${name} ${arg})
+endfunction()
+
+
+add_benchmarks(libsodium salsa20    64)
+add_benchmarks(libsodium sha256     64)
+add_benchmarks(libsodium sha256     8192)
+add_benchmarks(hacl      chacha20   8192)
+add_benchmarks(hacl      poly1305   1024)
+add_benchmarks(hacl      curve25519 64)
+add_benchmarks(openssl   sha256     64)
+add_benchmarks(openssl   sha256     8192)
+add_benchmarks(openssl   chacha20   8192)
+add_benchmarks(openssl   curve25519 64)
+
+# add_benchmarks(openssl   sha256     1048576)
+
+
+function(add_breakdowns)
+  set(modes baseline_none baseline_lfence baseline_slh baseline_retpoline baseline_ssbd baseline_lfence+retpoline+ssbd baseline_slh+retpoline+ssbd cloucc cloucc_udt cloucc_ncas cloucc_fps cloucc_prech)
+  foreach(mode IN LISTS modes)
+    set(exe breakdown_${mode})
+    add_executable(${exe} ${ARGN})
+    target_link_libraries(${exe} PRIVATE libsodium_${mode} benchmark::benchmark)
+    target_compile_definitions(${exe} PRIVATE BENCH_NAME=libsodium_sha256 BENCH_LIBSODIUM BENCH_TIME BENCH_METRIC=time BENCH_ARG=0)
+  endforeach()
+endfunction()
+
+add_breakdowns(breakdown.cc libsodium_sha256.cc)
+
+# Generate timing plot
+foreach(metric IN LISTS metrics)
+  get_directory_property(metric_jsons ${metric}_jsons)
+  get_directory_property(bench_clean bench_clean)
+  set_property(DIRECTORY PROPERTY bench_clean ${bench_clean} ${metric_jsons} ${metric}.pdf)
+  
+  add_custom_target(${metric}_jsons DEPENDS ${metric_jsons})
+  
+  add_custom_command(OUTPUT ${metric}.pdf ${metric}.pdf.txt
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/plot.py ${metric_jsons} -o ${metric}.pdf
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/plot.py ${metric_jsons} ${Python3_EXECUTABLE}
+  )
+  add_custom_target(${metric}_pdf
+    DEPENDS ${metric}.pdf
   )
 endforeach()
 
-file(GENERATE
-  OUTPUT plot.json
-  INPUT plot.json.in
-)
-
-function(add_benchmark NAME SRC LIB)
-  add_executable(${NAME} ${SRC})
-  target_link_libraries(${NAME} PRIVATE ${LIB} benchmark::benchmark)
-  add_custom_command(OUTPUT ${NAME}.json
-    COMMAND ${NAME} --benchmark_out=${NAME}.json --benchmark_out_format=json --benchmark_repetitions=5 --benchmark_min_warmup_time=1
-    DEPENDS ${NAME}
-  )
-  add_custom_target(${NAME}_json
-    DEPENDS ${NAME}.json
-  )
-endfunction()
-
-set(libsodium_benchmark_libraries
-  libsodium_baseline_none
-  libsodium_baseline_lfence
-  libsodium_baseline_slh
-  libsodium_baseline_retpoline
-  libsodium_baseline_ssbd
-  libsodium_baseline_lfence+retpoline+ssbd
-  libsodium_baseline_slh+retpoline+ssbd
-  libsodium_cloucc_udt
-  libsodium_cloucc_ncas
-  libsodium_cloucc_fps
-  libsodium_cloucc_prech
-  libsodium_cloucc
-  libsodium_cloucc_unweighted
-  libsodium_cloucc_unsafeaa
-)
-
-foreach(libsodium_benchmark_library IN LISTS libsodium_benchmark_libraries)
-  # ExternalProject_Get_Property(${libsodium_benchmark_library} install_dir)
-  string(REGEX REPLACE "^libsodium_" "" name ${libsodium_benchmark_library})
-  add_benchmark(${name}_benchmark libsodium_sha256.cc ${libsodium_benchmark_library})
-endforeach()
-
-get_target_property(cloucc_benchmark_logs libsodium_cloucc CLOU_LOGS)
-set_target_properties(cloucc_benchmark PROPERTIES CLOU_LOGS ${cloucc_benchmark_logs})
-
-add_executable(libsodium_sha256_none_benchmark ALIAS baseline_none_benchmark)
-add_executable(libsodium_sha256_lfence+retpoline+ssbd_benchmark ALIAS baseline_lfence+retpoline+ssbd_benchmark)
-add_executable(libsodium_sha256_slh+retpoline+ssbd_benchmark ALIAS baseline_slh+retpoline+ssbd_benchmark)
-add_executable(libsodium_sha256_cloucc_benchmark ALIAS cloucc_benchmark)
-
-add_executable(libsodium_salsa20_none_benchmark libsodium_salsa20.cc)
-add_executable(libsodium_salsa20_lfence+retpoline+ssbd_benchmark libsodium_salsa20.cc)
-add_executable(libsodium_salsa20_slh+retpoline+ssbd_benchmark libsodium_salsa20.cc)
-add_executable(libsodium_salsa20_cloucc_benchmark libsodium_salsa20.cc)
-target_link_libraries(libsodium_salsa20_none_benchmark PRIVATE libsodium_baseline_none benchmark::benchmark)
-target_link_libraries(libsodium_salsa20_lfence+retpoline+ssbd_benchmark PRIVATE libsodium_baseline_lfence+retpoline+ssbd benchmark::benchmark)
-target_link_libraries(libsodium_salsa20_slh+retpoline+ssbd_benchmark PRIVATE libsodium_baseline_slh+retpoline+ssbd benchmark::benchmark)
-target_link_libraries(libsodium_salsa20_cloucc_benchmark PRIVATE libsodium_cloucc benchmark::benchmark)
-
-get_target_property(libsodium_salsa20_cloucc_benchmark_logs libsodium_cloucc CLOU_LOGS)
-set_target_properties(libsodium_salsa20_cloucc_benchmark PROPERTIES CLOU_LOGS ${libsodium_salsa20_cloucc_benchmark_logs})
-
-# foreach(pass IN ITEMS MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes)
-#   list(APPEND PASS_FLAGS -Xclang -load -Xclang $<TARGET_FILE:${pass}>)
-# endforeach()
-# 
-# FetchContent_GetProperties(Hacl SOURCE_DIR Hacl_SOURCE_DIR)
-# set(Hacl_INCLUDE_DIRS ${Hacl_SOURCE_DIR}/dist/gcc-compatible ${Hacl_SOURCE_DIR}/dist/karamel/include ${Hacl_SOURCE_DIR}/dist/karamel/krmllib/dist/minimal)
-# list(TRANSFORM Hacl_INCLUDE_DIRS PREPEND -I OUTPUT_VARIABLE Hacl_INCLUDE_FLAGS)
-# 
-# add_custom_command(OUTPUT Hacl_Chacha20.o
-#   COMMAND ${LLVM_BINARY_DIR}/bin/clang -flegacy-pass-manager -fPIE ${Hacl_INCLUDE_FLAGS} -mllvm -clou -mllvm -no-stack-slot-sharing ${PASS_FLAGS} ${Hacl_SOURCE_DIR}/dist/gcc-compatible/Hacl_Chacha20.c -c -o Hacl_Chacha20.o
-# )
-# 
-# add_executable(Hacl_Chacha20_benchmark Hacl_Chacha20_bench.cc Hacl_Chacha20.o)
-# target_link_libraries(Hacl_Chacha20_benchmark PRIVATE benchmark::benchmark)
-# target_include_directories(Hacl_Chacha20_benchmark PRIVATE ${Hacl_INCLUDE_DIRS})
-
-include(HaclBenchmark)
-
-function(hacl_benchmarks BASENAME BENCHSRC SRC)
-  hacl_benchmark(${BASENAME}_none_benchmark ${BENCHSRC} ${SRC}
-    CFLAGS -O3 -fno-stack-protector
-  )
-  hacl_benchmark(${BASENAME}_lfence+retpoline+ssbd_benchmark ${BENCHSRC} ${SRC}
-    ${baseline_lfence_retpoline_ssbd_args}
-    CFLAGS -O3 -fno-stack-protector
-  )
-  hacl_benchmark(${BASENAME}_slh+retpoline+ssbd_benchmark ${BENCHSRC} ${SRC}
-    ${baseline_slh_retpoline_ssbd_args}
-    CFLAGS -O3 -fno-stack-protector
-  )
-  set(logs ${CMAKE_CURRENT_BINARY_DIR}/${BASENAME}_cloucc_benchmark_logs)
-  make_directory(${logs})
-  hacl_benchmark(${BASENAME}_cloucc_benchmark ${BENCHSRC} ${SRC}
-    ${cloucc_args}
-    CFLAGS -O3 -fno-stack-protector
-    # LLVMFLAGS -clou-log=${logs}
-  )
-  set_target_properties(${BASENAME}_cloucc_benchmark PROPERTIES CLOU_LOGS ${logs})
-endfunction()
-
-hacl_benchmarks(hacl_chacha20 Hacl_Chacha20_bench.cc Hacl_Chacha20.c)
-hacl_benchmarks(hacl_poly1305 Hacl_Poly1305_bench.cc Hacl_Poly1305_32.c)
-hacl_benchmarks(hacl_curve25519 Hacl_Curve25519_bench.cc Hacl_Curve25519_51.c)
-
-file(GENERATE OUTPUT table.json
-  INPUT table.json.in
-)
-
-configure_file(table.py.in table.py)
-
-
-make_directory(${CMAKE_CURRENT_BINARY_DIR}/hacl_curve25519_cloucc_benchmark_logs)
-# hacl_benchmark(hacl_curve25519_cloucc_benchmark_dbg Hacl_Curve25519_bench.cc Hacl_Curve25519_51.c
-#   ${cloucc_args}
-#   CFLAGS -O3 -fno-stack-protector -g
-#   LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:trace_runtime> -ltrace_runtime -L$<TARGET_FILE_DIR:trace_runtime>
-#   LLVMFLAGS -clou-log=${CMAKE_CURRENT_BINARY_DIR}/hacl_curve25519_cloucc_benchmark_logs -clou-whitelist=point_add_and_double,point_double
-#   PASSES TracePass
-#   DEPENDS trace_runtime
-# )
-
-hacl_benchmark(hacl_curve25519_cloucc_benchmark_test Hacl_Curve25519_bench.cc Hacl_Curve25519_51.c
-  ${cloucc_args}
-  CFLAGS -O3 -fno-stack-protector -finline-functions
+get_directory_property(bench_clean bench_clean)
+add_custom_target(clean_bench
+  COMMAND rm -f ${bench_clean}
 )
 
 
-function(register_benchmark NAME FUNC)
-  add_custom_command(OUTPUT ${NAME}_stats.json
-    COMMAND ${Python3_EXECUTABLE} stats.py --logs $<TARGET_PROPERTY:${NAME},CLOU_LOGS> --func ${FUNC} --json ${CMAKE_CURRENT_SOURCE_DIR}/stats.json | clang-format --assume-filename=.json > ${NAME}_stats.json
-    DEPENDS ${Python3_EXECUTABLE} ${NAME} stats.py stats.json
-  )
-  add_custom_target(${NAME}_stats ALL DEPENDS ${NAME}_stats.json stats.json)
-endfunction()
-
-register_benchmark(libsodium_salsa20_cloucc_benchmark "crypto_core_salsa20")
-register_benchmark(libsodium_sha256_cloucc_benchmark "crypto_hash_sha256")
-register_benchmark(hacl_chacha20_cloucc_benchmark "Hacl_Chacha20_chacha20_encrypt")
-register_benchmark(hacl_poly1305_cloucc_benchmark "Hacl_Poly1305_32_poly1305_mac")
-register_benchmark(hacl_curve25519_cloucc_benchmark "Hacl_Curve25519_51_ecdh")

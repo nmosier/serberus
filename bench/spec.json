@@ -1,0 +1,29 @@
+{
+    "benchmarks": [
+	{"lib": "libsodium", "name": "salsa20", "size": "64"},
+	{"lib": "libsodium", "name": "sha256", "size": "64"},
+	{"lib": "libsodium", "name": "sha256", "size": "8192"},
+	{"lib": "hacl", "name": "chacha20", "size": "8192"},
+	{"lib": "hacl", "name": "poly1305", "size": "1024"},
+	{"lib": "hacl", "name": "curve25519", "size": "64"},
+	{"lib": "openssl", "name": "sha256", "size": "64"},
+	{"lib": "openssl", "name": "sha256", "size": "8192"},
+	{"lib": "openssl", "name": "chacha20", "size": "8192"},
+	{"lib": "openssl", "name": "curve25519", "size": "64"}
+    ],
+    "baseline": "base",
+    "mitigations": [
+	{
+	    "name": "lfence+retpoline+ssbd",
+	    "components": ["lfence", "lfence_retpoline", "lfence+retpoline+ssbd"]
+	},
+	{
+	    "name": "slh+retpoline+ssbd",
+	    "components": ["slh", "slh+retpoline", "slh+retpoline+ssbd"]
+	},
+	{
+	    "name": "llsct",
+	    "components": ["hwmodel", "swmodel", "llsct-fence", "llsct-fence+fps", "llsct-fence+fps+regclean"]
+	}
+    ]
+}
