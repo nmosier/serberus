@@ -17,12 +17,14 @@ set(baseline_lfence_retpoline_ssbd_args
   ${baseline_lfence_args}
   ${baseline_retpoline_args}
   ${baseline_ssbd_args}
+  CFLAGS -fcf-protection=none
 )
 
 set(baseline_slh_retpoline_ssbd_args
   ${baseline_slh_args}
   ${baseline_retpoline_args}
   ${baseline_ssbd_args}
+  CFLAGS -fcf-protection=none
 )
 
 set(cloucc_base_args
@@ -38,7 +40,8 @@ set(cloucc_base_args
   # CET
   LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:cet> -L$<TARGET_FILE_DIR:cet> -lcet
   DEPENDS cet
-  LDFLAGS -Wl,-z,force-ibt
+  LDFLAGS -Wl,-z,force-ibt -Wl,-z,force-shstk
+  CFLAGS -fcf-protection=full
 )
 
 # Google Benchmark Flags

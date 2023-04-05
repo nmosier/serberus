@@ -46,30 +46,25 @@ namespace clou {
     llvm::AAResults& AA = getAnalysis<llvm::AAResultsWrapperPass>().getAAResults();
 
     // Initialize public values with transmitter operands. We'll handle call results in the main loop.
-    for (llvm::Instruction& I : llvm::instructions(F)) {
-      for (const TransmitterOperand& op : get_transmitter_sensitive_operands(&I)) {
-	pub_vals.insert(op.V);
-      }
-    }
+    for (llvm::Instruction& I : llvm::instructions(F))
+      for (const TransmitterOperand& op : get_transmitter_sensitive_operands(&I))
+	if (auto *I = llvm::dyn_cast<llvm::Instruction>(op.V))
+	  pub_vals.insert(I);
 
     // All pointer values are public.
-    for (llvm::Instruction& I : llvm::instructions(F)) {
-      if (I.getType()->isPointerTy()) {
+    for (llvm::Instruction& I : llvm::instructions(F))
+      if (I.getType()->isPointerTy())
 	pub_vals.insert(&I);
-      }
-    }
 
     // Add public non-instruction operands (arguments are handled later for simplicity)
-    for (llvm::Instruction& I : llvm::instructions(F)) {
-      for (llvm::Value *op_V : I.operands()) {
-	if (llvm::isa<llvm::Argument, llvm::BasicBlock, llvm::InlineAsm, llvm::Constant, llvm::LandingPadInst>(op_V)) {
+    for (llvm::Instruction& I : llvm::instructions(F))
+      for (llvm::Value *op_V : I.operands())
+	if (llvm::isa<llvm::BasicBlock, llvm::InlineAsm, llvm::Constant, llvm::LandingPadInst>(op_V))
 	  pub_vals.insert(op_V);
-	}
-      }
-    }
-
-    for (auto& A : F.args())
-      pub_vals.insert(&A);
+    
+    if (StrictCallingConv) 
+      for (auto& A : F.args())
+	pub_vals.insert(&A);
 
     VSet pub_vals_bak;
     std::set<llvm::Instruction *> seen_mem_taint_prop;
@@ -116,6 +111,38 @@ namespace clou {
 	    case llvm::Intrinsic::usub_sat:
 	    case llvm::Intrinsic::fmuladd:
 	    case llvm::Intrinsic::fabs:
+	    case llvm::Intrinsic::experimental_constrained_fcmp:
+	    case llvm::Intrinsic::experimental_constrained_fsub:
+	    case llvm::Intrinsic::experimental_constrained_fmul:
+	    case llvm::Intrinsic::experimental_constrained_sitofp:
+	    case llvm::Intrinsic::experimental_constrained_uitofp:
+	    case llvm::Intrinsic::experimental_constrained_fcmps:
+	    case llvm::Intrinsic::experimental_constrained_fadd:	
+	    case llvm::Intrinsic::experimental_constrained_fptosi:
+	    case llvm::Intrinsic::experimental_constrained_fdiv:
+	    case llvm::Intrinsic::experimental_constrained_fptoui:
+	    case llvm::Intrinsic::experimental_constrained_fpext:
+	    case llvm::Intrinsic::experimental_constrained_floor:
+	    case llvm::Intrinsic::experimental_constrained_ceil:
+	    case llvm::Intrinsic::experimental_constrained_fptrunc:
+	    case llvm::Intrinsic::experimental_constrained_fmuladd:
+	    case llvm::Intrinsic::masked_load:
+	    case llvm::Intrinsic::masked_gather:
+	    case llvm::Intrinsic::stacksave:
+	    case llvm::Intrinsic::fshr:
+	    case llvm::Intrinsic::vector_reduce_mul:
+	    case llvm::Intrinsic::vector_reduce_umax:	    
+	    case llvm::Intrinsic::vector_reduce_umin:
+	    case llvm::Intrinsic::vector_reduce_smax:	    
+	    case llvm::Intrinsic::vector_reduce_smin:
+	    case llvm::Intrinsic::vector_reduce_xor:
+	    case llvm::Intrinsic::eh_typeid_for:
+	    case llvm::Intrinsic::uadd_with_overflow:
+	    case llvm::Intrinsic::ctlz:
+	    case llvm::Intrinsic::experimental_constrained_powi:	      
+	    case llvm::Intrinsic::experimental_constrained_trunc:
+	    case llvm::Intrinsic::experimental_constrained_round:
+	    case llvm::Intrinsic::uadd_sat:
 	      taint_rule = Taint::Passthrough;
 	      break;
 
@@ -147,12 +174,13 @@ namespace clou {
 	  }
 	} else {
 	  // Regular call instruction -- assume it conforms to ClouCC CallingConv.
-	  // All arguments are public
-	  for (llvm::Value *V : CB.args()) {
-	    pub_vals.insert(V);
+	  if (StrictCallingConv) {
+	    // All arguments are public
+	    for (llvm::Value *V : CB.args())
+	      pub_vals.insert(V);
+	    // Return value is public
+	    pub_vals.insert(&CB);
 	  }
-	  // Return value is public
-	  pub_vals.insert(&CB);
 	}
       }
 
@@ -177,6 +205,11 @@ namespace clou {
 	}
       }
 
+      if (StrictCallingConv) {
+	for (auto& RI : util::instructions<llvm::ReturnInst>(F))
+	  pub_vals.insert(RI.getReturnValue());
+      }
+      
       for (llvm::Instruction& I : util::nonvoid_instructions(F)) {
 	if (auto *GEP = llvm::dyn_cast<llvm::GetElementPtrInst>(&I)) {
 	  addAllOperands(GEP);
@@ -193,7 +226,7 @@ namespace clou {
 		   llvm::LandingPadInst>(&I)) {
 	  // ignore: already handled
 	} else if (llvm::isa<llvm::InsertElementInst, llvm::ShuffleVectorInst, llvm::ExtractElementInst,
-		   llvm::ExtractValueInst>(&I)) {
+		   llvm::ExtractValueInst, llvm::InsertValueInst>(&I)) {
 	  // ignore: make more precise later
 	} else {
 	  unhandled_instruction(I);
@@ -232,7 +265,10 @@ namespace clou {
   }
 
   bool NonspeculativeTaint::secret(llvm::Value *V) const {
-    return !pub_vals.contains(V);
+    if (auto *I = llvm::dyn_cast<llvm::Instruction>(V))
+      return !pub_vals.contains(I);
+    else
+      return false;
   }
 
   static llvm::RegisterPass<NonspeculativeTaint> X {"clou-nonspeculative-taint-analysis", "Clou's Nonspeculative Taint Analysis"};

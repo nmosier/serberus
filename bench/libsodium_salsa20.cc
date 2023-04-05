@@ -1,11 +1,6 @@
-#include <cstdint>
-#include <cstdlib>
-#include <benchmark/benchmark.h>
-#include <sodium.h>
+#include "shared.h"
 
-#define CLOBBER_REGS() asm volatile ("" ::: "r12", "r13", "r14", "r15")
-
-void libsodium_salsa20_bench(benchmark::State& state) {
+void libsodium_salsa20(benchmark::State& state) {
   uint8_t out[crypto_core_salsa20_OUTPUTBYTES];
   uint8_t in[crypto_core_salsa20_INPUTBYTES];
   uint8_t k[crypto_core_salsa20_KEYBYTES];
@@ -13,12 +8,7 @@ void libsodium_salsa20_bench(benchmark::State& state) {
   for (auto& b : in) b = rand();
   for (auto& b : k) b = rand();
   for (auto& b : c) b = rand();
-  for (auto _ : state) {
-    CLOBBER_REGS();
-    crypto_core_salsa20(out, in, k, c);
-    CLOBBER_REGS();    
+  for ([[maybe_unused]] auto _ : state) {
+    SAFE_CALL(crypto_core_salsa20(out, in, k, c));
   }
 }
-
-BENCHMARK(libsodium_salsa20_bench)->Arg(64);
-BENCHMARK_MAIN();

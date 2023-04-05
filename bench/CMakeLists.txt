@@ -37,6 +37,17 @@ register_mode(swmodel base hwmodel swmodel)
 register_mode(llsct-fence base hwmodel swmodel llsct_fence)
 register_mode(llsct-fence+fps base hwmodel swmodel llsct_fence llsct_fps)
 register_mode(llsct base hwmodel swmodel llsct_fence llsct_fps llsct_regclean)
+
+register_mode(llsctssbd-fence base hwmodel swmodel llsctssbd_fence)
+register_mode(llsctssbd-fence+stkinit base hwmodel swmodel llsctssbd_fence llsctssbd_stkinit)
+register_mode(llsctssbd-fence+stkinit+regclean base hwmodel swmodel llsctssbd_fence llsctssbd_stkinit llsct_regclean)
+register_mode(llsctssbd base hwmodel swmodel llsctssbd_fence llsctssbd_stkinit llsct_regclean ssbd)
+
+register_mode(hwmodel+psf base hwmodel+psf)
+register_mode(swmodel+psf base hwmodel+psf swmodel)
+register_mode(llsctpsf-fence base hwmodel+psf swmodel llsctpsf_fence)
+register_mode(llsctpsf base hwmodel+psf swmodel llsctpsf_fence llsct_regclean)
+
 # register_mode(llsct-psf base hwmodel swmodel llsct_naive)
 
 include(BenchmarkFlags)
@@ -77,7 +88,7 @@ function(add_benchmark_shared lib name mode arg metric libsuffix)
 
   # generate run script
   set(sh ${exe}.sh)
-  set(cmd sudo taskset -c 0 env BENCH=1 ${runc_${mode}} ${CMAKE_CURRENT_BINARY_DIR}/${exe} ${tmp_benchmark_runtime_flags} --benchmark_out_format=json --benchmark_out=${json} --benchmark_color=true)
+  set(cmd sudo taskset -c 0 env BENCH=1 $@ ${runc_${mode}} ${CMAKE_CURRENT_BINARY_DIR}/${exe} ${benchmark_runtime_flags} --benchmark_out_format=json --benchmark_out=${json} --benchmark_color=true)
   list(JOIN cmd " " cmd)
   configure_file(template.sh.in ${sh})
     # FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE  
@@ -165,7 +176,7 @@ add_benchmarks(libsodium salsa20    64)
 add_benchmarks(libsodium sha256     64)
 add_benchmarks(libsodium sha256     8192)
 add_benchmarks(hacl      chacha20   8192)
-add_benchmarks(hacl      poly1305   1024)
+add_benchmarks(hacl      poly1305   8192)
 add_benchmarks(hacl      curve25519 64)
 add_benchmarks(openssl   sha256     64)
 add_benchmarks(openssl   sha256     8192)
@@ -186,6 +197,8 @@ function(add_breakdowns)
 endfunction()
 
 add_breakdowns(breakdown.cc libsodium_sha256.cc)
+
+
 
 # Generate timing plot
 foreach(metric IN LISTS metrics)
@@ -208,5 +221,3 @@ get_directory_property(bench_clean bench_clean)
 add_custom_target(clean_bench
   COMMAND rm -f ${bench_clean}
 )
-
-

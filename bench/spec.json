@@ -15,15 +15,35 @@
     "mitigations": [
 	{
 	    "name": "lfence+retpoline+ssbd",
-	    "components": ["lfence", "lfence_retpoline", "lfence+retpoline+ssbd"]
+	    "components": ["lfence", "lfence_retpoline", "lfence+retpoline+ssbd"],
+	    "hatch": [".", "*", "x"],
+	    "labels": ["lfence", "retp", "ssbd"]
 	},
 	{
 	    "name": "slh+retpoline+ssbd",
-	    "components": ["slh", "slh+retpoline", "slh+retpoline+ssbd"]
+	    "components": ["slh", "slh+retpoline", "slh+retpoline+ssbd"],
+	    "hatch": [".", "*", "o"],
+	    "labels": ["slh", "retp", "ssbd"]
 	},
 	{
 	    "name": "llsct",
-	    "components": ["hwmodel", "swmodel", "llsct-fence", "llsct-fence+fps", "llsct-fence+fps+regclean"]
+	    "components": ["hwmodel", "swmodel", "llsct-fence", "llsct-fence+fps", "llsct"],
+	    "labels": ["asp", "sw", "fins", "fps", "rc"],
+	    "hatch": ["|", "|*", "+", "O", "O."]
+	},
+	{
+	    "name": "llsctssbd",
+	    "components": ["hwmodel", "swmodel", "llsctssbd-fence", "llsctssbd-fence+stkinit", "llsctssbd-fence+stkinit+regclean", "llsctssbd"],
+	    "labels": ["asp", "sw", "fins'", "init", "rc", "ssbd"],
+	    "hatch": ["|", "|*", "+", "-", "O.", "x"]
+	},
+	{
+	    "name": "llsctpsf",
+	    "components": ["hwmodel+psf", "swmodel+psf", "llsctpsf-fence", "llsctpsf"],
+	    "labels": ["asp+psf", "sw", "fins''", "rc"],
+	    "hatch": ["|", "|*", "+", "O."]
 	}
-    ]
+    ],
+    "ymin": -5,
+    "ymax": 110
 }

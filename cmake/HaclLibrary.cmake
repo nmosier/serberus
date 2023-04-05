@@ -15,9 +15,10 @@ function(hacl_library NAME)
   make_directory(${LOG_DIR})
 
   # CET stuff
-  list(APPEND HACL_LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:cet> -L$<TARGET_FILE_DIR:cet> -lcet)
-  list(APPEND HACL_DEPENDS cet)
-  list(APPEND HACL_CFLAGS -fcf-protection=branch)
+  # NOTE: Only LLSCT should add this.
+  # list(APPEND HACL_LDFLAGS -Wl,-rpath,$<TARGET_FILE_DIR:cet> -L$<TARGET_FILE_DIR:cet> -lcet)
+  # list(APPEND HACL_DEPENDS cet)
+  # list(APPEND HACL_CFLAGS -fcf-protection=branch)
 
   # Logging 
   list(APPEND HACL_LLVMFLAGS -clou-log=${LOG_DIR})

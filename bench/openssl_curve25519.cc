@@ -1,15 +1,12 @@
+#include "shared.h"
+#include <openssl/evp.h>
 #include <cstdint>
-#include <cstdlib>
-#include <vector>
-#include <benchmark/benchmark.h>
 
-extern "C" {
-#include "Hacl_Curve25519_51.h"
-}
+extern "C" int
+ossl_x25519(uint8_t out_shared_key[32], const uint8_t private_key[32],
+            const uint8_t peer_public_value[32]);
 
-#define CLOBBER_REGS() asm volatile ("" ::: "r12", "r13", "r14", "r15")
-
-void hacl_curve25519_bench(benchmark::State& state) {
+void openssl_curve25519(benchmark::State& state) {
   constexpr size_t KEY_BYTES = 32;
   uint8_t out[KEY_BYTES];
   static uint8_t priv[KEY_BYTES] = {
@@ -20,12 +17,7 @@ void hacl_curve25519_bench(benchmark::State& state) {
     20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
     100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115,    
   };
-  for (auto _ : state) {
-    CLOBBER_REGS();
-    Hacl_Curve25519_51_ecdh(out, priv, pub);
-    CLOBBER_REGS();
+  for ([[maybe_unused]] auto _ : state) {
+    SAFE_CALL(ossl_x25519(out, priv, pub));
   }
 }
-
-BENCHMARK(hacl_curve25519_bench);
-BENCHMARK_MAIN();

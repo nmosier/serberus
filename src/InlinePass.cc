@@ -27,6 +27,9 @@ namespace clou {
 
       using CBSet = std::set<llvm::CallBase *>;
 
+      static inline constexpr unsigned inline_limit = 100; // per-function inline limit
+      std::map<const llvm::Function *, unsigned> inline_counts; // inline counts per function
+
       void getAnalysisUsage(llvm::AnalysisUsage& AU) const override {
 	AU.addRequired<ConstantAddressAnalysis>();
 	AU.addRequired<NonspeculativeTaint>();
@@ -159,12 +162,19 @@ namespace clou {
 	return nullptr;
       }
 
+      bool doInitialization(llvm::Module& M) override {
+	inline_counts.clear();
+	return false;
+      }
+
       bool runOnFunction(llvm::Function& F) override {
 	llvm::CallBase *CB;
 	std::set<llvm::CallBase *> skip;
 	bool changed = false;
-	int i = 0;
+	unsigned& inline_count = inline_counts[&F];
 	while ((CB = getCallToInline(F, skip))) {
+	  if (inline_count >= inline_limit)
+	    break;
 	  assert(!skip.contains(CB));
 	  llvm::Function *CalledF = util::getCalledFunction(CB);
 	  if (CalledF == nullptr || CalledF->isDeclaration() || CalledF == &F) {
@@ -177,10 +187,9 @@ namespace clou {
 	    skip.insert(CB);
 	    continue;
 	  }
+	  inline_count += inline_counts[CalledF] + 1;
 	  changed = true;
-	  llvm::errs() << "\rinlined " << ++i << " (" << F.getInstructionCount() << ")";
 	}
-	llvm::errs() << "\n";
 
 	// We'll also erase any mitigations that have been introduced.
 	std::vector<MitigationInst *> mitigations;

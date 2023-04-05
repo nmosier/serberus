@@ -1,0 +1,8 @@
+EVP_CIPHER_CTX_new
+EVP_EncryptInit_ex2
+EVP_chacha20_poly1305
+EVP_EncryptUpdate
+EVP_EncryptFinal_ex
+EVP_CIPHER_CTX_free
+ossl_x25519
+SHA256

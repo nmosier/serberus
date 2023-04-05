@@ -1039,6 +1039,20 @@ namespace clou {
 	    
 	}
 
+	// LLSCT-SSBD
+	if (enabled.call_xmit) {
+	  std::set<llvm::Instruction *> xmits;
+	  std::set<llvm::CallBase *> calls;
+	  for (llvm::Instruction& xmit : llvm::instructions(F)) 
+	    for (const auto& [kind, xmit_op] : get_transmitter_sensitive_operands(&xmit))
+	      if (!llvm::isa<llvm::Constant>(xmit_op)) // Could also check if it's defined before the call.
+		xmits.insert(&xmit);
+	  for (llvm::CallBase& call : util::instructions<llvm::CallBase>(F))
+	    if (util::mayLowerToFunctionCall(call))
+	      calls.insert(&call);
+	  A.add_st(make_node_set(calls), make_node_set(xmits));	  
+	}
+
 	// Add CFG to graph
 	for (auto& B : F) {
 	  for (auto& src : B) {
@@ -1048,11 +1062,37 @@ namespace clou {
 	  }
 	}
 
+#if 0
 	// Add back edges to CFG
 	for (llvm::ReturnInst& RI : util::instructions<llvm::ReturnInst>(F)) {
 	  llvm::Instruction *Entry = &F.front().front();
 	  G[&RI][Entry] = compute_edge_weight(&RI, Entry, DT, LI);
 	}
+#else
+	// Add all back edges to the S-CFG.
+	{
+	  const auto exits = llvm::make_filter_range(llvm::instructions(F), [] (const llvm::Instruction& I) {
+	    if (llvm::isa<llvm::ReturnInst>(&I))
+	      return true;
+	    if (auto *C = llvm::dyn_cast<llvm::CallBase>(&I))
+	      return util::mayLowerToFunctionCall(*C);
+	    return false;
+	  });
+	  const auto entries = llvm::make_filter_range(llvm::instructions(F), [] (const llvm::Instruction& I) {
+	    if (&I == &I.getFunction()->front().front())
+	      return true;
+	    if (auto *C = llvm::dyn_cast_or_null<llvm::CallBase>(I.getPrevNode()))
+	      if (util::mayLowerToFunctionCall(*C))
+		return true;
+	    return false;
+	  });
+
+	  for (auto& exit : exits)
+	    for (auto& entry : entries)
+	      if (&entry != &exit)
+		G[&exit].emplace(&entry, 1); // NOTE: We intentionally don't overwrite the previous value, since it may have been already added and contain a better edge weight. 
+	}
+#endif
 
 	// Run algorithm to obtain min-cut
 	const clock_t solve_start = clock();
@@ -1061,6 +1101,7 @@ namespace clou {
 #endif
 	auto G_ = G;
 	const auto sts_bak = A.get_sts().vec();
+	std::cerr << "Min-Cut on " << F.getName().str() << std::endl;
 	A.run();
 	const clock_t solve_stop = clock();
 	const float solve_duration = (static_cast<float>(solve_stop) - static_cast<float>(solve_start)) / CLOCKS_PER_SEC;

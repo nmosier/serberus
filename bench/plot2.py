@@ -9,12 +9,17 @@ import matplotlib.pyplot as plt
 import math
 from types import SimpleNamespace
 import numpy as np
+from matplotlib.patches import Rectangle
 
 parser = ap.ArgumentParser()
 parser.add_argument('spec')
 parser.add_argument('-o', dest = 'out', required = True)
 parser.add_argument('-d', dest = 'dir', required = True)
 parser.add_argument('-n', '--naked', action = 'store_true')
+parser.add_argument('-i', '--index', type = int, required = False, default = -1)
+parser.add_argument('--positive', action = 'store_true')
+parser.add_argument('--ymax', type = int, default = None)
+parser.add_argument('--ymin', type = int, default = None)
 args = parser.parse_args()
 
 
@@ -68,7 +73,10 @@ def add_record(bench, mitigation, overhead):
 def add_bar(bench, mitigation):
     # bench = SimpleNamespace(**bench)
     mitigation = SimpleNamespace(**mitigation)
-    overhead = load_overhead(bench, mitigation.components[-1])
+    if args.index >= len(mitigation.components):
+        overhead = 0
+    else:
+        overhead = load_overhead(bench, mitigation.components[args.index])
     add_record(bench, mitigation.name, overhead)
 
 def add_benchmark(bench):
@@ -82,8 +90,9 @@ for bench in spec.benchmarks:
 # compute the geomean for each mitigation
 def add_geomean(agg, name):
     for mitigation, overheads in agg.items():
-        prod = math.prod(overheads)
+        prod = math.prod([x / 100 + 1 for x in overheads])
         mean = pow(prod, 1.0 / len(overheads))
+        mean = (mean - 1) * 100
         data['benchmark'].append(name)
         data['mitigation'].append(mitigation)
         data['overhead'].append(mean)
@@ -91,6 +100,14 @@ def add_geomean(agg, name):
 add_geomean(agg, 'geomean\n(all)')
 add_geomean(agg_large, 'geomean\n($\geq$1KB)')
 
+if args.positive:
+    todo = []
+    for i, overhead in enumerate(data['overhead']):
+        if overhead < 0:
+            todo.append(i)
+    for i in todo:
+        for key, l in data.items():
+            del l[i]
 
 df = pd.DataFrame(data = data)
 aspect = 3
@@ -105,6 +122,11 @@ g = sns.catplot(
 )
 ax = g.facet_axis(0, 0)
 
+if args.ymax:
+    ax.set_ybound(upper = args.ymax)
+if args.ymin:
+    ax.set_ybound(lower = args.ymin)
+
 # label bars
 for c in ax.containers:
     labels = []
@@ -113,8 +135,16 @@ for c in ax.containers:
         val = v.get_height()
         s = f'{val:.1f}'
         labels.append(s)
+        v.set_edgecolor('black')
+        v.set_hatch('////')
         
-    texts = ax.bar_label(c, labels = labels, label_type = 'edge', rotation = 90, fontsize = 'small')
+        # ax.add_patch(Rectangle(v.xy, v.get_width(), v.get_height() / 2))
+
+    if not args.naked:
+        texts = ax.bar_label(c, labels = labels, label_type = 'edge', rotation = 90, fontsize = 'small')
+
+
+# now add in partial mitigations
 
 
 if args.naked:
@@ -124,4 +154,4 @@ if args.naked:
     ax.set_xticks([])
     ax.set_yticks([])
 
-plt.savefig(f'{args.out}')
+plt.savefig(f'{args.out}', transparent = True)

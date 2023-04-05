@@ -19,7 +19,7 @@ function(libsodium_library NAME)
 
   # Use ld.lld
   list(APPEND LIBSODIUM_LDFLAGS -fuse-ld=${LLVM_BINARY_DIR}/bin/ld.lld)
-  list(APPEND LIBSODIUM_CFLAGS -fcf-protection=branch)
+  # list(APPEND LIBSODIUM_CFLAGS -fcf-protection=branch)
 
 
   # TODO: log

@@ -124,13 +124,7 @@ target_compile_options(FunctionLocalStacks PRIVATE -Wno-mismatched-new-delete)
 add_library(Attributes SHARED
   Attributes.cc
 )
-register_llvm_pass(Attributes PRIVATE util)
-
-add_library(NoCalleeSavedRegistersPass SHARED
-  NoCalleeSavedRegistersPass.cc
-)
-register_llvm_pass(NoCalleeSavedRegistersPass)
-target_link_libraries(NoCalleeSavedRegistersPass PRIVATE util)
+register_llvm_pass(Attributes PRIVATE util ConstantAddressAnalysis)
 
 add_subdirectory(check)
 
@@ -186,3 +180,10 @@ add_library(MemIntrinsicPass SHARED
 )
 register_llvm_pass(MemIntrinsicPass)
 target_link_libraries(MemIntrinsicPass PRIVATE util ConstantAddressAnalysis)
+
+add_library(StackInitPass SHARED
+  StackInitPass.cc
+)
+register_llvm_pass(StackInitPass)
+target_link_libraries(StackInitPass PRIVATE util)
+target_compile_options(StackInitPass PRIVATE -O0 -g)

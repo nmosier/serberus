@@ -32,73 +32,99 @@ openssl_baseline_library(openssl_baseline_slh+retpoline+ssbd ${baseline_slh_args
 
 
 openssl_cloucc_library(openssl_cloucc
-  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou
 )
 
+openssl_cloucc_library(openssl_cloucc_ncasall
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou -llsct-ncas-all
+)
+
+openssl_cloucc_library(openssl_cloucc_csrs
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=ncal_xmit,ncal_glob,ncas_xmit,ncas_ctrl,prech,fps,postch
+)
+
+openssl_cloucc_library(openssl_cloucc_ssbd
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=ncal_xmit,ncal_glob,ncas_xmit,ncas_ctrl,prech,stackinit
+  ${baseline_ssbd_args}
+)
+
+openssl_cloucc_library(openssl_cloucc_init
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=ncal_xmit,ncal_glob,ncas_xmit,ncas_ctrl,prech,stackinit
+)
+
 openssl_cloucc_library(openssl_cloucc_mem
-  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou
 )
 
 openssl_cloucc_library(openssl_cloucc_opt
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou -clou-expand-sts
 )
 
 openssl_cloucc_library(openssl_cloucc_naive
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=load_xmit,prech
 )
 
 openssl_cloucc_library(openssl_cloucc_ncal_xmit
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=ncal_xmit
 )
 
 openssl_cloucc_library(openssl_cloucc_ncal_glob
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=ncal_glob
 )
 
 openssl_cloucc_library(openssl_cloucc_ncas_xmit
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=ncas_xmit
 )
 
 openssl_cloucc_library(openssl_cloucc_ncas_ctrl
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass  FunctionLocalStacks Attributes
   LLVMFLAGS -clou=ncas_ctrl
 )
 
 openssl_cloucc_library(openssl_cloucc_load_xmit
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass  FunctionLocalStacks Attributes
   LLVMFLAGS -clou=load_xmit
 )
 
+openssl_cloucc_library(openssl_cloucc_entry
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=ncal_xmit,ncal_glob,ncas_xmit,ncas_ctrl,entry_xmit,prech
+)
+
 openssl_cloucc_library(openssl_cloucc_sts
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=ncal_xmit,ncal_glob,ncas_xmit,ncas_ctrl
 )
 
 openssl_cloucc_library(openssl_cloucc_fps
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=fps
 )
 
 openssl_cloucc_library(openssl_cloucc_fps+postch
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=fps,postch
 )
 
 openssl_cloucc_library(openssl_cloucc_prech
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=prech
 )
 
 if(0)
 openssl_cloucc_library(openssl_cloucc_trace
-  PASS MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes TracePass
+  PASS MitigatePass FunctionLocalStacks Attributes TracePass
   LLVMFLAGS -clou
   CFLAGS -g
   LDFLAGS -L$<TARGET_FILE_DIR:trace_runtime> -l$<TARGET_LINKER_FILE_BASE_NAME:trace_runtime>

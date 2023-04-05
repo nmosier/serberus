@@ -119,6 +119,38 @@ namespace clou {
 	      case llvm::Intrinsic::usub_sat:
 	      case llvm::Intrinsic::fmuladd:
 	      case llvm::Intrinsic::fabs:
+	      case llvm::Intrinsic::experimental_constrained_fcmp:
+	      case llvm::Intrinsic::experimental_constrained_fmul:
+	      case llvm::Intrinsic::experimental_constrained_fsub:
+	      case llvm::Intrinsic::experimental_constrained_fcmps:
+	      case llvm::Intrinsic::experimental_constrained_sitofp:
+	      case llvm::Intrinsic::experimental_constrained_uitofp:
+	      case llvm::Intrinsic::experimental_constrained_fadd:	
+	      case llvm::Intrinsic::experimental_constrained_fptosi:
+	      case llvm::Intrinsic::experimental_constrained_fdiv:
+ 	      case llvm::Intrinsic::experimental_constrained_fptoui:
+	      case llvm::Intrinsic::experimental_constrained_fpext:
+	      case llvm::Intrinsic::experimental_constrained_floor:
+	      case llvm::Intrinsic::experimental_constrained_ceil:
+	      case llvm::Intrinsic::bitreverse:
+	      case llvm::Intrinsic::masked_load:
+	      case llvm::Intrinsic::masked_gather:
+	      case llvm::Intrinsic::experimental_constrained_fptrunc:
+	      case llvm::Intrinsic::experimental_constrained_fmuladd:
+	      case llvm::Intrinsic::fshr:
+	      case llvm::Intrinsic::vector_reduce_mul:
+	      case llvm::Intrinsic::vector_reduce_umax:	    		
+	      case llvm::Intrinsic::vector_reduce_umin:
+	      case llvm::Intrinsic::vector_reduce_smax:	    		
+	      case llvm::Intrinsic::vector_reduce_xor:
+	      case llvm::Intrinsic::vector_reduce_smin:
+	      case llvm::Intrinsic::eh_typeid_for:
+	      case llvm::Intrinsic::uadd_with_overflow:
+	      case llvm::Intrinsic::ctlz:
+	      case llvm::Intrinsic::experimental_constrained_powi:
+	      case llvm::Intrinsic::experimental_constrained_trunc:		
+	      case llvm::Intrinsic::experimental_constrained_round:
+	      case llvm::Intrinsic::uadd_sat:		
 		for (llvm::Value *V : II->args()) {
 		  leaks.insert(V);
 		}
@@ -158,7 +190,9 @@ namespace clou {
 		llvm::copy(util::getValueOperands(Store), std::inserter(leaks, leaks.end()));
 	    }
 
-	  } else if (llvm::isa<llvm::CmpInst, llvm::GetElementPtrInst, llvm::BinaryOperator, llvm::PHINode, llvm::CastInst, llvm::SelectInst, llvm::ExtractValueInst, llvm::ExtractElementInst, llvm::InsertElementInst, llvm::ShuffleVectorInst, llvm::FreezeInst>(I)
+	  } else if (llvm::isa<llvm::CmpInst, llvm::GetElementPtrInst, llvm::BinaryOperator, llvm::PHINode, llvm::CastInst, llvm::SelectInst,
+		     llvm::ExtractValueInst, llvm::ExtractElementInst, llvm::InsertElementInst, llvm::ShuffleVectorInst, llvm::FreezeInst,
+		     llvm::InsertValueInst>(I)
 		     || (llvm::isa<llvm::UnaryOperator>(I) && llvm::cast<llvm::UnaryOperator>(I)->getOpcode() == llvm::UnaryOperator::UnaryOps::FNeg)
 		     ) {
 	    // Leaks all input operands
@@ -168,6 +202,9 @@ namespace clou {
 
 	  } else if (llvm::isa<llvm::AllocaInst>(I)) {
 	    // ignore
+
+	  } else if (llvm::isa<llvm::LandingPadInst>(I)) {
+	    // unhandled for now
 
 	  } else {
 	    unhandled_instruction(I);

@@ -63,6 +63,12 @@ add_subdirectory(src)
 add_subdirectory(runtime)
 add_subdirectory(tools)
 add_subdirectory(scripts)
-add_subdirectory(test)
 add_subdirectory(bench)
-add_subdirectory(bench-new)
+# add_subdirectory(test)
+# add_subdirectory(bench-new)
+
+include(AddDriver)
+add_driver(sctcc EXE ${LLVM_BINARY_DIR}/clang
+  PASS MitigatePass
+)
+  

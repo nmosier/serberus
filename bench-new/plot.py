@@ -83,6 +83,8 @@ for benchmark in benchmarks:
 
         if is_absolute:
             overhead = mitigation_metric
+        elif baseline_metric == 0:
+            overhead = 0
         else:
             overhead = (mitigation_metric - baseline_metric) / baseline_metric * 100
         data['benchmark'].append(benchmark_displayname(*benchmark))

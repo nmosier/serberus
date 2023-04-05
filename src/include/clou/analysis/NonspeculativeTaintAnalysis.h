@@ -18,7 +18,7 @@ namespace clou {
     NonspeculativeTaint();
     
   private:
-    VSet pub_vals;
+    std::set<llvm::Value *> pub_vals;
     llvm::Function *F;
     
     void getAnalysisUsage(llvm::AnalysisUsage& AU) const override;
