@@ -1,49 +1,63 @@
 {
     "benchmarks": [
-	{"lib": "libsodium", "name": "salsa20", "size": "64"},
-	{"lib": "libsodium", "name": "sha256", "size": "64"},
-	{"lib": "libsodium", "name": "sha256", "size": "8192"},
-	{"lib": "hacl", "name": "chacha20", "size": "8192"},
-	{"lib": "hacl", "name": "poly1305", "size": "1024"},
-	{"lib": "hacl", "name": "curve25519", "size": "64"},
-	{"lib": "openssl", "name": "sha256", "size": "64"},
-	{"lib": "openssl", "name": "sha256", "size": "8192"},
-	{"lib": "openssl", "name": "chacha20", "size": "8192"},
-	{"lib": "openssl", "name": "curve25519", "size": "64"}
+	{"lib": "libsodium", "name": "salsa20", "size": 64},
+	{"lib": "libsodium", "name": "sha256", "size": 64},
+	{"lib": "libsodium", "name": "sha256", "size": 8192},
+	{"lib": "hacl", "name": "chacha20", "size": 8192},
+	{"lib": "hacl", "name": "poly1305", "size": 8192},
+	{"lib": "hacl", "name": "curve25519", "size": 64},
+	{"lib": "openssl", "name": "sha256", "size": 64},
+	{"lib": "openssl", "name": "sha256", "size": 8192},
+	{"lib": "openssl", "name": "chacha20", "size": 8192},
+	{"lib": "openssl", "name": "curve25519", "size": 64}
     ],
     "baseline": "base",
     "mitigations": [
 	{
-	    "name": "lfence+retpoline+ssbd",
-	    "components": ["lfence", "lfence_retpoline", "lfence+retpoline+ssbd"],
-	    "hatch": [".", "*", "x"],
-	    "labels": ["lfence", "retp", "ssbd"]
+	    "name": "f+retp+ssbd",
+	    "components": ["lfence", "lfence+retpoline", "lfence+retpoline+ssbd"],
+	    "hatch": ["/", "\\", "O"],
+	    "labels": ["f", "r", "$\\textsc{ssbd}$"]
 	},
 	{
-	    "name": "slh+retpoline+ssbd",
+	    "name": "s+retp+ssbd",
 	    "components": ["slh", "slh+retpoline", "slh+retpoline+ssbd"],
-	    "hatch": [".", "*", "o"],
-	    "labels": ["slh", "retp", "ssbd"]
+	    "hatch": ["/", "\\", "O"],
+	    "labels": ["s", "r", "ssbd"]
 	},
 	{
-	    "name": "llsct",
-	    "components": ["hwmodel", "swmodel", "llsct-fence", "llsct-fence+fps", "llsct"],
-	    "labels": ["asp", "sw", "fins", "fps", "rc"],
-	    "hatch": ["|", "|*", "+", "O", "O."]
+	    "name": "llsct-nostl",
+	    "components": ["llsctssbd-fence", "llsctssbd-fence+stkinit", "llsctssbd-fence+stkinit+regclean", "llsctssbd"],
+	    "labels": ["f", "init", "rc", "asp-nostl"],
+	    "hatch": ["/", "\\", "-", "O"]
 	},
 	{
-	    "name": "llsctssbd",
-	    "components": ["hwmodel", "swmodel", "llsctssbd-fence", "llsctssbd-fence+stkinit", "llsctssbd-fence+stkinit+regclean", "llsctssbd"],
-	    "labels": ["asp", "sw", "fins'", "init", "rc", "ssbd"],
-	    "hatch": ["|", "|*", "+", "-", "O.", "x"]
+	    "name": "llsct-psf",
+	    "components": ["llsctpsf-fence", "llsctpsf-fence+rc", "llsctpsf"],
+	    "labels": ["f", "rc", "asp-psf"],
+	    "hatch": ["/", "-", "O"]
 	},
 	{
-	    "name": "llsctpsf",
-	    "components": ["hwmodel+psf", "swmodel+psf", "llsctpsf-fence", "llsctpsf"],
-	    "labels": ["asp+psf", "sw", "fins''", "rc"],
-	    "hatch": ["|", "|*", "+", "O."]
+	    "name": "$\\textbf{llsct}$",
+	    "components": ["llsct-fence", "llsct-fence+fps", "llsct-fence+fps+rc", "llsct"],
+	    "labels": ["f", "fps", "rc", "asp"],
+	    "hatch": ["/", "\\", "-", "O"]
 	}
     ],
     "ymin": -5,
-    "ymax": 110
+    "ymax": 100,
+    "height": 1.35,
+    "width": 7,
+    "barlabel_fontsize": 7,
+    "fontsize": 7,
+    "labelfontsize": 7,
+    "hatchweight": 0.1,
+    "hatchdensity": 10,
+    "weight": 0.25,
+    "bar_label_threshold": 90,
+    "shouldhatch": false,
+    "component_threshold": 10,
+    "component_fontsize": 6,
+    "alpha": 0.3,
+    "legendloc": [0.115, 1.4]
 }
