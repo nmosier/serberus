@@ -287,13 +287,10 @@ namespace clou {
 	return count;
       };
 
-      const size_t in_size = compute_size(out_sts);
+      [[maybe_unused]] const size_t in_size = compute_size(out_sts);
       
       bool changed;
-      int num_iterations = 0;
       do {
-	llvm::errs() << "\roptimization iteration " << ++num_iterations;
-
 	changed = false;
 
 	changed |= optimize_sts_join(out_sts, G);
@@ -305,10 +302,8 @@ namespace clou {
 	  changed |= global_opt(out_sts, G);
 
       } while (changed);
-      llvm::errs() << "\n";
       
-      const size_t out_size = compute_size(out_sts);
-      llvm::errs() << "reduced sts: " << in_size << " to " << out_size << "\n";
+      [[maybe_unused]] const size_t out_size = compute_size(out_sts);
     }
     
   public:
@@ -328,8 +323,6 @@ namespace clou {
 	this->sts = std::move(opt_sts);
       }
 #endif
-
-      llvm::errs() << "min-cut on " << getNodes().size() << " nodes\n";
 
       /* New algorithm:
        * Maintain a set of LFENCE insertion points.
@@ -387,10 +380,10 @@ namespace clou {
       Cuts cuts(sts.size());
       CutsHistory cuts_hist;
       const IdxGraph OrigG = G; // mainly for checking weights
-      int num_iterations = 0;
+      // constexpr unsigned limit = 10; // maximum number of iterations to perform before bailing
+      // constexpr float timeout = 100000.; // 10 seconds
+      clock_t clock_start = clock();
       do {
-	llvm::errs() << "\rnum_iterations: " << ++num_iterations;
-	
 	changed = false;
 
 	for (const auto& [st, cut] : llvm::zip(sts, cuts)) {
@@ -455,6 +448,9 @@ namespace clou {
 	    assert(mode == Mode::Replace);
 	    llvm::WithColor::warning() << "detected loop in min-cut algorithm\n";
 	    mode = Mode::Augment;
+	  } else if (clou::Timeout > 0 && static_cast<float>(clock() - clock_start) / CLOCKS_PER_SEC >= clou::Timeout) {
+	    mode = Mode::Augment;
+	    llvm::WithColor::warning() << "timeout reached: falling back to sub-optimal fence insertion\n";
 	  }
 	}
 
@@ -473,7 +469,6 @@ namespace clou {
 #endif
 	
       } while (changed);
-      llvm::errs() << "\n";
 
 
 #if CHECK_CUTS
@@ -686,7 +681,6 @@ namespace clou {
 
       llvm::BitVector connected_nodes_bv;
       for ([[maybe_unused]] int i = 0; const auto& st : sts) {
-	DEBUG(llvm::errs() << "\r\t\tsts processed: " << i++ << "/" << sts.size());
 	const auto& fwd = s_reach.at(st.s);
 	const auto& bwd = t_reach.at(st.t);
 	llvm::BitVector both = fwd;
@@ -709,8 +703,6 @@ namespace clou {
       llvm::BitVector disconnected_nodes_bv = connected_nodes_bv; disconnected_nodes_bv.flip();
       for (unsigned disconnected_node_idx : disconnected_nodes_bv.set_bits())
 	disconnected_nodes.insert(idx_to_node(disconnected_node_idx));
-
-      DEBUG(llvm::errs() << "\n");
 
       std::map<Edge, unsigned> results_;
       for (unsigned src_idx = 0; src_idx < n; ++src_idx) {
@@ -850,14 +842,15 @@ namespace clou {
 	}
       }
 
+#if 0
       if (!llvm::equal(getNodes(), std::set<Node>(order.begin(), order.end()))) {
 	const auto nodes = getNodes();
 	for (const Node& node : getNodes()) {
 	  if (!order.contains(node))
 	    errs() << "node: " << *node.V << "\n";
 	}
-	  
       }
+#endif
 
       assert(llvm::equal(getNodes(), std::set<Node>(order.begin(), order.end())));
 

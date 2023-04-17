@@ -27,3 +27,7 @@ add_executable(memusage
 )
 
 add_subdirectory(pin)
+
+add_library(msr SHARED
+  msr.c
+)

@@ -178,11 +178,13 @@ namespace clou {
       return os << *v.V;
     }
 
+#if 0
     std::ostream& operator<<(std::ostream& os, const Node& v) {
       llvm::raw_os_ostream os_(os);
       os_ << v;
       return os;
     }
+#endif
 
     struct NodeHash {
       auto operator()(const Node& n) const {
@@ -796,6 +798,10 @@ namespace clou {
 	  std::set<llvm::Instruction *> ncas;
 	  llvm::copy(nca_nt_sec_stores, std::inserter(ncas, ncas.end()));
 	  llvm::copy(nca_t_sec_stores, std::inserter(ncas, ncas.end()));
+	  if (NCASAll)
+	    for (auto& SI : util::instructions<llvm::StoreInst>(F))
+	      if (!CAA.isConstantAddress(SI.getPointerOperand()) && !llvm::isa<llvm::Constant>(SI.getValueOperand()))
+		ncas.insert(&SI);
 	  for (llvm::MemCpyInlineInst& MCII : util::instructions<llvm::MemCpyInlineInst>(F))
 	    ncas.insert(&MCII);	  
 	  
@@ -847,7 +853,7 @@ namespace clou {
 	      const auto& sources = get_sources(SI);
 	      A.add_st(make_node_set(sources), std::set<Node>{SI}, xmits);
 	    } else {
-	      A.add_st(std::set<Node>{SI}, xmits); // REVERTME
+	      A.add_st(std::set<Node>{SI}, xmits);
 	    }
 	    ++stat_ncas_xmit;
 	  }
@@ -870,6 +876,10 @@ namespace clou {
 	    std::set<llvm::Instruction *> ncas;
 	    llvm::copy(nca_nt_sec_stores, std::inserter(ncas, ncas.end()));
 	    llvm::copy(nca_t_sec_stores, std::inserter(ncas, ncas.end()));
+	    if (NCASAll)
+	      for (auto& SI : util::instructions<llvm::StoreInst>(F))
+		if (!CAA.isConstantAddress(SI.getPointerOperand()) && !llvm::isa<llvm::Constant>(SI.getValueOperand()))
+		  ncas.insert(&SI);
 	    for (llvm::MemCpyInlineInst& MCII : util::instructions<llvm::MemCpyInlineInst>(F))
 	      ncas.insert(&MCII);
 	    // Create ST-pairs for {oob_sec_stores X ctrls}
@@ -886,7 +896,6 @@ namespace clou {
 	    for (llvm::Instruction *xmit_op : xmit_ops)
 	      llvm::copy(ST.taints.at(xmit_op), std::inserter(ncals, ncals.end()));
 	    for (llvm::Instruction *ncal : ncals) {
-	      // FIXME: ADDED || TRUE; revert if necessary.
 	      if (!ExpandSTs || ncal == &ncal->getFunction()->front().front()) {
 		A.add_st(std::set<Node>{ncal}, std::set<Node>{xmit});
 		++stat_ncal_xmit;
@@ -912,6 +921,54 @@ namespace clou {
 	    }
 	  }
 	  
+	}
+
+	if (enabled.entry_xmit) {
+	  std::set<Node> xmits;
+
+	  // Get the pre-call transmitters.
+	  {
+	    std::stack<llvm::Instruction *> todo;
+	    todo.push(&F.front().front());
+	    std::set<llvm::Instruction *> seen;
+	    while (!todo.empty()) {
+	      auto *I = todo.top();
+	      todo.pop();
+	      if (!seen.insert(I).second)
+		continue;
+	      if (auto *C = llvm::dyn_cast<llvm::CallBase>(I))
+		if (util::mayLowerToFunctionCall(*C))
+		  continue;
+	      for (const auto& [kind, xmit_op] : get_transmitter_sensitive_operands(I))
+		for (llvm::Value *SourceV : get_incoming_loads(xmit_op))
+		  if (auto *SourceLI = llvm::dyn_cast<llvm::LoadInst>(SourceV))
+		    if (CAA.isConstantAddress(SourceLI->getPointerOperand()))
+		      xmits.insert(I);
+	      for (auto *Succ : llvm::successors_inst(I))
+		todo.push(Succ);
+	    }
+	  }
+
+	  // Get the post-call transmitters.
+	  {
+	    std::stack<llvm::Instruction *> todo;
+	    for (auto& C : util::instructions<llvm::CallBase>(F))
+	      todo.push(&C);
+	    std::set<llvm::Instruction *> seen;
+	    while (!todo.empty()) {
+	      auto *I = todo.top();
+	      todo.pop();
+	      if (!seen.insert(I).second)
+		continue;
+	      for (const auto& [kind, xmit_op] : get_transmitter_sensitive_operands(I))
+		if (!llvm::isa<llvm::Constant>(xmit_op))
+		  xmits.insert(I);
+	      for (auto *Succ : llvm::successors_inst(I))
+		todo.push(Succ);
+	    }
+	  }
+
+	  A.add_st(std::set<Node>{&F.front().front()}, xmits);
 	}
 
 	if (enabled.load_xmit) {
@@ -990,6 +1047,20 @@ namespace clou {
 	    
 	}
 
+	// LLSCT-SSBD
+	if (enabled.call_xmit) {
+	  std::set<llvm::Instruction *> xmits;
+	  std::set<llvm::CallBase *> calls;
+	  for (llvm::Instruction& xmit : llvm::instructions(F)) 
+	    for (const auto& [kind, xmit_op] : get_transmitter_sensitive_operands(&xmit))
+	      if (!llvm::isa<llvm::Constant>(xmit_op)) // Could also check if it's defined before the call.
+		xmits.insert(&xmit);
+	  for (llvm::CallBase& call : util::instructions<llvm::CallBase>(F))
+	    if (util::mayLowerToFunctionCall(call))
+	      calls.insert(&call);
+	  A.add_st(make_node_set(calls), make_node_set(xmits));	  
+	}
+
 	// Add CFG to graph
 	for (auto& B : F) {
 	  for (auto& src : B) {
@@ -999,26 +1070,50 @@ namespace clou {
 	  }
 	}
 
+#if 0
 	// Add back edges to CFG
 	for (llvm::ReturnInst& RI : util::instructions<llvm::ReturnInst>(F)) {
 	  llvm::Instruction *Entry = &F.front().front();
 	  G[&RI][Entry] = compute_edge_weight(&RI, Entry, DT, LI);
 	}
+#else
+	// Add all back edges to the S-CFG.
+	{
+	  const auto exits = llvm::make_filter_range(llvm::instructions(F), [] (const llvm::Instruction& I) {
+	    if (llvm::isa<llvm::ReturnInst>(&I))
+	      return true;
+	    if (auto *C = llvm::dyn_cast<llvm::CallBase>(&I))
+	      return util::mayLowerToFunctionCall(*C);
+	    return false;
+	  });
+	  const auto entries = llvm::make_filter_range(llvm::instructions(F), [] (const llvm::Instruction& I) {
+	    if (&I == &I.getFunction()->front().front())
+	      return true;
+	    if (auto *C = llvm::dyn_cast_or_null<llvm::CallBase>(I.getPrevNode()))
+	      if (util::mayLowerToFunctionCall(*C))
+		return true;
+	    return false;
+	  });
+
+	  for (auto& exit : exits)
+	    for (auto& entry : entries)
+	      if (&entry != &exit)
+		G[&exit].emplace(&entry, 1); // NOTE: We intentionally don't overwrite the previous value, since it may have been already added and contain a better edge weight. 
+	}
+#endif
 
 	// Run algorithm to obtain min-cut
 	const clock_t solve_start = clock();
 #if 0
 	cull_sts(sts);
 #endif
-	llvm::errs() << F.getName() << "\n";
 	auto G_ = G;
 	const auto sts_bak = A.get_sts().vec();
+	std::cerr << "Min-Cut on " << F.getName().str() << std::endl;
 	A.run();
 	const clock_t solve_stop = clock();
 	const float solve_duration = (static_cast<float>(solve_stop) - static_cast<float>(solve_start)) / CLOCKS_PER_SEC;
 	auto& cut_edges = A.cut_edges;
-	llvm::errs() << "num sts: " << A.get_sts().size() << "\n";
-	llvm::errs() << "cut edges: " << cut_edges.size() << "\n";
 
 	// double-check cut: make sure that no source can reach its sink
 	{

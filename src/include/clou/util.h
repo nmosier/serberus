@@ -468,7 +468,7 @@ namespace clou {
     };
 
     void getFrontierBwd(llvm::Instruction *I, const std::set<llvm::Instruction *>& targets, std::set<llvm::Instruction *>& out);
-    
+
   }
 
 #define assert_implies(p, q) assert(!(p) || (q))

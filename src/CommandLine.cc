@@ -5,6 +5,10 @@
 #include <string>
 #include <fstream>
 
+namespace llvm {
+  __attribute__((weak)) raw_os_ostream::~raw_os_ostream() {}
+}
+
 namespace clou {
 
   int verbose = 0;

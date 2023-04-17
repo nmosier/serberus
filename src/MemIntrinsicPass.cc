@@ -24,7 +24,7 @@ namespace clou {
 	  return false;
 
 	llvm::Value *Len = MI->getLength();
-	if (!llvm::isa<llvm::Constant>(Len))
+	if (!llvm::isa<llvm::ConstantInt>(Len))
 	  return false;
 	
 	llvm::IRBuilder<> IRB(MI);

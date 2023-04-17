@@ -32,67 +32,93 @@ libsodium_baseline_library(libsodium_baseline_slh+retpoline+ssbd ${baseline_slh_
 
 # ClouCC Mitigation
 libsodium_cloucc_library(libsodium_cloucc
-  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou
 )
 
+libsodium_cloucc_library(libsodium_cloucc_ncasall
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou -llsct-ncas-all
+)
+
+libsodium_cloucc_library(libsodium_cloucc_csrs
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=ncal_xmit,ncal_glob,ncas_xmit,ncas_ctrl,prech,fps,postch
+)
+
+libsodium_cloucc_library(libsodium_cloucc_ssbd
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=ncal_xmit,ncal_glob,ncas_xmit,ncas_ctrl,prech,stackinit
+  ${baseline_ssbd_args}
+)
+
+libsodium_cloucc_library(libsodium_cloucc_init
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=ncal_xmit,ncal_glob,ncas_xmit,ncas_ctrl,prech,stackinit
+)
+
 libsodium_cloucc_library(libsodium_cloucc_mem
-  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass MemIntrinsicPass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou
 )
 
 libsodium_cloucc_library(libsodium_cloucc_naive
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=load_xmit,prech
 )
 
 libsodium_cloucc_library(libsodium_cloucc_opt
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou -clou-expand-sts
 )
 
 libsodium_cloucc_library(libsodium_cloucc_ncal_xmit
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=ncal_xmit
 )
 
 libsodium_cloucc_library(libsodium_cloucc_ncal_glob
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=ncal_glob
 )
 
 libsodium_cloucc_library(libsodium_cloucc_ncas_xmit
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=ncal_xmit
 )
 
 libsodium_cloucc_library(libsodium_cloucc_ncas_ctrl
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=ncas_ctrl
 )
 
 libsodium_cloucc_library(libsodium_cloucc_load_xmit
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=load_xmit
 )
 
+libsodium_cloucc_library(libsodium_cloucc_entry
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
+  LLVMFLAGS -clou=ncal_xmit,ncal_glob,ncas_xmit,ncas_ctrl,entry_xmit,prech
+)
+
 libsodium_cloucc_library(libsodium_cloucc_sts
-  PASS DuplicatePass InlinePass MitigatePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass MitigatePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=ncal_xmit,ncal_glob,ncas_xmit,ncas_ctrl
 )
 
 
 libsodium_cloucc_library(libsodium_cloucc_fps
-  PASS DuplicatePass InlinePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=fps
 )
 
 libsodium_cloucc_library(libsodium_cloucc_fps+postch
-  PASS DuplicatePass InlinePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=fps,postch
 )
 
 libsodium_cloucc_library(libsodium_cloucc_prech
-  PASS DuplicatePass InlinePass NoCalleeSavedRegistersPass FunctionLocalStacks Attributes
+  PASS DuplicatePass InlinePass FunctionLocalStacks Attributes
   LLVMFLAGS -clou=prech
 )

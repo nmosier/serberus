@@ -28,7 +28,7 @@ static long execute([[maybe_unused]] char *argv[]) {
   struct perf_event_attr pea;
   memset(&pea, 0, sizeof pea);
   pea.type = PERF_TYPE_HARDWARE;
-  pea.config = PERF_COUNT_HW_CACHE_MISSES;
+  pea.config = PERF_COUNT_HW_STALLED_CYCLES_BACKEND;
   pea.size = sizeof pea;
   pea.disabled = 1;
 
@@ -37,11 +37,9 @@ static long execute([[maybe_unused]] char *argv[]) {
     err(EXIT_FAILURE, "perf_event_open");
 
   // clear the cache
-  benchmark::State state(BENCH_ARG);
-
   clear_cache();
 
-  SAFE_CALL(BENCH_NAME(state));
+  benchmark::State state(BENCH_ARG);
 
   ioctl_perf(fd, PERF_EVENT_IOC_RESET);
   ioctl_perf(fd, PERF_EVENT_IOC_ENABLE);

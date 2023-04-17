@@ -16,7 +16,7 @@ function(openssl_library NAME)
 
   list(APPEND OPENSSL_CFLAGS -flegacy-pass-manager)
 
-  list(APPEND OPENSSL_CONFIGURE_OPTIONS no-threads)
+  list(APPEND OPENSSL_CONFIGURE_OPTIONS no-threads no-asm)
 
   list(APPEND OPENSSL_LLVMFLAGS -clou-log=${LOG_DIR})
 
@@ -27,6 +27,8 @@ function(openssl_library NAME)
     list(APPEND OPENSSL_DEPENDS ${pass})
   endforeach()
 
+  list(APPEND OPENSSL_DEPENDS ${LLVM_BINARY_DIR}/bin/clang ${LLVM_BINARY_DIR}/bin/ld.lld)
+
   foreach(llvmflag IN LISTS OPENSSL_LLVMFLAGS)
     list(APPEND OPENSSL_CFLAGS -mllvm ${llvmflag})
   endforeach()
@@ -35,7 +37,7 @@ function(openssl_library NAME)
     list(APPEND OPENSSL_CFLAGS -mllvm ${llvmflag})
   endforeach()
 
-  list(APPEND OPENSSL_LDFLAGS -pthread) # Not sure why
+  # list(APPEND OPENSSL_LDFLAGS -pthread) # Not sure why
   
   list(JOIN OPENSSL_CFLAGS " " OPENSSL_CFLAGS)
   list(JOIN OPENSSL_CPPFLAGS " " OPENSSL_CPPFLAGS)
@@ -62,7 +64,7 @@ function(openssl_library NAME)
 
   # build step
   add_custom_command(OUTPUT ${STAMP_DIR}/build.stamp
-    COMMAND make --quiet -j16
+    COMMAND make -j16 install_dev # this just does the libraries and the includes, not the executable
     COMMAND touch ${STAMP_DIR}/build.stamp
     DEPENDS ${STAMP_DIR}/clean.stamp
     COMMENT "Building OpenSSL library ${NAME}"
@@ -80,7 +82,7 @@ function(openssl_library NAME)
 
   # install step
   add_custom_command(OUTPUT ${STAMP_DIR}/install.stamp ${INSTALL_DIR}/lib64/libssl.a ${INSTALL_DIR}/lib64/libcrypto.a
-    COMMAND make --quiet install
+    # COMMAND make --quiet install
     COMMAND touch ${STAMP_DIR}/install.stamp
     DEPENDS ${STAMP_DIR}/test.stamp
     COMMENT "Installing OpenSSL library ${NAME}"

@@ -64,6 +64,18 @@ namespace clou {
 	  case llvm::Intrinsic::memcpy:
 	    leaked_args = all;
 	    break;
+	  case llvm::Intrinsic::experimental_constrained_fdiv:
+	    leaked_args = all;
+	    break;
+	  case llvm::Intrinsic::masked_load:
+	    leaked_args = {0, 1};
+	    break;
+	  case llvm::Intrinsic::masked_gather:
+	    leaked_args = {0, 1};
+	    break;
+	  case llvm::Intrinsic::eh_typeid_for:
+	    leaked_args = {0};
+	    break;
 	  case llvm::Intrinsic::vector_reduce_add:
 	  case llvm::Intrinsic::vector_reduce_and:
 	  case llvm::Intrinsic::vector_reduce_or:
@@ -86,6 +98,32 @@ namespace clou {
 	  case llvm::Intrinsic::fmuladd:
 	  case llvm::Intrinsic::fabs:
 	  case llvm::Intrinsic::ctlz:
+	  case llvm::Intrinsic::experimental_constrained_fcmp:
+	  case llvm::Intrinsic::experimental_constrained_fsub:
+	  case llvm::Intrinsic::experimental_constrained_fmul:
+	  case llvm::Intrinsic::experimental_constrained_sitofp:
+	  case llvm::Intrinsic::experimental_constrained_uitofp:
+	  case llvm::Intrinsic::experimental_constrained_fptoui:
+	  case llvm::Intrinsic::experimental_constrained_fcmps:
+	  case llvm::Intrinsic::experimental_constrained_fadd:	
+	  case llvm::Intrinsic::experimental_constrained_fptosi:
+	  case llvm::Intrinsic::experimental_constrained_fpext:
+	  case llvm::Intrinsic::experimental_constrained_floor:
+	  case llvm::Intrinsic::experimental_constrained_ceil:
+	  case llvm::Intrinsic::experimental_constrained_fptrunc:
+	  case llvm::Intrinsic::experimental_constrained_fmuladd:
+	  case llvm::Intrinsic::fshr:
+	  case llvm::Intrinsic::vector_reduce_mul:
+	  case llvm::Intrinsic::vector_reduce_umax:	    
+	  case llvm::Intrinsic::vector_reduce_umin:
+	  case llvm::Intrinsic::vector_reduce_smax:	    
+	  case llvm::Intrinsic::vector_reduce_smin:
+	  case llvm::Intrinsic::vector_reduce_xor:
+	  case llvm::Intrinsic::uadd_with_overflow:
+	  case llvm::Intrinsic::experimental_constrained_powi:
+	  case llvm::Intrinsic::experimental_constrained_trunc:
+	  case llvm::Intrinsic::experimental_constrained_round:
+	  case llvm::Intrinsic::uadd_sat:
 	    leaked_args = none;
 	    break;
 	  default:
@@ -119,7 +157,7 @@ namespace clou {
     } else if (llvm::isa<llvm::CmpInst, llvm::CastInst, llvm::PHINode, llvm::AllocaInst,
 	       llvm::GetElementPtrInst, llvm::ShuffleVectorInst, llvm::InsertElementInst, llvm::SelectInst,
 	       llvm::ExtractElementInst, llvm::ExtractValueInst, llvm::FreezeInst, llvm::UnaryOperator,
-	       llvm::LandingPadInst>(I)) {
+	       llvm::LandingPadInst, llvm::InsertValueInst>(I)) {
       // no leaked operands
     } else {
       unhandled_instruction(*I);

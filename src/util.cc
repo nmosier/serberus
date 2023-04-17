@@ -115,6 +115,42 @@ namespace util {
       case llvm::Intrinsic::floor:
       case llvm::Intrinsic::x86_sse2_lfence:
       case llvm::Intrinsic::memcpy_inline:
+      case llvm::Intrinsic::experimental_constrained_fcmp:
+      case llvm::Intrinsic::experimental_constrained_fsub:
+      case llvm::Intrinsic::experimental_constrained_fmul:
+      case llvm::Intrinsic::experimental_constrained_fcmps:
+      case llvm::Intrinsic::experimental_constrained_sitofp:
+      case llvm::Intrinsic::experimental_constrained_uitofp:
+      case llvm::Intrinsic::experimental_constrained_fadd:	
+      case llvm::Intrinsic::experimental_constrained_fptosi:
+      case llvm::Intrinsic::experimental_constrained_fdiv:
+      case llvm::Intrinsic::experimental_constrained_fptoui:
+      case llvm::Intrinsic::experimental_constrained_fpext:
+      case llvm::Intrinsic::experimental_constrained_floor:
+      case llvm::Intrinsic::experimental_constrained_ceil:
+      case llvm::Intrinsic::vacopy:
+      case llvm::Intrinsic::experimental_constrained_fptrunc:
+      case llvm::Intrinsic::experimental_constrained_fmuladd:
+      case llvm::Intrinsic::masked_load:
+      case llvm::Intrinsic::masked_gather:
+      case llvm::Intrinsic::stacksave:
+      case llvm::Intrinsic::stackrestore:
+      case llvm::Intrinsic::masked_store:
+      case llvm::Intrinsic::vector_reduce_mul:
+      case llvm::Intrinsic::vector_reduce_umax:	    	
+      case llvm::Intrinsic::vector_reduce_umin:
+      case llvm::Intrinsic::vector_reduce_smax:	    	
+      case llvm::Intrinsic::vector_reduce_smin:
+      case llvm::Intrinsic::vector_reduce_xor:
+      case llvm::Intrinsic::trap:
+      case llvm::Intrinsic::eh_typeid_for:
+      case llvm::Intrinsic::uadd_with_overflow:
+      case llvm::Intrinsic::ctlz:
+      case llvm::Intrinsic::experimental_constrained_powi:
+      case llvm::Intrinsic::experimental_constrained_trunc:
+      case llvm::Intrinsic::experimental_constrained_round:
+      case llvm::Intrinsic::prefetch:
+      case llvm::Intrinsic::uadd_sat:
 	return false;
 
       case llvm::Intrinsic::memset:
@@ -194,6 +230,10 @@ namespace util {
     } else if (const auto *Sel = llvm::dyn_cast<llvm::SelectInst>(V)) {
       getBaseAddresses(Sel->getTrueValue(), out);
       getBaseAddresses(Sel->getFalseValue(), out);
+    } else if (llvm::isa<llvm::IntToPtrInst>(V)) {
+      *out++ = V;
+    } else if (llvm::isa<llvm::ConcreteOperator<llvm::Operator, llvm::Instruction::IntToPtr>>(V)) {
+      *out++ = V;
     } else {
       unhandled_value(*V);
     }

@@ -46,14 +46,6 @@ namespace clou {
 	    const unsigned ArgNo = A->getArgNo();
 	    const bool is_nca = ArgNo >= I->arg_size() || !isConstantAddress(I->getArgOperand(ArgNo));
 	    if (is_nca) {
-	      if (Callee->getName() == "Hacl_Impl_Curve25519_Field51_fmul") {
-		llvm::errs() << "Marking argument as NCA:\n"
-			     << "Formal: " << *A << "\n"
-			     << "Actual: " << *I->getArgOperand(ArgNo) << "\n"
-			     << "Call:   " << *I << "\n"
-			     << "Caller: " << I->getParent()->getParent()->getName() << "\n"
-			     << "Filename: " << Callee->getParent()->getSourceFileName() << "\n";
-	      }
 	      it = args.erase(it); 
 	    } else {
 	      ++it;
@@ -89,6 +81,10 @@ namespace clou {
 	return false;
     } else if (const auto *Select = llvm::dyn_cast<llvm::SelectInst>(V)) {
       return isConstantAddress(Select->getTrueValue()) && isConstantAddress(Select->getFalseValue());
+    } else if (const auto *Extract = llvm::dyn_cast<llvm::ExtractElementInst>(V)) {
+      return llvm::isa<llvm::Constant>(Extract->getVectorOperand()) && llvm::isa<llvm::Constant>(Extract->getIndexOperand());
+    } else if (const auto *Extract = llvm::dyn_cast<llvm::ExtractValueInst>(V)) {
+      return llvm::isa<llvm::Constant>(Extract->getAggregateOperand());
     } else {
       unhandled_value(*V);
     }
