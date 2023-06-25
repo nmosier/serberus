@@ -57,3 +57,8 @@ To run the benchmark to obtain a graph of runtime overhead:
 ninja time_compile clean_bench && ninja -j1 time_pdf
 ```
 and a PDF of the overhead plot will be written to `bench-new/time.pdf`.
+
+### Troubleshooting
+```sh
+sudo cpupower frequency-set --governor performance
+```
