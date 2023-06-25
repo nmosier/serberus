@@ -75,6 +75,22 @@ set(compile_llsctpsf_fence
 )
 set(run_llsctpsf_fence)
 
+set(compile_llsct_fallthru LLVMFLAGS -clou=+fallthru)
+set(run_llsct_fallthru)
+
+
+# Ultimate SLH
+set(compile_uslh
+  LLVMFLAGS --x86-speculative-load-hardening --x86-slh-fixed --x86-slh-indirect --x86-slh-ip --x86-slh-loads --x86-slh-sbhAll --x86-slh-vtInstr --x86-slh-post-load=0 --x86-slh-store
+)
+set(run_uslh)
+
+# Blade
+set(compile_blade
+  LLVMFLAGS --x86-speculative-load-hardening --x86-slh-blade --x86-slh-loads=0
+)
+set(run_blade)
+
 include(LibsodiumLibrary)
 function(add_libsodium_library NAME)
   libsodium_library(${NAME}

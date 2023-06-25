@@ -27,6 +27,10 @@ set(baseline_slh_retpoline_ssbd_args
   CFLAGS -fcf-protection=none
 )
 
+set(baseline_uslh_args
+  LLVMFLAGS --x86-speculative-load-hardening # --x86-slh-sbh --x86-slh-sbhAll --x86-slh-fixed --x86-slh-store --x86-slh-vtInstr
+)
+
 set(cloucc_base_args
   LLVMFLAGS -clou
   

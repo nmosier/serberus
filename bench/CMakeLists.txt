@@ -25,29 +25,33 @@ function(register_mode name)
 endfunction()
 
 register_mode(base base)
-register_mode(lfence base lfence)
-register_mode(lfence+retpoline base lfence retpoline)
+# register_mode(lfence base lfence)
+# register_mode(lfence+retpoline base lfence retpoline)
 register_mode(lfence+retpoline+ssbd base lfence retpoline ssbd)
-register_mode(slh base slh)
-register_mode(slh+retpoline base slh retpoline)
+# register_mode(slh base slh)
+# register_mode(slh+retpoline base slh retpoline)
 register_mode(slh+retpoline+ssbd base slh retpoline ssbd)
 register_mode(uslh+retpoline+ssbd base uslh retpoline ssbd)
+# register_mode(blade+retpoline base blade retpoline)
 register_mode(blade+retpoline+ssbd base blade retpoline ssbd)
 
-register_mode(llsct-fence        base swmodel llsct_fence)
-register_mode(llsct-fence+fps    base swmodel llsct_fence llsct_fps)
-register_mode(llsct-fence+fps+rc base swmodel llsct_fence llsct_fps llsct_regclean)
+# register_mode(llsct-fence        base swmodel llsct_fence)
+# register_mode(llsct-fence+fps    base swmodel llsct_fence llsct_fps)
+# register_mode(llsct-fence+fps+rc base swmodel llsct_fence llsct_fps llsct_regclean)
 register_mode(llsct              base swmodel llsct_fence llsct_fps llsct_regclean hwmodel)
 
-# These are disabled for now. 
-register_mode(llsctssbd-fence                  base swmodel llsctssbd_fence)
-register_mode(llsctssbd-fence+stkinit          base swmodel llsctssbd_fence llsctssbd_stkinit)
-register_mode(llsctssbd-fence+stkinit+regclean base swmodel llsctssbd_fence llsctssbd_stkinit llsct_regclean)
-register_mode(llsctssbd                        base swmodel llsctssbd_fence llsctssbd_stkinit llsct_regclean hwmodel ssbd)
+register_mode(llsct+fallthru base swmodel llsct_fence llsct_fps llsct_regclean hwmodel llsct_fallthru)
 
-register_mode(llsctpsf-fence    base swmodel llsctpsf_fence)
-register_mode(llsctpsf-fence+rc base swmodel llsctpsf_fence llsct_regclean)
-register_mode(llsctpsf          base swmodel llsctpsf_fence llsct_regclean hwmodel+psf)
+
+# These are disabled for now. 
+# register_mode(llsctssbd-fence                  base swmodel llsctssbd_fence)
+# register_mode(llsctssbd-fence+stkinit          base swmodel llsctssbd_fence llsctssbd_stkinit)
+# register_mode(llsctssbd-fence+stkinit+regclean base swmodel llsctssbd_fence llsctssbd_stkinit llsct_regclean)
+# register_mode(llsctssbd                        base swmodel llsctssbd_fence llsctssbd_stkinit llsct_regclean hwmodel ssbd)
+# 
+# register_mode(llsctpsf-fence    base swmodel llsctpsf_fence)
+# register_mode(llsctpsf-fence+rc base swmodel llsctpsf_fence llsct_regclean)
+# register_mode(llsctpsf          base swmodel llsctpsf_fence llsct_regclean hwmodel+psf)
 
 
 include(BenchmarkFlags)
