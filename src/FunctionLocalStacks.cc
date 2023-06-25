@@ -101,7 +101,7 @@ namespace {
       // Save old function-local stack pointer on entry + exit
       {
 	LLVMContext& ctx = F.getContext();
-	Value *OldSP;
+	Value *OldSP = nullptr;
 	IRBuilder<> IRB(&F.getEntryBlock().front());
 	if (shouldRestoreOldSP(F)) 
 	  OldSP = IRB.CreateLoad(sp_ty, sp);
@@ -118,7 +118,13 @@ namespace {
 	  for (BasicBlock &B : F) {
 	    Instruction *I = &B.back();
 	    if (isa<ReturnInst>(I)) {
-	      IRBuilder<>(I).CreateStore(OldSP, sp);
+	      IRBuilder<> IRB(I);
+	      Value *StackEnd = IRB.CreateGEP(stack_ty, stack, {IRB.getInt32(1)});
+	      Value *StackEndI = IRB.CreatePtrToInt(StackEnd, IRB.getInt64Ty());
+	      Value *OldSPI = IRB.CreatePtrToInt(OldSP, IRB.getInt64Ty());
+	      Value *ClippedOldSPI = IRB.CreateIntrinsic(Intrinsic::umin, {IRB.getInt64Ty()}, {StackEndI, OldSPI});
+	      Value *ClippedOldSP = IRB.CreateIntToPtr(ClippedOldSPI, sp_ty);
+	      IRB.CreateStore(ClippedOldSP, sp);
 	    }
 	  }
 	}
