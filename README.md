@@ -4,6 +4,8 @@
 This repository contains some of the passes implementing LLSCT, but not all.
 The rest of LLSCT is implemented here: [llsct-llvm](https://anonymous.4open.science/r/sctcc).
 
+[bench/additional-baselines.md](bench/additional-baselines.md) contains the full results including the additional baseline mitigations based on BladeSLH and UltimateSLH, which we did not have space to include in the paper.
+
 ## Building
 LLSCT is only supported for Linux (but may run on Intel-based Macs with some tweaks).
 
