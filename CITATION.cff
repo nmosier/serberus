@@ -4,8 +4,7 @@
 cff-version: 1.2.0
 title: LLSCT
 message: >-
-  If you use this software, please cite it using the
-  metadata from this file.
+  If you use LLSCT, please cite the following.
 type: conference-paper
 authors:
   - given-names: Nicholas
@@ -27,4 +26,8 @@ authors:
     email: trippel@stanford.edu
     affiliation: Stanford University
     orcid: 'https://orcid.org/0000-0002-5776-1121'
-repository-code: 'https://github.com/nmosier/llsct'
+title: "Serberus: Protecting Cryptographic Code from Spectres at Compile-Time"
+year: 2024
+collection-title: "2024 IEEE Symposium on Security and Privacy (S&P)"
+conference: 
+  - name: 2024 IEEE Symposium on Security and Privacy (S&P)
