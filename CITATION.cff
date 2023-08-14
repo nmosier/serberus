@@ -6,7 +6,7 @@ title: LLSCT
 message: >-
   If you use this software, please cite it using the
   metadata from this file.
-type: proceedings
+type: conference-paper
 authors:
   - given-names: Nicholas
     family-names: Mosier
