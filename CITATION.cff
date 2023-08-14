@@ -38,6 +38,5 @@ preferred-citation:
       orcid: 'https://orcid.org/0000-0002-5776-1121'
   title: "Serberus: Protecting Cryptographic Code from Spectres at Compile-Time"
   year: 2024
-  collection-title: "2024 IEEE Symposium on Security and Privacy (S&P)"
   conference: 
     - name: 2024 IEEE Symposium on Security and Privacy (S&P)
