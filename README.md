@@ -69,3 +69,7 @@ and a PDF of the overhead plot will be written to `bench-new/time.pdf`.
 ```sh
 sudo cpupower frequency-set --governor performance
 ```
+
+### Citing LLSCT
+If you use LLSCT in your work, we would appreciate it if you cite our paper ([bibtex](/cite.bib)):
+> N. Mosier, H. Nemati, J. Mitchell, C. Trippel, "Serberus: Protecting Cryptographic Code from Spectres at Compile-Time," _2024 IEEE Symposium on Security and Privacy (S&P)_, 2024.
