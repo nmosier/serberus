@@ -1,6 +1,5 @@
 # LLSCT
 
-## REVIEWERS: 
 This repository contains some of the passes implementing LLSCT, but not all.
 The rest of LLSCT is implemented here: [llsct-llvm](https://anonymous.4open.science/r/sctcc).
 
