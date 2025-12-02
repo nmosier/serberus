@@ -1,7 +1,7 @@
 # LLSCT
 
 This repository contains some of the passes implementing LLSCT, but not all.
-The rest of LLSCT is implemented here: [llsct-llvm](https://anonymous.4open.science/r/sctcc).
+The rest of LLSCT is implemented here: [llsct-llvm](https://github.com/nmosier/serberus-llvm).
 
 [bench/additional-baselines.md](bench/additional-baselines.md) contains the full results including the additional baseline mitigations based on BladeSLH and UltimateSLH, which we did not have space to include in the paper.
 
@@ -30,7 +30,7 @@ export LD_LIBRARY_PATH="$(brew --prefix gcc)/lib/gcc/current:$LD_LIBRARY_PATH"
 ```
 
 ### Building llsct-llvm
-To build LLSCT, you will need to clone two repositories: [llsct-llvm](https://github.com/nmosier/clouxx-llvm) and llsct-passes (this repository).
+To build LLSCT, you will need to clone two repositories: [llsct-llvm](https://github.com/nmosier/serberus-llvm) and llsct-passes (this repository).
 First, clone and build __llsct-llvm__:
 ```sh
 git clone https://github.com/nmosier/clouxx-llvm --depth=1 llsct-llvm
