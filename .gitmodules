@@ -4,3 +4,6 @@
 [submodule "extern/z3"]
 	path = extern/z3
 	url = https://github.com/Z3Prover/z3.git
+[submodule "llvm"]
+	path = llvm
+	url = https://github.com/nmosier/serberus-llvm.git
