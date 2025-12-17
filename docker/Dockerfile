@@ -12,3 +12,5 @@ RUN pip install pandas seaborn
 
 ENTRYPOINT ["/bin/bash"]
 WORKDIR "/serberus"
+
+RUN apt-get update && apt-get install -y sudo
